@@ -1,0 +1,9 @@
+data/*.fm
+data/*.bin
+*.out
+/bin/
+.DS_Store
+CLAUDE.local.md
+.claude/agent-memory-local/
+.claude/settings.local.json
+/.superpowers/

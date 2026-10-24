@@ -1,0 +1,96 @@
+set	uid	name	fm_transfer_only	fm_transfer_or_loan
+DR	2002078283	Maitere Wong	pass	pass
+DR	2002078285	Jean Eloi Musongi	pass	pass
+DR	2002082525	Modou Sall	pass	pass
+DR	2002098107	Frode Øverenget	pass	pass
+DR	2002099764	Oumar Cissokho	pass	pass
+DR	2002114039	Maxime Cipriano	pass	pass
+DR	2002114070	Zvonko Nešić	pass	pass
+DR	2002114299	Benjamin Masson	pass	pass
+DR	2002114387	Ibrahim Diallo	pass	pass
+DR	2002114633	Simone Scotti	pass	pass
+DR	2002115040	Jérémy Catherine	pass	pass
+DR	2002116366	Álvaro Garrido	pass	pass
+DR	2002123791	Aleksei Korshun	pass	pass
+DR	2002115106	Logan Lafleur	fail	pass
+DR	2002125884	Marko Tomašević	fail	pass
+DR	2002099116	Muzi Molefe	fail	fail
+DR	2002099882	Franc Ortega	fail	fail
+DR	2002112631	Julien Barthes	fail	fail
+DR	2002114035	Halifa Guibert	fail	fail
+DR	2002114155	Thierry Andreani	fail	fail
+DR	2002115333	Eneko Gamboa	fail	fail
+DR	2002115699	Unai Marco	fail	fail
+DR	2002100676	Massaër Sonko	fail	fail
+DC	2000265741	Mladen Jelavić	pass	pass
+DC	2000408820	Francesco Manta	pass	pass
+DC	2002078285	Jean Eloi Musongi	pass	pass
+DC	2002079909	Romualdas Baranauskas	pass	pass
+DC	2002095817	Manuel Vega	fail	pass
+DC	2002098970	Oskar Hedeager	pass	pass
+DC	2002098987	Giovanni Lotito	pass	pass
+DC	2002099096	Lander Martínez de Eulate	pass	pass
+DC	2002099515	Yves Guignard	pass	pass
+DC	2002102518	Bubacar Cá	pass	pass
+DC	2002102530	Kwesi Danso	pass	pass
+DC	2002103140	Joseba Fraile	pass	pass
+DC	2002103973	Raimundo Nonato Cardoso	pass	pass
+DC	2002112751	Eric Tanko	pass	pass
+DC	2002114112	Mathieu Boulay	pass	pass
+DC	2002114937	Vahe Israelyan	pass	pass
+DC	2002115080	Thorbjørn Nødgaard	pass	pass
+DC	2002115620	Sfiso Mncube	pass	pass
+DC	2002115683	Ahmed Coulibaly	pass	pass
+DC	2002128026	Luis Adrianza	pass	pass
+DC	2002232002	Ronald van Hattum	pass	pass
+DC	2002232296	André Vuillemin	pass	pass
+DC	2002252964	Leonel Pessoa Bastos	pass	pass
+DC	2002125562	Luigi Lazzaretti	pass	pass
+DC	2000416174	Gabriel Ahovey	fail	fail
+DC	2000502705	Divine Adetunji	fail	fail
+DC	2000511587	Murtala Ejike	fail	fail
+DC	2002077773	David Silva	fail	fail
+DC	2002077799	Erwan Sueur	fail	fail
+DC	2002099041	Christos Heed	fail	fail
+DC	2002099880	Théo Rougier	fail	fail
+DC	2002100422	Jakub Cichy	fail	fail
+DC	2002103644	Eugeni Folch	fail	fail
+DC	2002113189	Gallio Harmanus	fail	fail
+DC	2002115328	Pablo Vilas	fail	fail
+DC	2002116137	Marek Witkowski	fail	fail
+DC	2002117407	Demba Diédhiou	fail	fail
+DC	2002117488	Gianfranco Fiaschetti	fail	fail
+DC	2002127265	Lau Jiménez	fail	fail
+DC	2002077776	Baye Gora Souaré	fail	fail
+DC	2002098872	Jesús Blanco	fail	fail
+ST	2000272884	Mutala Keïta	fail	
+ST	2002077775	Jean-Pierre Bayal	fail	
+ST	2002078455	Hani Boutaleb	pass	
+ST	2002079777	Mert Kaplan	pass	
+ST	2002081599	Titouan Vacher	fail	
+ST	2002097530	Kim Forsberg	pass	
+ST	2002097894	Mauricio Jiménez	pass	
+ST	2002098424	Dariusz Zbiciak	pass	
+ST	2002098533	Marco Fechtenburg	fail	
+ST	2002098939	Andrew Connor-Piper	fail	
+ST	2002101410	Stephen Buckingham	fail	
+ST	2002102479	Valerio Anselmi	pass	
+ST	2002102488	Andrea Maffei	fail	
+ST	2002102531	Sumaila Djú	pass	
+ST	2002103925	Josué Lusamba	fail	
+ST	2002103945	Miljan Živanović	pass	
+ST	2002103950	Goran Stanojlović	pass	
+ST	2002104000	Alessio Kottelat	fail	
+ST	2002112883	Antonini Šemiga	fail	
+ST	2002114038	Maurice Biaye	fail	
+ST	2002114158	Vittorio Strano	pass	
+ST	2002114449	Nguyen Viet Trieu	pass	
+ST	2002114571	Jan Stáňa	pass	
+ST	2002114797	Simon Skov	pass	
+ST	2002114990	Gavin O'Neill	fail	
+ST	2002115082	Oscar Maxsø	pass	
+ST	2002115115	John Ramström	pass	
+ST	2002115491	Pablo Cubelo	fail	
+ST	2002115852	Maurice Mougin	pass	
+ST	2002127264	Mamady Togola	pass	
+ST	2002253023	Aziz El Hariri	pass	

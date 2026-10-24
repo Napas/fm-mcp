@@ -1,0 +1,103 @@
+package main
+
+// v2 <save> : one JSON line per men's player aged 23..26 (by birth year) with the inputs of the interest gates.
+import (
+	"bufio"
+	"encoding/hex"
+	"encoding/json"
+	"os"
+
+	"github.com/Napas/fm-mcp/internal/savefile"
+)
+
+type out struct {
+	UID, Index             uint32
+	Nation                 int64
+	Team, ContractTeam     int64
+	TeamClub, ContractClub int32
+	TeamClubNation         int32
+	ContractClubNation     int32
+	LoanTeam               int64
+	Flags                  uint64
+	EC                     [2]int
+	IDs                    []uint32
+	HdrType                int
+	Loyalty                int
+	End, Signed            [2]int
+	B, Score               int
+	Rel                    string
+	Future                 bool
+	F57, Orig              int
+	FTManager              int64
+	ClubRel                string
+	Core                   string
+}
+
+func main() {
+	a, _ := savefile.Open(os.Args[1])
+	db, err := savefile.ReadGameDB(a)
+	if err != nil {
+		panic(err)
+	}
+	body, recs, _ := savefile.PersonRecords(a)
+	rb := map[uint32]savefile.Record{}
+	for _, r := range recs {
+		rb[r.Index] = r
+	}
+	club := func(t int64) (int32, int32) {
+		if t < 0 || int(t) >= len(db.Teams) || db.Teams[t].National {
+			return -1, -1
+		}
+		c := db.Teams[t].Container
+		return c, db.Clubs[c].NationIndex
+	}
+	w := bufio.NewWriter(os.Stdout)
+	defer w.Flush()
+	enc := json.NewEncoder(w)
+	for i := range db.Players {
+		p := &db.Players[i]
+		if p.Female || p.BirthDate.Year < 2009 || p.BirthDate.Year > 2013 {
+			continue
+		}
+		r := rb[p.Index]
+		o := out{UID: p.UID, Index: p.Index, Nation: p.NationIndex, Team: p.TeamIndex, ContractTeam: -1, LoanTeam: -1, Flags: r.Flags, Loyalty: int(p.Hidden[2]), Future: p.FutureContract != nil}
+		o.TeamClub, o.TeamClubNation = club(p.TeamIndex)
+		_, d2, _, ok := savefile.PersonDates(body, r)
+		if ok {
+			o.EC = [2]int{int(d2.Raw & 0x1ff), int(d2.Year)}
+		}
+		o.IDs, _ = savefile.PersonIDs(body, r)
+		_, ht, _, craw, okc := savefile.MainContractRaw(body, r)
+		o.HdrType = int(ht)
+		if okc && len(craw) > 23 {
+			o.F57, o.Orig = int(craw[23]), int(craw[22])
+			o.Core = hex.EncodeToString(craw)
+		}
+		o.FTManager = -2
+		cc := o.TeamClub
+		if o.ContractTeam >= 0 {
+			cc, _ = club(o.ContractTeam)
+		}
+		if cc >= 0 {
+			o.ClubRel = hex.EncodeToString(db.Clubs[cc].Rel)
+			for _, t := range db.Clubs[cc].Teams {
+				if db.Teams[t].TeamType == 0 {
+					o.FTManager = int64(db.Teams[t].Manager)
+					break
+				}
+			}
+		}
+		if c := p.Contract; c != nil {
+			o.ContractTeam = c.TeamIndex
+			o.ContractClub, o.ContractClubNation = club(c.TeamIndex)
+			o.End = [2]int{int(c.End.Raw & 0x1ff), int(c.End.Year)}
+			o.Signed = [2]int{int(c.Signed.Raw & 0x1ff), int(c.Signed.Year)}
+			o.B, o.Score = int(c.PlayingTime), int(c.PlayingTimeScore)
+		}
+		if p.Loan != nil {
+			o.LoanTeam = p.Loan.TeamIndex
+		}
+		o.Rel = hex.EncodeToString(p.RelRaw)
+		_ = enc.Encode(o)
+	}
+}

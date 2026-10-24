@@ -1,0 +1,116 @@
+package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"os"
+
+	"github.com/Napas/fm-mcp/internal/fm"
+	"github.com/Napas/fm-mcp/internal/savefile"
+)
+
+type out struct {
+	UID                       uint32
+	Name, Nation, Club        string
+	Age                       int
+	TeamIndex                 int64
+	ClubIndex                 int32
+	ClubFirstTeam             int32
+	ClubFirstTeamRep          int
+	ClubFirstTeamDiv          int32
+	TeamRep                   int
+	HR, CR, WR, CA, PA        int
+	DR, WBR, DL, DC           int
+	Female                    bool
+	B, OrigB                  int
+	Score, Recent             int
+	Clauses                   []int
+	ContractTeam              int64
+	ContractEnd, ContractSign string
+	Loan                      bool
+	LoanTeam                  int64
+	GK                        int
+	Know                      int
+	Female2                   bool
+}
+
+func main() {
+	a, err := savefile.Open(os.Args[1])
+	if err != nil {
+		panic(err)
+	}
+	db, err := savefile.ReadGameDB(a)
+	if err != nil {
+		panic(err)
+	}
+	g, err := fm.Load(os.Args[1], fm.LoadOptions{GameDBDir: os.Args[2]})
+	if err != nil {
+		panic(err)
+	}
+	nat := map[uint32]string{}
+	age := map[uint32]int{}
+	know := map[uint32]int{}
+	for _, p := range g.AllPlayers() {
+		nat[p.UID] = p.Nation
+		age[p.UID] = p.Age
+		know[p.UID] = int(p.Knowledge())
+	}
+	firstTeam := func(club int32) int32 {
+		if club < 0 || int(club) >= len(db.Clubs) {
+			return -1
+		}
+		for _, t := range db.Clubs[club].Teams {
+			if int(t) < len(db.Teams) && db.Teams[t].TeamType == 0 {
+				return t
+			}
+		}
+		if len(db.Clubs[club].Teams) > 0 {
+			return db.Clubs[club].Teams[0]
+		}
+		return -1
+	}
+	w := bufio.NewWriter(os.Stdout)
+	defer w.Flush()
+	enc := json.NewEncoder(w)
+	for _, p := range db.Players {
+		o := out{UID: p.UID, Name: p.FirstName + " " + p.LastName, Nation: nat[p.UID], Age: age[p.UID], TeamIndex: p.TeamIndex, ClubIndex: -1, ClubFirstTeam: -1,
+			HR: int(p.HomeReputation), CR: int(p.CurrentReputation), WR: int(p.WorldReputation), CA: int(p.CurrentAbility), PA: int(p.PotentialAbility),
+			DR: int(p.Positions[4]), WBR: int(p.Positions[14]), DL: int(p.Positions[2]), DC: int(p.Positions[3]), GK: int(p.Positions[0]), Female: p.Female, LoanTeam: -1, ContractTeam: -1, Know: know[p.UID]}
+		if p.CommonName != "" {
+			o.Name = p.CommonName
+		}
+		ti := p.TeamIndex
+		if p.Contract != nil {
+			ti = p.Contract.TeamIndex
+		}
+		if ti >= 0 && int(ti) < len(db.Teams) {
+			t := db.Teams[ti]
+			o.TeamRep = int(t.Reputation)
+			if !t.National {
+				o.ClubIndex = t.Container
+				o.Club = db.Clubs[t.Container].Name
+				ft := firstTeam(t.Container)
+				o.ClubFirstTeam = ft
+				if ft >= 0 {
+					o.ClubFirstTeamRep = int(db.Teams[ft].Reputation)
+					o.ClubFirstTeamDiv = db.Teams[ft].Division
+				}
+			}
+		}
+		if c := p.Contract; c != nil {
+			o.B, o.OrigB, o.Score, o.Recent = int(c.PlayingTime), int(c.OriginalPlayingTime), int(c.PlayingTimeScore), int(c.RecentPlayingTimeScore)
+			o.ContractTeam = c.TeamIndex
+			o.ContractEnd = fmt.Sprint(c.End)
+			o.ContractSign = fmt.Sprint(c.Signed)
+			for _, cl := range c.Clauses {
+				o.Clauses = append(o.Clauses, int(cl.Type))
+			}
+		}
+		if p.Loan != nil {
+			o.Loan = true
+			o.LoanTeam = p.Loan.TeamIndex
+		}
+		_ = enc.Encode(o)
+	}
+}

@@ -1,0 +1,32 @@
+name	uid	prediction	reason	score_sum	confidence
+Mutala Keïta	2000272884	FAIL	just-joined penalty 50400; T = -P_T 50400 + reason2 3612 + playing time(L=10) 17367	-29421	confident
+Jean-Pierre Bayal	2002077775	FAIL	just-joined penalty 104400; T = -P_T 104400 + reason2 17088 + playing time(L=10) 18638	-68674	uncertain: previous club FC Metz: reason-100 gate not evaluated by frozen scorer
+Hani Boutaleb	2002078455	PASS	T = -P_T 0 + reason2 9084 + playing time(L=10) 30788	39872	confident
+Mert Kaplan	2002079777	PASS	T = -P_T 0 + reason2 1164 + playing time(L=10) 17214	18378	uncertain: depends on offered level L (sum at L=8: 1164); near threshold; uncomputed factors
+Titouan Vacher	2002081599	FAIL	just-joined penalty 246000; T = -P_T 246000 + reason2 7456 + playing time(L=10) 24738	-213806	confident
+Kim Forsberg	2002097530	PASS	T = -P_T 0 + reason2 4336 + playing time(L=10) 18336	22672	uncertain: depends on offered level L (sum at L=8: 4336); near threshold; uncomputed factors
+Mauricio Jiménez	2002097894	PASS	T = -P_T 0 + reason2 -732 + playing time(L=10) 16374	15642	uncertain: depends on offered level L (sum at L=8: -732); near threshold; uncomputed factors
+Dariusz Zbiciak	2002098424	PASS	T = -P_T 0 + reason2 444 + playing time(L=10) 24168	24612	uncertain: near threshold; uncomputed factors
+Marco Fechtenburg	2002098533	FAIL	just-joined penalty 44000; T = -P_T 44000 + reason2 3716 + playing time(L=10) 17319	-22965	confident
+Andrew Connor-Piper	2002098939	FAIL	just-joined penalty 54500; T = -P_T 54500 + reason2 10308 + playing time(L=10) 15482	-28710	confident
+Stephen Buckingham	2002101410	FAIL	just-joined penalty 100800; T = -P_T 100800 + reason2 -26640 + playing time(L=10) 22324	-105116	confident
+Valerio Anselmi	2002102479	PASS	T = -P_T 0 + reason2 2616 + playing time(L=10) 57766	60382	confident
+Andrea Maffei	2002102488	FAIL	just-joined penalty 145600; T = -P_T 145600 + reason2 5696 + playing time(L=10) 0	-139904	confident
+Sumaila Djú	2002102531	PASS	T = -P_T 0 + reason2 1756 + playing time(L=10) 17361	19117	uncertain: depends on offered level L (sum at L=8: 1756); near threshold; uncomputed factors
+Josué Lusamba	2002103925	FAIL	arranged transfer (status 19)		confident
+Miljan Živanović	2002103945	PASS	T = -P_T 0 + reason2 2372 + playing time(L=10) 12390	14762	uncertain: depends on offered level L (sum at L=8: -10018); near threshold; uncomputed factors
+Goran Stanojlović	2002103950	PASS	T = -P_T 0 + reason2 2372 + playing time(L=10) 13398	15770	uncertain: depends on offered level L (sum at L=8: -11026); near threshold; uncomputed factors
+Alessio Kottelat	2002104000	FAIL	just-joined penalty 358500; T = -P_T 358500 + reason2 10072 + playing time(L=10) 25214	-323214	confident
+Antonini Šemiga	2002112883	FAIL	just-joined penalty 65800; T = -P_T 65800 + reason2 2364 + playing time(L=10) 16458	-46978	confident
+Maurice Biaye	2002114038	FAIL	just-joined penalty 124800; T = -P_T 124800 + reason2 620 + playing time(L=10) 18594	-105586	confident
+Vittorio Strano	2002114158	PASS	T = -P_T 0 + reason2 4136 + playing time(L=10) 18771	22907	uncertain: depends on offered level L (sum at L=8: 4136); near threshold; uncomputed factors
+Nguyen Viet Trieu	2002114449	PASS	T = -P_T 0 + reason2 5036 + playing time(L=10) 18495	23531	uncertain: depends on offered level L (sum at L=8: 5036); near threshold; uncomputed factors
+Jan Stáňa	2002114571	FAIL	T = -P_T 0 + reason2 3132 + playing time(L=10) 0	3132	uncertain: near threshold; uncomputed factors
+Simon Skov	2002114797	PASS	T = -P_T 0 + reason2 3716 + playing time(L=10) 17742	21458	uncertain: depends on offered level L (sum at L=8: 3716); near threshold; uncomputed factors
+Gavin O'Neill	2002114990	FAIL	arranged transfer (status 19)		confident
+Oscar Maxsø	2002115082	FAIL	T = -P_T 0 + reason2 9106 + playing time(L=10) 0	9106	uncertain: near threshold; uncomputed factors
+John Ramström	2002115115	PASS	T = -P_T 0 + reason2 9176 + playing time(L=10) 55954	65130	confident
+Pablo Cubelo	2002115491	FAIL	T = -P_T 0 + reason2 -17800 + playing time(L=10) 16269	-1531	uncertain: near threshold; uncomputed factors
+Maurice Mougin	2002115852	PASS	T = -P_T 0 + reason2 6588 + playing time(L=10) 25718	32306	confident
+Mamady Togola	2002127264	PASS	T = -P_T 0 + reason2 2956 + playing time(L=10) 61694	64650	confident
+Aziz El Hariri	2002253023	PASS	T = -P_T 0 + reason2 92 + playing time(L=10) 63018	63110	confident

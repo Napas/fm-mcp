@@ -1,0 +1,95 @@
+package savefile
+
+// PersonRecords returns game_db.dat's body and the person table's records (scratch copy only).
+func PersonRecords(a *Archive) ([]byte, []Record, error) {
+	f, err := a.ReadFile("game_db.dat")
+	if err != nil {
+		return nil, nil, err
+	}
+	h, err := ParseGameDBHeader(f.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+	_, tableStart, err := findNameTables(f.Body[h.Size:], minFirstNames)
+	if err != nil {
+		return nil, nil, err
+	}
+	recs, _, err := splitTable(f.Body, h.Size+tableStart, personTrailer)
+	return f.Body, recs, err
+}
+
+// PersonDates returns the two ACTUAL_PERSON dates before the contracts marker (+0xe8, +0xec) and the bytes around them.
+func PersonDates(body []byte, rec Record) (Date, Date, int, bool) {
+	b := body[rec.Start:rec.End]
+	if len(b) < playerPartSize+personTrailerSize {
+		return Date{}, Date{}, 0, false
+	}
+	_, m, ok := readContracts(b, playerPartSize, len(b)-personTrailerSize, rec.Index)
+	if !ok {
+		return Date{}, Date{}, 0, false
+	}
+	for n := 0; n < maxMarkerRefs; n++ {
+		q := m - 5 - 4*n
+		if int(b[q]) == n && validDates(b, q-5, q-9) {
+			return dateAt(b, q-9), dateAt(b, q-5), m, true
+		}
+	}
+	return Date{}, Date{}, m, false
+}
+
+// MainContractRaw returns the main slot's type, FULL header type byte, and the first core's item count and raw bytes from core start to tail end.
+func MainContractRaw(body []byte, rec Record) (slotType, hdrType byte, items int, raw []byte, ok bool) {
+	b := body[rec.Start:rec.End]
+	_, _, m, okd := PersonDates(body, rec)
+	if !okd && m == 0 {
+		return
+	}
+	cores := findCores(b, playerPartSize, len(b)-personTrailerSize, rec.Index)
+	slotType = b[m+1]
+	hdrType = b[m+2]
+	c := firstCoreFrom(cores, m+2)
+	if c == nil {
+		return
+	}
+	items = int(b[c.start+coreItemsOff])
+	raw = b[c.start : c.tail+coreTailSize]
+	ok = true
+	return
+}
+
+// PersonIDs returns the ACTUAL_PERSON +0x68 u32 vector written before the marker.
+func PersonIDs(body []byte, rec Record) ([]uint32, bool) {
+	b := body[rec.Start:rec.End]
+	_, _, m, ok := PersonDates(body, rec)
+	if !ok {
+		return nil, false
+	}
+	for n := 0; n < maxMarkerRefs; n++ {
+		q := m - 5 - 4*n
+		if int(b[q]) == n && validDates(b, q-5, q-9) {
+			var out []uint32
+			for i := 0; i < n; i++ {
+				out = append(out, uint32(b[q+1+4*i])|uint32(b[q+2+4*i])<<8|uint32(b[q+3+4*i])<<16|uint32(b[q+4+4*i])<<24)
+			}
+			return out, true
+		}
+	}
+	return nil, false
+}
+
+// PrevClubRef returns the ref written right after ACTUAL_PERSON's first u16 (+0xd8), 9 bytes, at AP start + 2.
+func PrevClubRef(body []byte, rec Record) ([]byte, bool) {
+	b := body[rec.Start:rec.End]
+	_, _, m, ok := PersonDates(body, rec)
+	if !ok {
+		return nil, false
+	}
+	for n := 0; n < maxMarkerRefs; n++ {
+		q := m - 5 - 4*n
+		if int(b[q]) == n && validDates(b, q-5, q-9) {
+			ap := q - 9 - 16 // dates at q-9; before them u8,u8,u16,u16,ref(9),u16
+			return b[ap-4 : q-9], true
+		}
+	}
+	return nil, false
+}

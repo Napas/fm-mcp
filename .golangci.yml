@@ -1,0 +1,26 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - errorlint
+    - forbidigo
+    - gosec
+    - misspell
+    - unconvert
+  settings:
+    forbidigo:
+      forbid:
+        # The server must never modify saves (Steam Cloud syncs them) or the game install.
+        - pattern: ^os\.(Create|CreateTemp|WriteFile|OpenFile|Remove|RemoveAll|Rename|Mkdir|MkdirAll|MkdirTemp|Chmod|Chtimes|Truncate|Symlink|Link)$
+          msg: fm-mcp only reads files
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - forbidigo
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

@@ -1,0 +1,1 @@
+- [Review inputs](project_review_inputs.md) — no git history; review from caller-supplied diffs, never commit; Go cache and real-save env vars
