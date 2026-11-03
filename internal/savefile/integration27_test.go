@@ -1,6 +1,9 @@
 package savefile
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 const testSave27Path = "../../data/test_save_27.fm"
 
@@ -29,4 +32,27 @@ func TestTestSave27Clubs(t *testing.T) {
 	}
 	checkClubBudgets(t, db, 47040647, Budgets{Transfer: 2078958, WeeklyWage: 21687})
 	checkClubBudgets(t, db, 602, Budgets{Transfer: 152700000, WeeklyWage: 4940326})
+}
+
+func TestTestSave27GameDBHeader(t *testing.T) {
+	a := openTestSaveAt(t, testSave27Path)
+	f, err := a.ReadFile("game_db.dat")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h, err := ParseGameDBHeader(f.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if h.DatabaseVersion != 3754 || h.OriginalDatabaseVersion != 3753 || h.Label != "2700" {
+		t.Errorf("versions %d/%d, label %q", h.DatabaseVersion, h.OriginalDatabaseVersion, h.Label)
+	}
+	if h.Timestamp != 63927573184000 || h.Year != 2026 || h.Unknown808 != 701095 {
+		t.Errorf("Timestamp %d, Year %d, Unknown808 %d", h.Timestamp, h.Year, h.Unknown808)
+	}
+	if got, want := h.GameDate.Time(), time.Date(2026, 1, 19, 0, 0, 0, 0, time.UTC); !got.Equal(want) {
+		t.Errorf("GameDate = %s, want %s", got, want)
+	}
 }

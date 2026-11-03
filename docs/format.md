@@ -27,7 +27,7 @@ Unset dates are saved in 1900. Seen: joined dates of 1900-01-01 on loanees and f
 | [`role-ability.md`](format/role-ability.md) | role attribute lists, role rating, best role, role ability, stars, out-of-possession table | Role ability (game code) |
 | [`player-interest.md`](format/player-interest.md) | interest filter, hard gates, just-joined penalty, reputation gap, playing-time value, verdicts | Player interest (game code) |
 | [`player-stats.md`](format/player-stats.md) | season stats: totals, 60 detail fields, goalkeeper split, scopes/slots, rollover | rgman/player_stats.dat |
-| [`game-db.md`](format/game-db.md) | game_db header, table template, name tables, person table and record tags, trailer flags | game_db.dat; Person name tables; Person table |
+| [`game-db.md`](format/game-db.md) | game_db header, table template, name tables, person table and record tags, trailer flags | game_db.dat; 27.0.0 header; Person name tables; Person table |
 | [`players.md`](format/players.md) | player part offsets, reputation level, current injuries, BASIC part, hidden attributes, relationships/favoured clubs, personality, traits, media handling | Player record (tags 2 and 3); Reputation level; Current injuries; BASIC person part; Relationships and favoured clubs; Personality; Player traits; Media handling |
 | [`contracts.md`](format/contracts.md) | ACTUAL_PERSON fields before the marker, contract types, FULL header, clauses, bonuses, playing time, actual playing time, squad numbers, loyalty bonus | Contracts (ACTUAL_PERSON part) |
 | [`clubs.md`](format/clubs.md) | CLUB/COMP/TEAM tables, club budgets, squad lists | Clubs, teams and competitions; 27.0.0 club layout; Club budgets (CLUB_FINANCE); Squad lists |

@@ -235,13 +235,7 @@ func TestMoneyFiltersUseTheUsersCurrencyAndPeriod(t *testing.T) {
 }
 
 func TestLoadShowsMoneyFromPreferences(t *testing.T) {
-	if _, err := os.Stat(testSavePath); err != nil {
-		t.Skip(err)
-	}
-	g, err := Load(testSavePath, LoadOptions{GameDBDir: gameDBDir(), PrefsDir: writePrefs(t, "7", "3")})
-	if err != nil {
-		t.Fatal(err)
-	}
+	g := loadTestSaveAt(t, testSavePath, LoadOptions{GameDBDir: gameDBDir(), PrefsDir: writePrefs(t, "7", "3")})
 
 	if g.Info.Money.Currency().ShortName != "Euro" || g.Info.Money.WagePeriod() != "p/a" {
 		t.Errorf("money = %+v %s", g.Info.Money.Currency(), g.Info.Money.WagePeriod())

@@ -50,7 +50,8 @@ type GameDBHeader struct {
 	Label                   string // "2620" in the test save
 	Date7D8                 Date
 	Unknown7DC              uint32
-	Year                    uint16 // capped at 2025 by the writer
+	Timestamp               uint64 // ms since 0001-01-01 (inference); 0 before version 3754
+	Year                    uint16 // capped by the writer at 2025 in 26.x; 2026 seen in 27.0.0 (cap unknown)
 	Unknown7CA              uint16
 	GameDate                Date // the in-game date
 	Unknown830              uint32
@@ -59,6 +60,10 @@ type GameDBHeader struct {
 	Unknown808              uint32
 	Size                    int // header length; the next section starts here
 }
+
+// headerTimestampGate is the first database version seen with the u64
+// timestamp; the game's own gate may be lower.
+const headerTimestampGate = dbVersion27_0
 
 // ParseGameDBHeader decodes the header at the start of game_db.dat's body.
 func ParseGameDBHeader(body []byte) (GameDBHeader, error) {
@@ -73,14 +78,17 @@ func ParseGameDBHeader(body []byte) (GameDBHeader, error) {
 		Label:                   r.str(),
 		Date7D8:                 r.date(),
 		Unknown7DC:              r.u32(),
-		Year:                    r.u16(),
-		Unknown7CA:              r.u16(),
-		GameDate:                r.date(),
-		Unknown830:              r.u32(),
-		Flag80D:                 r.u8(),
-		Flag80E:                 r.u8(),
-		Unknown808:              r.u32(),
 	}
+	if h.DatabaseVersion >= headerTimestampGate {
+		h.Timestamp = r.u64()
+	}
+	h.Year = r.u16()
+	h.Unknown7CA = r.u16()
+	h.GameDate = r.date()
+	h.Unknown830 = r.u32()
+	h.Flag80D = r.u8()
+	h.Flag80E = r.u8()
+	h.Unknown808 = r.u32()
 	if r.err != nil {
 		return GameDBHeader{}, r.err
 	}

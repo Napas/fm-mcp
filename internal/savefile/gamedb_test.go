@@ -28,16 +28,21 @@ func appendDate(b []byte, d Date) []byte {
 	return binary.LittleEndian.AppendUint16(b, d.Year)
 }
 
-func gameDBBody(label string, gameDate Date) []byte {
-	b := binary.LittleEndian.AppendUint16(nil, 3727)
+// gameDBBody encodes a game_db.dat header; from version 3754 it has a u64
+// timestamp after the u32 at +0x7dc.
+func gameDBBody(version uint16, label string, gameDate Date) []byte {
+	b := binary.LittleEndian.AppendUint16(nil, version)
 	b = binary.LittleEndian.AppendUint16(b, 7)
 	b = binary.LittleEndian.AppendUint16(b, 0)
 	b = binary.LittleEndian.AppendUint32(b, 8)
-	b = binary.LittleEndian.AppendUint16(b, 3727)
+	b = binary.LittleEndian.AppendUint16(b, version)
 	b = binary.LittleEndian.AppendUint16(b, 7)
 	b = appendString(b, label)
 	b = append(b, 0x2c, 0x36, 0xea, 0x07)
 	b = binary.LittleEndian.AppendUint32(b, 485714)
+	if version >= 3754 {
+		b = binary.LittleEndian.AppendUint64(b, 63927573184000)
+	}
 	b = binary.LittleEndian.AppendUint16(b, 2025)
 	b = binary.LittleEndian.AppendUint16(b, 0x21a0)
 	b = appendDate(b, gameDate)
@@ -47,35 +52,43 @@ func gameDBBody(label string, gameDate Date) []byte {
 	return append(b, 0xee) // first byte of the next section
 }
 
-func TestParseGameDBHeader(t *testing.T) {
-	body := gameDBBody("2620", Date{Raw: 0x1abc, Year: 2025})
+func TestParseGameDBHeaderHandlesDatabaseVersions(t *testing.T) {
+	for version, wantTimestamp := range map[uint16]uint64{3727: 0, 3733: 0, 3754: 63927573184000} {
+		body := gameDBBody(version, "2620", Date{Raw: 0x1abc, Year: 2025})
 
-	h, err := ParseGameDBHeader(body)
-	if err != nil {
-		t.Fatalf("ParseGameDBHeader: %v", err)
-	}
+		h, err := ParseGameDBHeader(body)
+		if err != nil {
+			t.Fatalf("version %d: ParseGameDBHeader: %v", version, err)
+		}
 
-	if h.DatabaseVersion != 3727 || h.OriginalDatabaseVersion != 3727 {
-		t.Errorf("versions = %d/%d, want 3727/3727", h.DatabaseVersion, h.OriginalDatabaseVersion)
-	}
-	if h.Label != "2620" {
-		t.Errorf("Label = %q, want 2620", h.Label)
-	}
-	if h.GameDate != (Date{Raw: 0x1abc, Year: 2025}) {
-		t.Errorf("GameDate = %+v", h.GameDate)
-	}
-	if h.Size != len(body)-1 || body[h.Size] != 0xee {
-		t.Errorf("Size = %d, want %d", h.Size, len(body)-1)
+		if h.DatabaseVersion != version || h.OriginalDatabaseVersion != version {
+			t.Errorf("version %d: versions = %d/%d", version, h.DatabaseVersion, h.OriginalDatabaseVersion)
+		}
+		if h.Label != "2620" {
+			t.Errorf("version %d: Label = %q, want 2620", version, h.Label)
+		}
+		if h.Timestamp != wantTimestamp {
+			t.Errorf("version %d: Timestamp = %d, want %d", version, h.Timestamp, wantTimestamp)
+		}
+		if h.GameDate != (Date{Raw: 0x1abc, Year: 2025}) || h.Unknown808 != 722795 {
+			t.Errorf("version %d: GameDate = %+v, Unknown808 = %d", version, h.GameDate, h.Unknown808)
+		}
+		if h.Size != len(body)-1 || body[h.Size] != 0xee {
+			t.Errorf("version %d: Size = %d, want %d", version, h.Size, len(body)-1)
+		}
 	}
 }
 
 func TestParseGameDBHeaderRejectsTruncatedBody(t *testing.T) {
-	body := gameDBBody("2620", Date{Raw: 0x1abc, Year: 2025})
+	// 3754 is cut inside its u64 timestamp (body bytes 30-37).
+	for version, cut := range map[uint16]int{3727: 30, 3754: 34} {
+		body := gameDBBody(version, "2620", Date{Raw: 0x1abc, Year: 2025})
 
-	_, err := ParseGameDBHeader(body[:30])
+		_, err := ParseGameDBHeader(body[:cut])
 
-	if !errors.Is(err, ErrTruncated) {
-		t.Errorf("err = %v, want ErrTruncated", err)
+		if !errors.Is(err, ErrTruncated) {
+			t.Errorf("version %d: err = %v, want ErrTruncated", version, err)
+		}
 	}
 }
 
