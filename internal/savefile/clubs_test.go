@@ -23,7 +23,9 @@ func dbRecord(b []byte, index, uid uint32) []byte {
 }
 
 // teamContainer encodes the TEAM_CONTAINER base that ends club records.
-func teamContainer(b []byte, women bool, teams, affiliated []int32, index, uid uint32) []byte {
+// dataVersion sets the count width of the three ref lists after the affiliated
+// teams.
+func teamContainer(b []byte, women bool, teams, affiliated []int32, index, uid uint32, dataVersion uint16) []byte {
 	w := byte(0)
 	if women {
 		w = 1
@@ -31,8 +33,17 @@ func teamContainer(b []byte, women bool, teams, affiliated []int32, index, uid u
 	b = append(b, 0, 0xff, w)
 	b = refList8(b, teams...)
 	b = refList8(b, affiliated...)
-	b = append(b, 0, 0, 0) // three empty person lists
-	b = append(b, 1)       // one 16-byte item
+	for _, refs := range [][]int32{{8635, 47010}, nil, {971}} {
+		if dataVersion >= 3754 {
+			b = binary.LittleEndian.AppendUint16(b, uint16(len(refs))) //nolint:gosec // small test data
+		} else {
+			b = append(b, byte(len(refs))) //nolint:gosec // small test data
+		}
+		for _, r := range refs {
+			b = le32(b, r)
+		}
+	}
+	b = append(b, 1) // one 16-byte item
 	b = append(b, make([]byte, 16)...)
 	b = binary.LittleEndian.AppendUint16(b, 1) // one 28-byte item
 	b = append(b, make([]byte, 28)...)
@@ -49,12 +60,16 @@ func financeBase(b []byte, balance int32) []byte {
 }
 
 // fullFinance encodes CLUB_FINANCE with the given budgets and bank balance.
-func fullFinance(b []byte, transfer, wage, balance int32) []byte {
+// From data version 3754 the block before the wage budget is 4 bytes shorter.
+func fullFinance(b []byte, transfer, wage, balance int32, dataVersion uint16) []byte {
 	b = le32(b, 5634364) // +0x7d0
 	b = le32(b, transfer)
 	b = le32(b, 2353289) // next season's transfer budget
 	b = append(b, 0)
-	b = append(b, make([]byte, 9*4+4+1+4+4+4)...)
+	b = append(b, make([]byte, 9*4+4+1+4+4)...)
+	if dataVersion < 3754 {
+		b = le32(b, 0)
+	}
 	b = le32(b, wage)
 	for range 4 {
 		b = append(b, make([]byte, 1+4+230)...)
@@ -83,7 +98,7 @@ type testClub struct {
 	teams       []int32
 }
 
-func (c testClub) encode(b []byte) []byte {
+func (c testClub) encode(b []byte, dataVersion uint16) []byte {
 	b = append(b, 0)
 	b = le32(b, c.nation)
 	for range 3 {
@@ -104,7 +119,7 @@ func (c testClub) encode(b []byte) []byte {
 	case 0:
 		b = financeBase(b, 242466987)
 	case 1:
-		b = fullFinance(b, 8329074, 1069817, 242466987)
+		b = fullFinance(b, 8329074, 1069817, 242466987, dataVersion)
 	}
 	b = append(b, 1)
 	b = append(b, make([]byte, 25)...)
@@ -112,7 +127,7 @@ func (c testClub) encode(b []byte) []byte {
 	b = append(b, make([]byte, 12)...)
 	b = binary.LittleEndian.AppendUint16(b, 0)
 	b = le32(b, -1)
-	return teamContainer(b, c.women, c.teams, nil, c.index, c.uid)
+	return teamContainer(b, c.women, c.teams, []int32{2259}, c.index, c.uid, dataVersion)
 }
 
 type testTeam struct {
@@ -183,33 +198,35 @@ func tableBytes(count int, records []byte) []byte {
 	return append(b, 0, 0, 0, 0, 1, 0, 0, 0, 0)
 }
 
-func TestReadClubTable(t *testing.T) {
-	var recs []byte
-	recs = testClub{index: 0, uid: 728, name: "Tottenham Hotspur", short: "Spurs", nation: 139, finance: 1, teams: []int32{1}}.encode(recs)
-	recs = testClub{index: 1, uid: 2000099871, name: "Chelsea", short: "Chelsea", nation: 139, women: true, finance: 0, teams: []int32{0}}.encode(recs)
-	recs = testClub{index: 2, uid: 99, name: "", short: "", nation: -1, finance: 2}.encode(recs)
-	body := append([]byte{1, 2, 3}, tableBytes(3, recs)...)
+func TestReadClubTableHandlesDataVersions(t *testing.T) {
+	for _, version := range []uint16{3727, 3733, 3754} {
+		var recs []byte
+		recs = testClub{index: 0, uid: 728, name: "Tottenham Hotspur", short: "Spurs", nation: 139, finance: 1, teams: []int32{1}}.encode(recs, version)
+		recs = testClub{index: 1, uid: 2000099871, name: "Chelsea", short: "Chelsea", nation: 139, women: true, finance: 0, teams: []int32{0}}.encode(recs, version)
+		recs = testClub{index: 2, uid: 99, name: "", short: "", nation: -1, finance: 2}.encode(recs, version)
+		body := append([]byte{1, 2, 3}, tableBytes(3, recs)...)
 
-	clubs, end, err := readClubTable(body, 3)
-	if err != nil {
-		t.Fatalf("readClubTable: %v", err)
-	}
+		clubs, end, err := readClubTable(body, 3, version)
+		if err != nil {
+			t.Fatalf("version %d: readClubTable: %v", version, err)
+		}
 
-	if len(clubs) != 3 || end != len(body)-9 {
-		t.Fatalf("got %d clubs ending at %d, want 3 ending at %d", len(clubs), end, len(body)-9)
-	}
-	spurs := clubs[0]
-	if spurs.UID != 728 || spurs.Name != "Tottenham Hotspur" || spurs.ShortName != "Spurs" || spurs.NationIndex != 139 || spurs.Women {
-		t.Errorf("Spurs = %+v", spurs)
-	}
-	if spurs.Balance != 242466987 || len(spurs.Teams) != 1 || spurs.Teams[0] != 1 {
-		t.Errorf("Spurs finances/teams = %+v", spurs)
-	}
-	if want := (Budgets{Transfer: 8329074, WeeklyWage: 1069817}); spurs.Budgets == nil || *spurs.Budgets != want {
-		t.Errorf("Spurs budgets = %+v, want %+v", spurs.Budgets, want)
-	}
-	if !clubs[1].Women || clubs[1].Balance != 242466987 || clubs[1].Budgets != nil {
-		t.Errorf("Chelsea women = %+v", clubs[1])
+		if len(clubs) != 3 || end != len(body)-9 {
+			t.Fatalf("version %d: got %d clubs ending at %d, want 3 ending at %d", version, len(clubs), end, len(body)-9)
+		}
+		spurs := clubs[0]
+		if spurs.UID != 728 || spurs.Name != "Tottenham Hotspur" || spurs.ShortName != "Spurs" || spurs.NationIndex != 139 || spurs.Women {
+			t.Errorf("version %d: Spurs = %+v", version, spurs)
+		}
+		if spurs.Balance != 242466987 || len(spurs.Teams) != 1 || spurs.Teams[0] != 1 || len(spurs.AffiliatedTeams) != 1 || spurs.AffiliatedTeams[0] != 2259 {
+			t.Errorf("version %d: Spurs finances/teams = %+v", version, spurs)
+		}
+		if want := (Budgets{Transfer: 8329074, WeeklyWage: 1069817}); spurs.Budgets == nil || *spurs.Budgets != want {
+			t.Errorf("version %d: Spurs budgets = %+v, want %+v", version, spurs.Budgets, want)
+		}
+		if !clubs[1].Women || clubs[1].Balance != 242466987 || clubs[1].Budgets != nil {
+			t.Errorf("version %d: Chelsea women = %+v", version, clubs[1])
+		}
 	}
 }
 
@@ -240,7 +257,7 @@ func TestReadTeamTableHandlesNationalTeamVersions(t *testing.T) {
 }
 
 func TestReadClubTableReportsMissingTable(t *testing.T) {
-	_, _, err := readClubTable([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 3)
+	_, _, err := readClubTable([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 3, 3733)
 
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)

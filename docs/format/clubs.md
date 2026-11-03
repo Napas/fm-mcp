@@ -24,6 +24,25 @@ A first team carries its club's uid (all first teams of both saves). Men's natio
 
 Examples (test save): team 547 → club 416 "Tottenham Hotspur" (uid 728, division Premier League); team 20739 → club "Chelsea", women's flag set; team 1233 → Argentina's national team (container 187).
 
+### 27.0.0 club layout — verified 27.0.0 (bytes)
+
+Database version 3754 (FM 27.0.0) changes two parts of the CLUB record. The rest of the CLUB, TEAM and COMP tables is unchanged.
+
+| Part | 26.x (3727, 3733) | 27.0.0 (3754) |
+|------|-------------------|---------------|
+| CLUB_FINANCE, block after next season's transfer budget | `u8, 9 × i32, i32, u8, i32, i32, i32` (54 bytes), wage budget at offset 66 | one i32 fewer (50 bytes), wage budget at offset 62. Which of the three i32s after the u8 went is unknown |
+| TEAM_CONTAINER, the three ref lists after the affiliated teams | `u8 n + n × ref` each | `u16 n + n × ref` each |
+
+Evidence (FM27 KŽ save, 27.0.0, `data/test_save_27.fm`):
+
+- Record boundaries were found from each record's trailing database record (`u32 index, u32 uid, u32 uid`, then the next record's tag), independently of the field layout. That gives all 30 100 records (CLUB + LEAGUE_BODY_CLUB), followed by the table end marker. With both changes the parser reads every record to exactly that boundary. With the 26.x layout it stops at record 1 (KS Besëlidhja Lezhë); with only the list change, at record 312 (Aldershot Town, the first full-finance record).
+- Record 0 (KS Besa, no lists, base finance) is 170 bytes in 26.3.2 and 173 in 27.0.0. The 3 extra bytes are the high bytes of the three list counts.
+- River Plate (record 26) lists `02 00` + 2 refs, `02 00` + 2 refs, `00 00` in 27.0.0. With u8 counts the refs would be misaligned.
+- Aldershot Town CLUB_FINANCE: offset 66 gives a £33 738 a week wage budget in 26.3.2. In 27.0.0 offset 66 holds 1 and offset 62 holds £23 277, followed by the first sub-item's `01, u32, 02 …` pattern, as in 26.3.2 at offset 70.
+- Values (bytes, not checked in game): Kauno Žalgiris (uid 47040647, the human's club) transfer budget £2 078 958, wage budget £21 687 a week, balance £3 870 421; Arsenal £152 700 000 and £4 940 326 a week. Team links agree with player records: Arsenal → team 462 (Rice, Saka, Saliba), Bayern → 740 (Kane, Olise), Barcelona → 1357 (Raphinha).
+
+3754 is the first version seen with this layout; the game's real gate may be lower (any version from 3734 up).
+
 ### Club budgets (CLUB_FINANCE) — verified 26.3.2 (code + in game)
 
 CLUB_FINANCE (finance type 1; writer `0x3118c7c`) holds the budgets. Offsets are from the first byte after the finance type byte. The writer emits each field as `add x1, x20, #off; mov w2, #size; blr [stream+0x30]`, which gives the object offset.
@@ -34,7 +53,7 @@ CLUB_FINANCE (finance type 1; writer `0x3118c7c`) holds the budgets. Offsets are
 | 4 | i32 | `+0x7cc` | current transfer budget, GBP; can be negative | verified (code + in game, 12-14) |
 | 8 | i32 | `+0x7d4` | next season's transfer budget, GBP | verified (code); not exposed |
 | 12 | 54 bytes | | u8, 9 × i32 (`+0x814…+0x834`), i32 `+0x83c`, u8, i32 `+0x838`, i32 `+0x7f8`, i32 `+0x7fc` | not decoded |
-| 66 | i32 | `+0x810` | wage budget, GBP per week: the total, not what is left | verified (code + in game, 12-14) |
+| 66 | i32 | `+0x810` | wage budget, GBP per week: the total, not what is left | verified (code + in game, 12-14). Offset 62 in 27.0.0 (see "27.0.0 club layout") |
 | 70 | … | | sub-items, counted blocks, then CLUB_FINANCE_BASE (bank balance) | not decoded |
 
 Code evidence (26.3.2):
@@ -85,4 +104,4 @@ The captain ref after the list fits the captain on the samples checked (test sav
 ## Open questions
 
 - Squad lists: which loanees out a club team lists; what tag-7 persons in squads are.
-- Club finances: which field FM's Original Budget shows (offset 0, €6 519 694 for Metz, or the €6 500 000 field; compare on a club or date where they differ by more than €0.1M); the amount spent this season and the scouting budget; the current wage bill the game subtracts from the wage budget (whether it includes staff); CLUB_FINANCE offsets 12–65 and after 66; where `+0x840` (next season's wage budget) is saved; how the game abbreviates amounts in millions.
+- Club finances: which field FM's Original Budget shows (offset 0, €6 519 694 for Metz, or the €6 500 000 field; compare on a club or date where they differ by more than €0.1M); the amount spent this season and the scouting budget; the current wage bill the game subtracts from the wage budget (whether it includes staff); CLUB_FINANCE offsets 12–65 and after 66; which i32 27.0.0 dropped from the block before the wage budget; the 27.0.0 budgets in game; where `+0x840` (next season's wage budget) is saved; how the game abbreviates amounts in millions.

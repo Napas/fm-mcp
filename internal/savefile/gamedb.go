@@ -41,7 +41,7 @@ func (d Date) Time() time.Time {
 // GameDBHeader is the start of game_db.dat's body, written by the
 // function at 0x32c8e44 in game_plugin 26.3.2.
 type GameDBHeader struct {
-	DatabaseVersion         uint16 // constant per build: 3727 in 26.2.0, 3733 in 26.3.2
+	DatabaseVersion         uint16 // constant per build: see versions.go
 	Const7                  uint16 // always 7
 	Const0                  uint16 // always 0
 	Unknown790              uint32 // UnknownNNN: meaning unknown; NNN is the writer's object offset
@@ -87,14 +87,6 @@ func ParseGameDBHeader(body []byte) (GameDBHeader, error) {
 	h.Size = r.off
 	return h, nil
 }
-
-// verifiedDatabaseVersions are the game_db.dat database versions whose
-// layouts were checked against real saves: 3727 (26.2.0) and 3733 (26.3.2).
-var verifiedDatabaseVersions = map[uint16]bool{3727: true, 3733: true}
-
-// VerifiedDatabaseVersion reports whether saves with this database version
-// were checked. Other versions may still parse but can decode wrong values.
-func VerifiedDatabaseVersion(v uint16) bool { return verifiedDatabaseVersions[v] }
 
 // GameDB is the decoded part of game_db.dat.
 type GameDB struct {
@@ -149,7 +141,7 @@ func ReadGameDB(a *Archive) (*GameDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	clubs, clubsEnd, err := readClubTable(f.Body, clubCount)
+	clubs, clubsEnd, err := readClubTable(f.Body, clubCount, h.DatabaseVersion)
 	if err != nil {
 		return nil, err
 	}

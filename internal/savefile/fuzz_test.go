@@ -46,10 +46,11 @@ func FuzzParsePlayer(f *testing.F) {
 
 func FuzzReadTables(f *testing.F) {
 	var recs []byte
-	recs = testClub{index: 0, uid: 728, name: "Tottenham Hotspur", short: "Spurs", nation: 139, finance: 1, teams: []int32{0}}.encode(recs)
+	recs = testClub{index: 0, uid: 728, name: "Tottenham Hotspur", short: "Spurs", nation: 139, finance: 1, teams: []int32{0}}.encode(recs, 3754)
 	f.Add(tableBytes(1, recs), uint32(1))
 	f.Fuzz(func(t *testing.T, body []byte, count uint32) {
-		_, _, _ = readClubTable(body, count)
+		_, _, _ = readClubTable(body, count, 3733)
+		_, _, _ = readClubTable(body, count, 3754)
 		_, _, _ = readTeamTable(body, count, 3733)
 		_, _, _ = splitTable(body, 0, personTrailer)
 		_, _, _ = splitTable(body, 0, competitionTrailer)

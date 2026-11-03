@@ -8,7 +8,7 @@ Serializer: `0x32c8e44` (REA/Hopper evidence `ev_e5f37f44…`). It opens `game_d
 
 | Body offset | Type | Field (object offset in writer) | Test save |
 |-------------|------|----------------------------------|-----------|
-| 8 | u16 | database version, constant in the writer (26.3.2 writes 3733 = `0x0e95`) | 3727 |
+| 8 | u16 | database version, constant in the writer (26.3.2 writes 3733 = `0x0e95`; 27.0.0 writes 3754, verified in bytes) | 3727 |
 | 10 | u16 | constant 7 | 7 |
 | 12 | u16 | constant 0 | 0 |
 | 14 | u32 | `+0x790` (set to 8 when -1) | 8 |
