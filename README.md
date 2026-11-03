@@ -1,6 +1,6 @@
 # fm-mcp
 
-An MCP server that reads Football Manager 26 save files and gives an LLM the tools of an assistant manager: find and compare players, review your squad, and scout.
+An MCP server that reads Football Manager 26 and 27 save files and gives an LLM the tools of an assistant manager: find and compare players, review your squad, and scout.
 
 The server only reads saves and the game's files; a lint rule forbids file-writing calls in non-test code.
 
@@ -12,7 +12,7 @@ go build -o bin/fm-mcp ./cmd/fm-mcp
 
 ## Use
 
-Claude Code picks up the server from `.mcp.json` in this folder. Approve it once when asked, then ask things like "who are my best centre backs?" or "find me a left back under 23 with potential above 160".
+Claude Code picks up the server from `.mcp.json` in this folder; it runs `bin/fm-mcp` from the project folder, so build it first. Approve it once when asked, then ask things like "who are my best centre backs?" or "find me a left back under 23 with potential above 160".
 
 Claude Desktop: add this to `claude_desktop_config.json`:
 
@@ -20,15 +20,15 @@ Claude Desktop: add this to `claude_desktop_config.json`:
 { "mcpServers": { "fm": { "command": "/absolute/path/to/bin/fm-mcp" } } }
 ```
 
-On first use the server loads `FM_SAVE`, or else the newest save in the FM26 save folders (`~/Library/Application Support/Sports Interactive/Football Manager 26/cloud/games` and `.../games`). Load times and memory: see [Loading and memory](#loading-and-memory). Load times and warnings are logged to stderr. Database versions other than 3727 (26.2.0) and 3733 (26.3.2) load with a warning, since their layouts are unchecked.
+On first use the server loads `FM_SAVE`, or else the newest save in the FM27 and FM26 save folders (`~/Library/Application Support/Sports Interactive/Football Manager 27/cloud/games` and `.../games`, then the same under `Football Manager 26`). Load times and memory: see [Loading and memory](#loading-and-memory). Load times and warnings are logged to stderr. Database versions other than 3727 (26.2.0) and 3733 (26.3.2) load with a warning, since their layouts are unchecked.
 
 | Variable | Effect |
 |----------|--------|
 | `FM_SAVE` | Save to load on first use |
 | `FM_SAVE_DIRS` | Folders to search for saves, separated like `PATH` |
-| `FM_GAME_DB_DIR` | The game's database folder, the source of nation, competition and injury names (default: the Steam install) |
+| `FM_GAME_DB_DIR` | The game's database folder, the source of nation, competition and injury names (default: the Steam install of FM27, else FM26; FM27 also ships FM26's database) |
 | `FM_FOG_OF_WAR` | `off`, `0` or `false` starts with fog of war off (default: on) |
-| `FM_PREFS_DIR` | The game's preferences folder, the source of the currency and wage period (default: `~/Library/Application Support/Sports Interactive/Football Manager 26/Preferences/version 6`) |
+| `FM_PREFS_DIR` | The game's preferences folder, the source of the currency and wage period (default: `Preferences/version 6` in the user folder of the save's game, e.g. `~/Library/Application Support/Sports Interactive/Football Manager 27`; for a save elsewhere, FM27's, else FM26's) |
 
 ## Loading and memory
 
