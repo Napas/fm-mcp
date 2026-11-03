@@ -18,10 +18,17 @@ const testSavePath = "../../data/test_save.fm"
 // openTestSave opens the FM 26.2.0 test save, skipping when it is absent.
 func openTestSave(t *testing.T) *Archive {
 	t.Helper()
-	if _, err := os.Stat(testSavePath); err != nil {
+	return openTestSaveAt(t, testSavePath)
+}
+
+// openTestSaveAt opens the save at path, skipping when it is absent, and
+// closes it when the test ends.
+func openTestSaveAt(t *testing.T, path string) *Archive {
+	t.Helper()
+	if _, err := os.Stat(path); err != nil {
 		t.Skipf("test save not available: %v", err)
 	}
-	a, err := Open(testSavePath)
+	a, err := Open(path)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

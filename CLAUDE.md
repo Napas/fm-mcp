@@ -23,7 +23,8 @@ Reverse engineer Football Manager 26 `.fm` save files, expose the decoded data t
 ## Files outside the repo — READ ONLY
 
 - Test save: `data/test_save.fm` (gitignored; copy from `~/www/my/fm/data/test_save.fm`). FM 26.2.0, Tottenham, game date 2025-07-07, ~46 MB.
-- Real saves: `~/Library/Application Support/Sports Interactive/Football Manager 26/cloud/games/*.fm` — Steam Cloud synced, ~400 MB, non-ASCII filenames (`Ž`). Never write, move or touch these; a bad write syncs to the cloud and destroys a career. Copy to `$TMPDIR` before experimenting.
+- FM27 test save: `data/test_save_27.fm` (gitignored). FM 27.0.0, Kauno Žalgiris, ~49 MB. A copy of the KŽ save taken 2026-11-04 from `~/Library/Application Support/Sports Interactive/Football Manager 27/games/`; that save changes as the game is played, so keep the copy.
+- Real saves: `~/Library/Application Support/Sports Interactive/Football Manager 26/cloud/games/*.fm` and `.../Football Manager 27/games/*.fm` (FM26 ones Steam Cloud synced), ~400 MB, non-ASCII filenames (`Ž`). Never write, move or touch these; a bad write syncs to the cloud and destroys a career. Copy to `$TMPDIR` before experimenting.
 - Game: `~/Library/Application Support/Steam/steamapps/common/Football Manager 26/fm.app`. Unity IL2CPP front end (`Contents/Frameworks/GameAssembly.dylib` + `global-metadata.dat`); the native SI engine is `Contents/PlugIns/game_plugin.bundle/Contents/MacOS/game_plugin`. Bundled database under `game_plugin.bundle/Contents/Resources/shared/data/database/db/`.
 
 ## Gotchas

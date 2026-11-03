@@ -31,7 +31,7 @@ func TestHugeCountsOnTinyInputsAllocateLittle(t *testing.T) {
 	fog = append(fog, make([]byte, 40<<20)...)
 
 	tests := map[string]func(){
-		"club table":     func() { _, _, _ = readClubTable(table, huge) },
+		"club table":     func() { _, _, _ = readClubTable(table, huge, 3754) },
 		"currency table": func() { _, _, _ = readCurrencyTable(currencies, huge) },
 		"split table":    func() { _, _, _ = splitTable(append(underCap, 0, 1, 2), 0, personTrailer) },
 		"name table":     func() { readNameTable(newReader(names)) },

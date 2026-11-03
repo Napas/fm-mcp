@@ -37,6 +37,12 @@ const (
 	financeSubItemSize = 230
 )
 
+// clubLayoutGate is the first data version seen with the 27.0.0 club layout:
+// CLUB_FINANCE has one i32 fewer before the wage budget, and the three
+// TEAM_CONTAINER ref lists after the affiliated teams have u16 counts.
+// The game's own gate may be lower.
+const clubLayoutGate = dbVersion27_0
+
 // Club is a CLUB or LEAGUE_BODY_CLUB record (serializer 0x308b1a0). Men's
 // and women's sides of the same club are separate records.
 type Club struct {
@@ -81,9 +87,12 @@ type Team struct {
 }
 
 // readClubTable parses the CLUB table holding count records and returns it
-// with the offset of its end marker.
-func readClubTable(body []byte, count uint32) ([]Club, int, error) {
-	return readTable(body, count, []byte{tagClub, tagLeagueBodyClub}, "CLUB", readClub)
+// with the offset of its end marker. dataVersion is the game_db database
+// version.
+func readClubTable(body []byte, count uint32, dataVersion uint16) ([]Club, int, error) {
+	return readTable(body, count, []byte{tagClub, tagLeagueBodyClub}, "CLUB", func(r *reader) (Club, uint32) {
+		return readClub(r, dataVersion)
+	})
 }
 
 // readTeamTable parses the TEAM table holding count records. dataVersion is
@@ -155,7 +164,7 @@ func parseTable[T any](body []byte, start int, count uint32, parse func(*reader)
 	return recs, r.off, true
 }
 
-func readClub(r *reader) (Club, uint32) {
+func readClub(r *reader, dataVersion uint16) (Club, uint32) {
 	var c Club
 	switch tag := r.u8(); tag {
 	case tagClub:
@@ -176,7 +185,7 @@ func readClub(r *reader) (Club, uint32) {
 	case finTypeBase:
 		c.Balance = readFinanceBase(r)
 	case finTypeFull:
-		c.Budgets, c.Balance = readFullFinance(r)
+		c.Budgets, c.Balance = readFullFinance(r, dataVersion)
 	case finTypeNone:
 	default:
 		r.fail("finance type %d", fin)
@@ -184,7 +193,7 @@ func readClub(r *reader) (Club, uint32) {
 	r.take(25 * int(r.u8()))
 	r.take(12 * int(r.u8()))
 	r.take(2 + 4)
-	c.Women, c.Teams, c.AffiliatedTeams = readTeamContainer(r)
+	c.Women, c.Teams, c.AffiliatedTeams = readTeamContainer(r, dataVersion)
 	c.Index, c.UID = readDatabaseRecord(r)
 	return c, c.Index
 }
@@ -199,11 +208,14 @@ func readFinanceBase(r *reader) int32 {
 
 // readFullFinance reads CLUB_FINANCE (0x3118c7c), which only active clubs
 // have, and returns its budgets and the bank balance.
-func readFullFinance(r *reader) (*Budgets, int32) {
+func readFullFinance(r *reader, dataVersion uint16) (*Budgets, int32) {
 	b := &Budgets{}
 	r.take(4) // +0x7d0, probably the season's starting transfer budget
 	b.Transfer = r.i32()
-	r.take(4 + 1 + 9*4 + 4 + 1 + 4 + 4 + 4) // next season's transfer budget (+0x7d4), then fields not decoded
+	r.take(4 + 1 + 9*4 + 4 + 1 + 4 + 4) // next season's transfer budget (+0x7d4), then fields not decoded
+	if dataVersion < clubLayoutGate {
+		r.take(4)
+	}
 	b.WeeklyWage = r.i32()
 	for range 4 {
 		r.take(1 + 4 + financeSubItemSize)
@@ -221,14 +233,18 @@ func readFullFinance(r *reader) (*Budgets, int32) {
 
 // readTeamContainer reads the TEAM_CONTAINER base (0x39a2730) up to its
 // database record.
-func readTeamContainer(r *reader) (women bool, teams, affiliated []int32) {
+func readTeamContainer(r *reader, dataVersion uint16) (women bool, teams, affiliated []int32) {
 	r.u8()
 	r.u8()
 	women = r.u8() == 1
 	teams = r.refs8()
 	affiliated = r.refs8()
 	for range 3 {
-		r.refs8()
+		if dataVersion >= clubLayoutGate {
+			r.take(4 * int(r.u16()))
+		} else {
+			r.take(4 * int(r.u8()))
+		}
 	}
 	r.take(16 * int(r.u8()))
 	r.take(28 * int(r.u16()))

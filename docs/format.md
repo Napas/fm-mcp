@@ -30,7 +30,7 @@ Unset dates are saved in 1900. Seen: joined dates of 1900-01-01 on loanees and f
 | [`game-db.md`](format/game-db.md) | game_db header, table template, name tables, person table and record tags, trailer flags | game_db.dat; Person name tables; Person table |
 | [`players.md`](format/players.md) | player part offsets, reputation level, current injuries, BASIC part, hidden attributes, relationships/favoured clubs, personality, traits, media handling | Player record (tags 2 and 3); Reputation level; Current injuries; BASIC person part; Relationships and favoured clubs; Personality; Player traits; Media handling |
 | [`contracts.md`](format/contracts.md) | ACTUAL_PERSON fields before the marker, contract types, FULL header, clauses, bonuses, playing time, actual playing time, squad numbers, loyalty bonus | Contracts (ACTUAL_PERSON part) |
-| [`clubs.md`](format/clubs.md) | CLUB/COMP/TEAM tables, club budgets, squad lists | Clubs, teams and competitions; Club budgets (CLUB_FINANCE); Squad lists |
+| [`clubs.md`](format/clubs.md) | CLUB/COMP/TEAM tables, club budgets, squad lists | Clubs, teams and competitions; 27.0.0 club layout; Club budgets (CLUB_FINANCE); Squad lists |
 | [`currencies.md`](format/currencies.md) | CURRENCY_RECORD rates, display rule, game preferences (currency, wage period) | Currencies (CURRENCY_RECORD); Display preferences (outside the save) |
 | [`nations.md`](format/nations.md) | CONTINENT strengths, NATION tail grammar, reputation factors | Continents, nations and national-team containers |
 | [`fixtures.md`](format/fixtures.md) | fix_man.dat lists, FIXTURE base, FIXTURE_RESULT scores | fix_man.dat; FIXTURE; FIXTURE_RESULT |
