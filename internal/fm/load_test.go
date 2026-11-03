@@ -19,10 +19,16 @@ const testSavePath = "../../data/test_save.fm"
 
 func loadTestSave(t *testing.T) *Game {
 	t.Helper()
-	if _, err := os.Stat(testSavePath); err != nil {
+	return loadTestSaveAt(t, testSavePath, LoadOptions{GameDBDir: gameDBDir()})
+}
+
+// loadTestSaveAt loads the save at path, skipping when it is absent.
+func loadTestSaveAt(t *testing.T, path string, opts LoadOptions) *Game {
+	t.Helper()
+	if _, err := os.Stat(path); err != nil {
 		t.Skipf("test save not available: %v", err)
 	}
-	g, err := Load(testSavePath, LoadOptions{GameDBDir: gameDBDir()})
+	g, err := Load(path, opts)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -106,13 +112,7 @@ func gameDBDir() string {
 }
 
 func TestLoadWithoutGameWarns(t *testing.T) {
-	if _, err := os.Stat(testSavePath); err != nil {
-		t.Skip(err)
-	}
-	g, err := Load(testSavePath, LoadOptions{GameDBDir: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	g := loadTestSaveAt(t, testSavePath, LoadOptions{GameDBDir: t.TempDir()})
 
 	names := slices.DeleteFunc(slices.Clone(g.Info.Warnings), func(w string) bool { return !strings.Contains(w, "names unavailable") })
 	onlyWarning(t, names, "nation, competition and injury names unavailable")

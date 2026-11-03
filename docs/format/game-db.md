@@ -26,6 +26,22 @@ Serializer: `0x32c8e44` (REA/Hopper evidence `ev_e5f37f44…`). It opens `game_d
 | 52 | u32 | `+0x808` | 722795 |
 | 56 | … | sub-serializers `0x48c7c6c`, `0x33f8ea4`, `0x36731b0`, `0x35da874`, `0x378cbac`, `0x492257c`, `0x48a8db8`, then about 50 tables | |
 
+### 27.0.0 header — verified 27.0.0 (bytes)
+
+Database version 3754 adds 8 bytes after the u32 at `+0x7dc` (body offset 38 above); every later field moves 8 bytes on. In `data/test_save_27.fm`:
+
+| Field | Bytes | Value |
+|-------|-------|-------|
+| `+0x7d8` date | `1f 37 ea 07` | day 287 of 2026 = 2026-10-14 |
+| `+0x7dc` u32 | `79 46 08 00` | 542 329 |
+| new u64 | `00 7e 4a 4c 24 3a 00 00` | 63 927 573 184 000 |
+| year | `ea 07` | 2026 (26.x saves cap it at 2025; the 27.0.0 cap is unknown) |
+| `+0x7ca` u16 | `38 15` | `0x1538` |
+| game date | `13 1a ea 07` | day 19 of 2026 = 2026-01-19, the same date `save_game_summary.dat` holds |
+| `+0x830`, `+0x80d`, `+0x80e`, `+0x808` | `00 00 00 00`, `01`, `00`, `a7 b2 0a 00` | 0, 1, 0, 701 095 |
+
+Without the 8 bytes the game date reads `ea 07 38 15` (year 0x1538) and the header ends 8 bytes early. The u64 as milliseconds since 0001-01-01 is 2026-10-14 11:13:04, the same day as `+0x7d8`, so it is probably a timestamp (inference, one save). The original database version is 3753. 3754 is the first version seen with this field; the game's own gate may be lower.
+
 The date serializer (`0x43fe348`) writes two raw u16s, so the bit layout in "Dates" comes from the struct itself.
 
 Table serializers (`0x32c9e98`, `0x32c9f98`, … `0x32ccd84`) share one template. Each table has its own per-record serializer:
@@ -95,4 +111,4 @@ Record bodies are not fully decoded, so the parser splits on trailers. It looks 
 
 ## Open questions
 
-- `game_db.dat`: the sections between the header and the CLUB table, the ACTUAL_PERSON part beyond contracts (history), player fields after offset 130, the LOAN contract header (fee, wage share), contract-type enum names, the COMP record body (league vs cup).
+- `game_db.dat`: what the 27.0.0 header u64 records (a timestamp, from one save) and the 27.0.0 year cap; the sections between the header and the CLUB table, the ACTUAL_PERSON part beyond contracts (history), player fields after offset 130, the LOAN contract header (fee, wage share), contract-type enum names, the COMP record body (league vs cup).
