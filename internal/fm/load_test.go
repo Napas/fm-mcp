@@ -97,18 +97,21 @@ func TestLoadTestSave(t *testing.T) {
 	}
 }
 
-// gameDBDir is the installed game's database folder, or "" without the game.
+// gameDBDir is the FM27 database folder, else FM26's, or "" if neither is
+// installed. FM27 ships FM26's databases.
 func gameDBDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	dir := filepath.Join(home, "Library", "Application Support", "Steam", "steamapps", "common", "Football Manager 26",
-		"fm.app", "Contents", "PlugIns", "game_plugin.bundle", "Contents", "Resources", "shared", "data", "database", "db")
-	if _, err := os.Stat(dir); err != nil {
-		return ""
+	for _, game := range []string{"Football Manager 27", "Football Manager 26"} {
+		dir := filepath.Join(home, "Library", "Application Support", "Steam", "steamapps", "common", game,
+			"fm.app", "Contents", "PlugIns", "game_plugin.bundle", "Contents", "Resources", "shared", "data", "database", "db")
+		if _, err := os.Stat(dir); err == nil {
+			return dir
+		}
 	}
-	return dir
+	return ""
 }
 
 func TestLoadWithoutGameWarns(t *testing.T) {

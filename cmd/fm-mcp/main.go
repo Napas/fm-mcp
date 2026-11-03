@@ -1,20 +1,21 @@
-// Command fm-mcp is an MCP server (stdio) that reads Football Manager 26
-// saves and exposes them as assistant-manager tools.
+// Command fm-mcp is an MCP server (stdio) that reads Football Manager 26 and
+// 27 saves and exposes them as assistant-manager tools.
 //
 // Environment:
 //
 //	FM_SAVE       save to load on first use (default: newest save found)
 //	FM_SAVE_DIRS  folders to search for saves, separated like PATH
-//	              (default: the FM26 save folders under ~/Library/Application Support)
+//	              (default: the FM27, then FM26 save folders under ~/Library/Application Support)
 //	FM_GAME_DB_DIR the game's bundled database folder, the source of nation,
-//	              competition and injury names (default: the Steam install)
+//	              competition and injury names (default: the newest installed
+//	              game's Steam install)
 //	FM_FOG_OF_WAR off, 0 or false starts with fog of war off (default: on)
 //	FM_PREFS_DIR  the game's preferences folder, the source of the currency and
-//	              wage period (default: the FM26 folder)
+//	              wage period (default: the folder of the game the save belongs
+//	              to, else the newest game's)
 package main
 
 import (
-	"cmp"
 	"context"
 	"log"
 	"os"
@@ -35,10 +36,18 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	opts := fm.LoadOptions{GameDBDir: gameDBDir(home, os.Getenv("FM_GAME_DB_DIR")), PrefsDir: prefsDir(home, os.Getenv("FM_PREFS_DIR"))}
+	dbDir := gameDBDir(home, os.Getenv("FM_GAME_DB_DIR"), dirExists)
+	prefsEnv := os.Getenv("FM_PREFS_DIR")
+	load := func(path string) (*fm.Game, error) {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			abs = path
+		}
+		return fm.Load(path, fm.LoadOptions{GameDBDir: dbDir, PrefsDir: prefsDir(home, prefsEnv, abs, dirExists)})
+	}
 	srv := mcpserver.New(mcpserver.Options{
 		SaveDirs:    saveDirs(home, os.Getenv("FM_SAVE_DIRS")),
-		Load:        func(path string) (*fm.Game, error) { return fm.Load(path, opts) },
+		Load:        load,
 		DefaultSave: os.Getenv("FM_SAVE"),
 		Version:     version,
 		FogOfWarOff: !fogOfWar(os.Getenv("FM_FOG_OF_WAR")),
@@ -48,26 +57,67 @@ func main() {
 	}
 }
 
-// userDir is the FM26 user data folder on macOS: saves and preferences.
-func userDir(home string) string {
-	return filepath.Join(home, "Library", "Application Support", "Sports Interactive", "Football Manager 26")
+// games lists the supported games' folder names, newest first.
+var games = []string{"Football Manager 27", "Football Manager 26"}
+
+// userDir is a game's user data folder on macOS: saves and preferences.
+func userDir(home, game string) string {
+	return filepath.Join(home, "Library", "Application Support", "Sports Interactive", game)
 }
 
 func saveDirs(home, env string) []string {
 	if env != "" {
 		return filepath.SplitList(env)
 	}
-	base := userDir(home)
-	return []string{filepath.Join(base, "cloud", "games"), filepath.Join(base, "games")}
+	var dirs []string
+	for _, g := range games {
+		base := userDir(home, g)
+		dirs = append(dirs, filepath.Join(base, "cloud", "games"), filepath.Join(base, "games"))
+	}
+	return dirs
 }
 
-func gameDBDir(home, env string) string {
-	return cmp.Or(env, filepath.Join(home, "Library", "Application Support", "Steam", "steamapps", "common", "Football Manager 26",
-		"fm.app", "Contents", "PlugIns", "game_plugin.bundle", "Contents", "Resources", "shared", "data", "database", "db"))
+// gameDBDir returns env, else the newest installed game's database folder,
+// else FM27's. FM27 also ships FM26's database (label 2600).
+func gameDBDir(home, env string, exists func(string) bool) string {
+	if env != "" {
+		return env
+	}
+	return newestExisting(exists, func(g string) string {
+		return filepath.Join(home, "Library", "Application Support", "Steam", "steamapps", "common", g,
+			"fm.app", "Contents", "PlugIns", "game_plugin.bundle", "Contents", "Resources", "shared", "data", "database", "db")
+	})
 }
 
-func prefsDir(home, env string) string {
-	return cmp.Or(env, filepath.Join(userDir(home), "Preferences", "version 6"))
+// prefsDir returns env, else the preferences folder of the game whose user
+// folder holds save, else the newest existing one, else FM27's.
+func prefsDir(home, env, save string, exists func(string) bool) string {
+	if env != "" {
+		return env
+	}
+	prefs := func(g string) string { return filepath.Join(userDir(home, g), "Preferences", "version 6") }
+	for _, g := range games {
+		if rel, err := filepath.Rel(userDir(home, g), save); err == nil && filepath.IsLocal(rel) {
+			return prefs(g)
+		}
+	}
+	return newestExisting(exists, prefs)
+}
+
+// newestExisting returns the first existing path in games order, else the
+// newest game's.
+func newestExisting(exists func(string) bool, path func(game string) string) string {
+	for _, g := range games {
+		if p := path(g); exists(p) {
+			return p
+		}
+	}
+	return path(games[0])
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 // fogOfWar reports whether FM_FOG_OF_WAR leaves fog of war on: anything but

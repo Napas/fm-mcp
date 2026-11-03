@@ -66,7 +66,7 @@ func New(opts Options) *mcp.Server {
 		Instructions: instructions,
 	})
 	addPrompts(srv)
-	addTool(srv, &mcp.Tool{Name: "list_saves", Description: "List Football Manager 26 save files, newest first."}, s.listSaves)
+	addTool(srv, &mcp.Tool{Name: "list_saves", Description: "List Football Manager 26 and 27 save files, newest first."}, s.listSaves)
 	addTool(srv, &mcp.Tool{Name: "load_save", Description: "Load a save file (read-only). Without a path, loads the configured default save or the newest one. Other tools do the same automatically when no save is loaded."}, s.loadSave)
 	addTool(srv, &mcp.Tool{Name: "game_overview", Description: "In-game date, the human manager and club, the club's transfer and wage budgets, how many players the save holds, and whether fog of war is on."}, s.overview)
 	addTool(srv, &mcp.Tool{Name: "set_fog_of_war", Description: "Turn fog of war on or off. Only call this when the user explicitly asks to."}, s.setFogOfWar)
@@ -91,7 +91,7 @@ const tableDescription = "Stored league tables in the game's order: leagues, gro
 // interestDescription ends the get_player and compare_players descriptions.
 const interestDescription = " interest: would he join your club. Transfer and loan are each out, uncertain or likely (a loan is never likely). Out comes with transfer_reason or loan_reason; transfer_factors and loan_factors list what weighs against."
 
-const instructions = `Tools for an assistant manager in Football Manager 26, reading the user's save file (read-only).
+const instructions = `Tools for an assistant manager in Football Manager 26 and 27, reading the user's save file (read-only).
 Start with game_overview: it names the human manager and club, and lists load warnings (e.g. missing names) that you should pass on.
 Players belong to teams: a club's first team or its youth or reserve teams. team_index identifies a team; find_clubs maps names to team_index values. A player's "club" field is his team's name. A player called up to a national team also has national_team and national_team_index. get_squad, squad_depth and search_players by team_index treat a called-up player as a player of both teams; search_players' club filter matches club teams only. When a club filter finds no players, search_players returns a hint saying why; pass it on.
 Scales: attributes and position ratings 1-20 (position 20 = natural, 15+ = accomplished); current and potential ability 1-200; reputation 0-10000.

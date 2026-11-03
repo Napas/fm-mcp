@@ -787,19 +787,23 @@ const (
 	ashbyUID   = 2002078397
 )
 
-// gameDBDir is the installed game's bundled database folder.
+// gameDBDir is the FM27 database folder, else FM26's; skips if neither is
+// installed. FM27 ships FM26's databases.
 func gameDBDir(t *testing.T) string {
 	t.Helper()
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Skip(err)
 	}
-	dir := filepath.Join(home, "Library", "Application Support", "Steam", "steamapps", "common", "Football Manager 26",
-		"fm.app", "Contents", "PlugIns", "game_plugin.bundle", "Contents", "Resources", "shared", "data", "database", "db")
-	if _, err := os.Stat(dir); err != nil {
-		t.Skipf("game not installed: %v", err)
+	for _, game := range []string{"Football Manager 27", "Football Manager 26"} {
+		dir := filepath.Join(home, "Library", "Application Support", "Steam", "steamapps", "common", game,
+			"fm.app", "Contents", "PlugIns", "game_plugin.bundle", "Contents", "Resources", "shared", "data", "database", "db")
+		if _, err := os.Stat(dir); err == nil {
+			return dir
+		}
 	}
-	return dir
+	t.Skip("game not installed")
+	return ""
 }
 
 func TestInstalledLangDBNations(t *testing.T) {
