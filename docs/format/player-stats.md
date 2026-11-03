@@ -19,9 +19,18 @@ record  = u8 1
 team    = u8 0 + u32 index (ref writer 0x335f5a0; hypothesis: team index), 6 × scope
 scope   = u8 0                                  absent
         | u8 1, u8 6, 17 bytes totals, 120 bytes detail   (block writer 0x31f50dc)
+        | u8 1, u8 7, 17 bytes totals, 136 bytes detail   (27.0.0, see "27.0.0 scope block")
 ```
 
 **Stat ids** (verified, code). A scope in memory (writer `0x31f50dc`, loader `0x31f5290`) is a pointer to the 60 i16 detail values and the 17 totals bytes. The raw getter `0x31f4f74(scope, id)` returns `detail[id]` for ids 0..59 and a totals byte for ids 60..74 (jump table `0x524d7c8`; offsets in the totals table below). The derived getter `0x31f55ec` computes ids 75..152 (per 90 when minutes ≥ 90, and ratios). The scoped getter `0x3204498(stats, id, scope)` reads slots 0..7 and sums some (scope 8 = slots 1 + 2 + 3, scope 12 = slots 1 + 2). The detail fields were named through the data binding (C# property from the IL2CPP registration → C# 4cc → engine 4cc, switch `0x34fc4c` → engine stat provider `0x1429d00`, whose cases call `0x3204498` with the stat id) and through the per-match accumulation `0xf0f220`, which shows where each value comes from in the match record. The loader (`0x31f5368`) reads 60 values from version 6 of the block, 59 in version 5 and 56 before.
+
+### 27.0.0 scope block
+
+Verified on `data/test_save_27.fm` (bytes) and the 27.0.0 `game_plugin` (arm64 slice; code). The file is still version 15. The scope block is version 7: 68 i16 detail values instead of 60, the 8 new ones appended as ids 60..67.
+
+- **Bytes**: reading 136 detail bytes for version 7 parses the whole FM27 file (51 826 records, 0 bytes left over). Every version 7 block in the save is empty except d17 = 150 (points per game with no appearances, see "Season rollover"), at the same offset as in version 6. No match has been played in that save, so the bytes do not show where the new values sit.
+- **Code**: block writer `0xf756f0` writes u8 7 (from `0x538cf68`), 17 totals bytes, then 0x88 detail bytes. Loader `0xf7588c` picks the count by version (`0xf7596c…0xf75990`): 56 below 5, 59 at 5, 60 at 6, 68 at 7 or more; it copies them to ids 0..count-1 and zeroes the rest, so a version 6 block keeps ids 0..59. Raw getter `0xf75588` returns `detail[id]` for ids 0..67 and a totals byte for ids 68..82 (jump table `0x538ca40`, same offsets as 26.3.2 with every id + 8). The derived ids are 83..160 (26.3.2's 75..152 + 8). The season reset (in `0xf81b8c`, loop `0xf81d88…0xf81dbc`) zeroes ids 0..81 except 15..18 and 81, so ids 60..67 are reset each season (inference: additive season counters).
+- `fm` reads versions 6 and 7 and ignores ids 60..67. Ids 0..59 keep their version 6 meaning (inference: the loader copies old blocks into the same ids without remapping). The stat ids in the tables below are the 26.3.2 ones; add 8 to those ≥ 60 for 27.0.0.
 
 Totals (offsets within the 17 bytes; id = the getter's stat id):
 
@@ -143,3 +152,4 @@ Recent matches: 16 × 3 bytes from a packed u16 (`v & 0x7f`, `(v >> 7) & 0x1f`, 
 ## Open questions
 
 - `rgman/player_stats.dat`: d42–d44 (a shot subtype, match record +0xd3, +0x97, +0xd4; counted with team counter +0x159 when a shot-type byte is 2, 7 or 10, `0x48e2b94`); the keeper labels of d19 and d32 and what d47 (PxGP) feeds and the d39 label; whether d0 and d1 count only while the player is on the pitch; in-game checks of every field marked "code" (Sami's goalkeeping columns, Matković's attacking and possession columns, a centre-back's blocks and mistakes, Matković's 2034/35 career row for the snapshot); where Esposito's "International League" and "European League Div. A" rows come from (in no slot; candidates `rgman/comp_<uid>.dat` match records or `fix_man.dat`) and where the game keeps per-competition rows (Champions League vs Europa League); where slot 4 is reset and the club path of `0x31be038` (`0x3caea64`); which matches the per-position list counts; recent-match bytes 2–3, the file trailer, versions ≤ 13.
+- 27.0.0 `rgman/player_stats.dat`: what detail ids 60..67 hold (no call site of the scoped getter `0xf7e0e4` names them; inference: reached through a computed id); in-game checks of every 27.0.0 field once the FM27 save has played matches; scope block versions above 7 (the loader reads any version ≥ 7 as 68 values).

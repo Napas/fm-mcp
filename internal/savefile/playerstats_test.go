@@ -3,19 +3,24 @@ package savefile
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 )
 
-// statsScope encodes one scope block: u8 6, the 17-byte totals, the 120-byte
-// detail block.
-func statsScope(s MatchStats) []byte {
-	b := []byte{statsScopeVersion}
+// statsScope encodes one scope block: u8 version, the 17-byte totals, the
+// detail block. Values 60 and up (version 7 only) hold 0x7f bytes.
+func statsScope(version byte, s MatchStats) []byte {
+	b := []byte{version}
 	b = binary.LittleEndian.AppendUint16(b, s.RatingSum)
 	b = binary.LittleEndian.AppendUint16(b, s.Minutes)
 	b = append(b, s.Starts, s.SubApps, s.Rated, s.Goals, s.Assists, s.GoalsConceded, s.PenaltiesTaken, s.PenaltiesScored,
 		s.PlayerOfTheMatch, s.RedCards, s.YellowCards, s.CleanSheets, 0)
-	detail := make([]byte, statsDetailSize)
+	detail := make([]byte, statsDetailSize(version))
+	for i := statsDetailSize(scopeVersion6); i < len(detail); i++ {
+		detail[i] = 0x7f
+	}
 	for _, f := range detailFields(&s.Detail) {
 		binary.LittleEndian.PutUint16(detail[2*f.index:], uint16(*f.field)) //nolint:gosec // bit reinterpretation of i16
 	}
@@ -23,14 +28,14 @@ func statsScope(s MatchStats) []byte {
 }
 
 // statsSlots encodes scopes as u8 present + block each; nil is absent.
-func statsSlots(scopes []*MatchStats) []byte {
+func statsSlots(version byte, scopes []*MatchStats) []byte {
 	var b []byte
 	for _, s := range scopes {
 		if s == nil {
 			b = append(b, 0)
 			continue
 		}
-		b = append(append(b, 1), statsScope(*s)...)
+		b = append(append(b, 1), statsScope(version, *s)...)
 	}
 	return b
 }
@@ -44,18 +49,23 @@ type statsRecord struct {
 	person  uint32
 	scopes  [statsScopes]*MatchStats
 	teams   []statsTeam
-	seasons int // 8-byte summary items
+	seasons int  // 8-byte summary items
+	version byte // scope block version; 0 is scopeVersion6
 }
 
 func (rec statsRecord) encode(b []byte) []byte {
+	version := rec.version
+	if version == 0 {
+		version = scopeVersion6
+	}
 	b = binary.LittleEndian.AppendUint32(append(b, 1), rec.person)
 	b = append(b, make([]byte, statsRecordHead)...)
-	b = append(b, statsSlots(rec.scopes[:])...)
+	b = append(b, statsSlots(version, rec.scopes[:])...)
 	b = append(b, make([]byte, statsRecordMiddle)...)
 	b = binary.LittleEndian.AppendUint32(b, uint32(len(rec.teams))) //nolint:gosec // test sizes
 	for _, t := range rec.teams {
 		b = binary.LittleEndian.AppendUint32(append(b, 0), t.team)
-		b = append(b, statsSlots(t.scopes[:])...)
+		b = append(b, statsSlots(version, t.scopes[:])...)
 	}
 	b = binary.LittleEndian.AppendUint32(b, uint32(rec.seasons)) //nolint:gosec // test sizes
 	for range rec.seasons {
@@ -121,6 +131,10 @@ func TestParseSeasonStats(t *testing.T) {
 	internationals.person = 13
 	internationals.scopes[4] = &international
 
+	// Version 7 blocks carry 8 extra detail values.
+	full7, onlyFriendlies7 := full, onlyFriendlies
+	full7.version, onlyFriendlies7.version = scopeVersion7, scopeVersion7
+
 	tests := []struct {
 		name string
 		body []byte
@@ -135,6 +149,10 @@ func TestParseSeasonStats(t *testing.T) {
 		{"cups and continental", statsBody(cups), map[uint32]SeasonRecord{11: {Cups: &cup, Continental: &continental}}},
 		{"internationals", statsBody(internationals), map[uint32]SeasonRecord{13: {Internationals: &international}}},
 		{"empty", statsBody(), map[uint32]SeasonRecord{}},
+		{"version 7 blocks", statsBody(full7, onlyFriendlies7), map[uint32]SeasonRecord{
+			146891: {Club: &ashby, Friendlies: &friendly, League: &league},
+			7:      {Friendlies: &friendly},
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -171,7 +189,7 @@ func TestParseSeasonStatsRejects(t *testing.T) {
 	good := statsBody(rec)
 	scopeAt := 1 + 4 + statsRecordHead + seasonScope // presence flag of the season scope
 
-	teamCountAt := scopeAt - seasonScope + statsScopes + statsScopeSize + statsRecordMiddle
+	teamCountAt := scopeAt - seasonScope + statsScopes + 1 + statsTotalsSize + statsDetailSize(scopeVersion6) + statsRecordMiddle
 	if good[teamCountAt+8] != recentRatings {
 		t.Fatalf("team count is not at %d", teamCountAt)
 	}
@@ -181,23 +199,26 @@ func TestParseSeasonStatsRejects(t *testing.T) {
 		return b
 	}
 	tests := []struct {
-		name string
-		body []byte
-		want error
+		name  string
+		body  []byte
+		want  error
+		cause string // in the error text, when set
 	}{
-		{"truncated", good[:len(good)-1], ErrTruncated},
-		{"trailing bytes", append(append([]byte(nil), good...), 0), ErrCorrupt},
-		{"bad record flag", mutate(0, 2), ErrCorrupt},
-		{"bad scope flag", mutate(scopeAt, 2), ErrCorrupt},
-		{"bad scope version", mutate(scopeAt+1, 5), ErrCorrupt},
-		{"rated beyond appearances", mutate(scopeAt+1+7, 19), ErrCorrupt},
-		{"duplicate person", statsBody(rec, rec), ErrCorrupt},
-		{"huge team count", binary.LittleEndian.AppendUint32(append([]byte(nil), good[:teamCountAt]...), 0xffffffff), ErrTruncated},
+		{"truncated", good[:len(good)-1], ErrTruncated, ""},
+		{"trailing bytes", append(append([]byte(nil), good...), 0), ErrCorrupt, ""},
+		{"bad record flag", mutate(0, 2), ErrCorrupt, ""},
+		{"bad scope flag", mutate(scopeAt, 2), ErrCorrupt, ""},
+		{"old scope version", mutate(scopeAt+1, 5), ErrCorrupt, "scope version 5"},
+		{"unknown scope version", mutate(scopeAt+1, 8), ErrCorrupt, "scope version 8"},
+		{"rated beyond appearances", mutate(scopeAt+1+7, 19), ErrCorrupt, ""},
+		{"duplicate person", statsBody(rec, rec), ErrCorrupt, ""},
+		{"huge team count", binary.LittleEndian.AppendUint32(append([]byte(nil), good[:teamCountAt]...), 0xffffffff), ErrTruncated, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := parseSeasonStats(tt.body); !errors.Is(err, tt.want) {
-				t.Errorf("err = %v, want %v", err, tt.want)
+			_, err := parseSeasonStats(tt.body)
+			if !errors.Is(err, tt.want) || !strings.Contains(fmt.Sprint(err), tt.cause) {
+				t.Errorf("err = %v, want %v (%q)", err, tt.want, tt.cause)
 			}
 		})
 	}
@@ -217,8 +238,8 @@ func TestStatsScopeReadsFixedOffsets(t *testing.T) {
 
 	// Every i16 slot holds 1000 + its index, then the fields below are
 	// overwritten at their byte offsets.
-	detail := make([]byte, statsDetailSize)
-	for i := 0; i < statsDetailSize; i += 2 {
+	detail := make([]byte, statsDetailSize(scopeVersion6))
+	for i := 0; i < len(detail); i += 2 {
 		binary.LittleEndian.PutUint16(detail[i:], uint16(1000+i/2)) //nolint:gosec // test values
 	}
 	put := func(at int, v int16) {
@@ -232,7 +253,7 @@ func TestStatsScopeReadsFixedOffsets(t *testing.T) {
 	put(116, 1)   // d58 shots blocked
 	put(94, -250) // d47, not decoded
 
-	b := append([]byte{1, statsScopeVersion}, totals...)
+	b := append([]byte{1, scopeVersion6}, totals...)
 	b = append(b, detail...)
 	got, ok := newReader(b).statsScope()
 	if !ok {

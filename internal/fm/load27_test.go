@@ -15,3 +15,11 @@ func TestLoadTestSave27Info(t *testing.T) {
 		t.Errorf("date %s, build %q, club %q; want date %s", g.Info.Date.Format(time.DateOnly), g.Info.Build, g.Info.ManagerClub, want.Format(time.DateOnly))
 	}
 }
+
+func TestLoadTestSave27SeasonStats(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27Path, LoadOptions{})
+
+	if !g.hasSeason {
+		t.Errorf("season stats not loaded; warnings %q", g.Info.Warnings)
+	}
+}

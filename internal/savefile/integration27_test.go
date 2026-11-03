@@ -56,3 +56,26 @@ func TestTestSave27GameDBHeader(t *testing.T) {
 		t.Errorf("GameDate = %s, want %s", got, want)
 	}
 }
+
+// No match has been played in the FM27 save: only the internationals slot is
+// kept, and it is empty.
+func TestTestSave27SeasonStats(t *testing.T) {
+	a := openTestSaveAt(t, testSave27Path)
+
+	season, err := ReadSeasonStats(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(season) != 937 {
+		t.Errorf("%d players with season stats, want 937", len(season))
+	}
+	for person, rec := range season {
+		if rec.Club != nil || rec.Friendlies != nil || rec.League != nil || rec.Cups != nil || rec.Continental != nil {
+			t.Fatalf("person %d has club scopes", person)
+		}
+		if *rec.Internationals != (MatchStats{}) {
+			t.Fatalf("person %d internationals = %+v, want empty", person, *rec.Internationals)
+		}
+	}
+}
