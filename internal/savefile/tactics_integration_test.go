@@ -86,18 +86,21 @@ func walkedEntries(t *testing.T, body []byte, human uint32, teams, active []int3
 // last-lineup table where the scan finds it.
 func TestTacticsWalkMatchesScan(t *testing.T) {
 	for _, tt := range []struct {
-		name, env string // env "" = the test save
-		at, n     int    // 0 = not pinned
+		name, env string // env "" = the test save at path
+		path      string
+		at, n     int // 0 = not pinned
 	}{
-		{"test save", "", 8704, 2413},
-		{"12-02", "FM_REAL_SAVE", 31267, 15016},
-		{"12-09", "FM_REAL_SAVE_9DEC", 31267, 15016},
-		{"12-14", "FM_REAL_SAVE_14DEC", 0, 0},
+		{"test save", "", testSavePath, 8704, 2413},
+		{"27.0.0", "", testSave27Path, 10417, 1646},
+		{"27.0.0 after a match", "", testSave27bPath, 15849, 2506},
+		{"12-02", "FM_REAL_SAVE", "", 31267, 15016},
+		{"12-09", "FM_REAL_SAVE_9DEC", "", 31267, 15016},
+		{"12-14", "FM_REAL_SAVE_14DEC", "", 0, 0},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var a *Archive
 			if tt.env == "" {
-				a = openTestSave(t)
+				a = openTestSaveAt(t, tt.path)
 			} else {
 				a, _ = openRealArchive(t, tt.env)
 			}

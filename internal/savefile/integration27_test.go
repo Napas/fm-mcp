@@ -7,7 +7,15 @@ import (
 	"time"
 )
 
-const testSave27Path = "../../data/test_save_27.fm"
+const (
+	testSave27Path  = "../../data/test_save_27.fm"
+	testSave27bPath = "../../data/test_save_27b.fm" // after Kauno Žalgiris's first match
+	kzHuman27       = 115841
+	kzTeam27        = 16521
+)
+
+// kzTeamEntries27 are the human's team entries in both FM27 saves.
+var kzTeamEntries27 = []int32{kzTeam27, 16546, 16573, 50315}
 
 func TestTestSave27Clubs(t *testing.T) {
 	a := openTestSaveAt(t, testSave27Path)
@@ -118,5 +126,90 @@ func TestTestSave27Fixtures(t *testing.T) {
 		friendly.Result.Home != [4]uint8{0, 0xff, 0xff, 0xff} || friendly.Result.Away != [4]uint8{1, 0xff, 0xff, 0xff} ||
 		!friendly.Date.Time().Equal(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)) {
 		t.Errorf("first played fixture = %+v, result %+v", friendly, friendly.Result)
+	}
+}
+
+// readTactics27 reads the tactics of an FM27 save and the tactics_man.dat body.
+func readTactics27(t *testing.T, path string) (Tactics, []byte) {
+	t.Helper()
+	a := openTestSaveAt(t, path)
+	tac, err := ReadTactics(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := a.ReadFile("tactics_man.dat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tac.WalkErr != nil || tac.TacticErr != nil {
+		t.Errorf("walk error %v, tactic error %v; want none", tac.WalkErr, tac.TacticErr)
+	}
+	return tac, f.Body
+}
+
+// No team has played: every last lineup is empty, and no team entry holds a
+// tactic.
+func TestTestSave27Tactics(t *testing.T) {
+	tac, body := readTactics27(t, testSave27Path)
+
+	if tac.Human != kzHuman27 || tac.Team != kzTeam27 || len(tac.Tactics) != 0 || tac.Selection != emptySelection() {
+		t.Errorf("human %d, team %d, %d tactics, selection %v", tac.Human, tac.Team, len(tac.Tactics), tac.Selection)
+	}
+	walkedEntries(t, body, kzHuman27, kzTeamEntries27, []int32{-1, -1, -1, -1})
+	checkAllFormations(t, tac, 1646)
+	for team, l := range tac.LastLineups {
+		if l.Opponent != -1 || l.Players != emptySelection() {
+			t.Fatalf("team %d: last lineup %+v, want empty", team, l)
+		}
+	}
+}
+
+// kzTactic27 is Kauno Žalgiris's tactic after its first match: the 4-3-3 DM
+// Wide preset with slots 5 to 10 changed out of possession.
+func kzTactic27() Tactic {
+	ipPos := [11]uint32{1, 4, 0x200010, 0x100010, 8, 0x80, 0x200400, 0x100400, 0x800, 0x1000, 0x4000}
+	oopPos := [11]uint32{1, 4, 0x200010, 0x100010, 8, 0x80, 0x100, 0x200400, 0x100400, 0x200, 0x4000}
+	ipRole := [11]uint64{0x200001, 0x400004, 0x200002, 0x200002, 0x400004, 0x200010, 0x400020, 0x800200, 0x400080, 0x400080, 0x800800}
+	oopRole := [11]uint64{0x400001, 0x200200, 0x200008, 0x200008, 0x200200, 0x208000, 0x800400000, 0x500000, 0x500000, 0x800400000, 0x40000400000}
+	t := Tactic{Name: "4-3-3 DM Wide", Mentality: 4}
+	for i := range t.Slots {
+		t.Slots[i] = TacticSlot{
+			InPossession:    SlotRole{Position: ipPos[i], Role: ipRole[i]},
+			OutOfPossession: SlotRole{Position: oopPos[i], Role: oopRole[i]},
+		}
+	}
+	return t
+}
+
+// Kauno Žalgiris played FK Banga (team 6215): the last lineup holds the XI
+// in shirts 1 to 11 and the bench in 12 to 27, in the tactic's shape.
+func TestTestSave27bTactics(t *testing.T) {
+	tac, body := readTactics27(t, testSave27bPath)
+
+	if tac.Human != kzHuman27 || tac.Team != kzTeam27 || tac.Active != 0 || len(tac.Tactics) != 1 {
+		t.Fatalf("human %d, team %d, active %d, %d tactics", tac.Human, tac.Team, tac.Active, len(tac.Tactics))
+	}
+	if got, want := tac.Tactics[0], kzTactic27(); got != want {
+		t.Errorf("tactic = %+v\nwant %+v", got, want)
+	}
+	for _, e := range walkedEntries(t, body, kzHuman27, kzTeamEntries27, []int32{0, 0, 0, 0}) {
+		if len(e.tactics) != 1 || e.tactics[0] != kzTactic27() {
+			t.Errorf("team %d: tactics %+v, want the KŽ tactic", e.team, e.tactics)
+		}
+	}
+	checkAllFormations(t, tac, 2506)
+	kz, banga := tac.LastLineups[kzTeam27], tac.LastLineups[6215]
+	if kz.Opponent != 6215 || banga.Opponent != kzTeam27 || kz.Players[0] != 20613 {
+		t.Errorf("KŽ opponent %d, Banga opponent %d, KŽ goalkeeper %d", kz.Opponent, banga.Opponent, kz.Players[0])
+	}
+	if want := [selectionSize]uint8{1, 2, 4, 5, 3, 6, 8, 7, 11, 10, 9, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27}; kz.ShirtNumbers != want {
+		t.Errorf("KŽ shirt numbers %v, want %v", kz.ShirtNumbers, want)
+	}
+	for i, s := range kzTactic27().Slots {
+		s.InPossession.Role &^= dutyMask
+		s.OutOfPossession.Role &^= dutyMask
+		if kz.Formation.Slots[i] != s {
+			t.Errorf("KŽ formation slot %d = %+v, want %+v", i, kz.Formation.Slots[i], s)
+		}
 	}
 }
