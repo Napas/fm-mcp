@@ -350,3 +350,38 @@ func TestTestSave27Players(t *testing.T) {
 		})
 	}
 }
+
+func TestTestSave27Transfers(t *testing.T) {
+	// records is the class 2 and 3 count (docs/format/transfers.md).
+	for path, records := range map[string]int{testSave27Path: 33, testSave27bPath: 884} {
+		t.Run(path, func(t *testing.T) {
+			a := openTestSaveAt(t, path)
+			ts, err := ReadTransfers(a)
+			if err != nil {
+				t.Fatal(err)
+			}
+			byID := make(map[uint32]Transfer, len(ts))
+			arranged := 0
+			for _, tr := range ts {
+				byID[tr.ID] = tr
+				if tr.Status == TransferArranged {
+					arranged++
+				}
+			}
+			if len(ts) != records {
+				t.Errorf("%d records, want %d", len(ts), records)
+			}
+			if arranged != 33 {
+				t.Errorf("%d arranged records, want 33", arranged)
+			}
+			for _, want := range []Transfer{
+				{ID: 0, Person: 53232, Class: 2, Team: 538, Status: TransferArranged, Date: Date{Raw: 1, Year: 2028}}, // Cavan Sullivan
+				{ID: 8, Person: 8353, Class: 2, Team: 463, Status: TransferArranged, Date: Date{Raw: 1, Year: 2027}},  // Ibrahim Dosso
+			} {
+				if got := byID[want.ID]; got != want {
+					t.Errorf("id %d = %+v, want %+v", want.ID, got, want)
+				}
+			}
+		})
+	}
+}

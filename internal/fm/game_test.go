@@ -719,6 +719,16 @@ func TestNewGameArrangedMove(t *testing.T) {
 	}
 }
 
+// A move dated before the game date still counts: check 0x2f54e10 reads only the status.
+func TestNewGameArrangedMoveInThePast(t *testing.T) {
+	past := savefile.Player{Index: 10, UID: 1, TransferIDs: []uint32{5}}
+	transfers := []savefile.Transfer{{ID: 5, Person: 10, Status: savefile.TransferArranged, Team: 855, Date: savefile.Date{Raw: 1, Year: 2025}}}
+	g := NewGame(Info{Date: gameDate}, []savefile.Player{past}, testWorld, PlayerExtras{Transfers: transfers})
+	if a := g.aux[0].interest.arranged; a == nil || a.team != 855 {
+		t.Errorf("arranged = %+v, want team 855", a)
+	}
+}
+
 func TestNewGameInterestInputs(t *testing.T) {
 	events := []savefile.ContractEvent{{Type: 12, ID: 650}}
 	c := &savefile.Contract{
