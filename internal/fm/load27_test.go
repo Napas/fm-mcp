@@ -9,6 +9,7 @@ import (
 const (
 	testSave27Path  = "../../data/test_save_27.fm"
 	testSave27bPath = "../../data/test_save_27b.fm" // after Kauno Žalgiris's first match
+	kzTeam27        = 16521                         // Kauno Žalgiris's team index
 )
 
 func TestLoadTestSave27Info(t *testing.T) {
@@ -59,11 +60,25 @@ func TestLoadTestSave27bTactic(t *testing.T) {
 	if p := tac.Slots[0].Player; p == nil || p.Name != "Deividas Mikelionis" {
 		t.Errorf("goalkeeper %+v, want Deividas Mikelionis", p)
 	}
-	l, err := v.LastLineup(16521)
+	l, err := v.LastLineup(kzTeam27)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if l.Opponent != "FK Banga" || l.InPossessionShape != "4-1-2-2-1" || l.Slots[0].Player == nil || l.Slots[0].Player.ShirtNumber != 1 {
 		t.Errorf("last lineup against %q, shape %q, goalkeeper %+v", l.Opponent, l.InPossessionShape, l.Slots[0].Player)
+	}
+}
+
+// Serves KŽ's A Lyga table: nine teams, FK Banga first and KŽ fourth.
+func TestLoadTestSave27Table(t *testing.T) {
+	kz := int64(kzTeam27)
+	for _, path := range []string{testSave27Path, testSave27bPath} {
+		got, err := loadTestSaveAt(t, path, LoadOptions{}).View(false).Tables(&kz, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		if len(got) != 1 || len(got[0].Rows) != 9 || got[0].Rows[3].Team != "FK Kauno Žalgiris" || got[0].Rows[0].Team != "FK Banga" {
+			t.Errorf("%s: tables %+v", path, got)
+		}
 	}
 }

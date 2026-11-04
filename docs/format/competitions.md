@@ -72,8 +72,17 @@ Outcome. KŽ: 120 of 603 tables relabelled (Spanish U19 Division 1 Groups 1–7,
 
 Different tables can share a label: KŽ has 38 such pairs, among them Major League Soccer's two conference tables (no stage name), the Vertu Trophy's north and south groups A–H, World Cup North American qualifying groups A–C, and the Brazilian Amazonas State Championship's two tables per stage with the same teams and different standings (probably the two turns, guess). Their teams tell them apart.
 
+### 27.0.0 league tables — verified 27.0.0 (bytes only)
+
+Comp files are version 521 (511 in 26.3.2; 26.2.0 not recorded). The row grammar is unchanged except that the bytes ending the row base (after the head-to-head) are 13, not 12. `savefile` reads 13 from version 521 and 12 below.
+
+Evidence: Ligue 1 (`comp_16.dat`) has 18 rows in both builds; its table is 18 bytes longer in 27.0.0, one per row. Those 13 bytes read `00 00 00 00 00 22 22 00 00 xx ff ff ff`, against `00 00 00 00 00 22 22 00 22 xx ff ff` in the 26.3.2 KŽ save of 2037-07-10 (`xx` = `ff`, 02 or 03). Which byte is new is unknown. With 13 bytes the scan finds 138 tables against 142 LEAGUE_STAGE objects in `data/test_save_27.fm` and 141 against 145 in `data/test_save_27b.fm`; with 12 it finds none. The A Lyga (`comp_2300046.dat`) lists its 9 teams in name order before the season, the same teams as its fixtures. 10 of the 11 tables with matches played match their stage's played fixtures on every row (played, won, drawn, lost, for, against). Competition 150784's group 41 is one of them, checked in tests. The 11th (competition 150784, stage 157) has no fixtures at its stage. The 26.3.2 save still gives 685 tables.
+
+Not checked in game; FM27 game code not traced.
+
 ## Open questions
 
 - What the keys with no competition (A = -1) are for.
 - The second row list's order; the row fields marked guess; the 42 (KŽ) and 2 (test) LEAGUE_STAGE objects without a found table (stages without rows, other stage classes, guess).
 - Why some tables hold an out-of-range stage value.
+- Which of the 13 bytes ending a 27.0.0 row base is new.
