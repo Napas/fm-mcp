@@ -19,7 +19,6 @@ const (
 	// first stat record: count, ref (u8, i32), 14 × u8, i32.
 	tableFirstStatOffset = 1 + 5 + 14 + 4
 	tableRowHeadSize     = 14
-	tableRowTailSize     = 12
 	tableRoundItemSize   = 8 // i32, u16, u8, u8
 	tableFormSize        = 10
 	tableRowStats        = 5
@@ -35,6 +34,21 @@ const (
 	tableScanFactor = 16
 	tableScanSlack  = 1 << 20
 )
+
+// Comp file versions (rgman/comp_<uid>.dat header).
+const (
+	compVersion26 = 511 // 26.3.2
+	compVersion27 = 521 // 27.0.0
+)
+
+// tableRowTailSize is the length of the bytes ending a row base: 13 from
+// comp file version 521 (27.0.0), 12 below it.
+func tableRowTailSize(compVersion uint16) int {
+	if compVersion >= compVersion27 {
+		return 13
+	}
+	return 12
+}
 
 // firstStatRef is a row's first stat record's ref: u8 0, i32 -1 (this row's team).
 var firstStatRef = []byte{0, 0xff, 0xff, 0xff, 0xff}
@@ -87,7 +101,7 @@ func ReadLeagueTables(a *Archive, stageCount int) (LeagueTables, error) {
 			continue
 		}
 		read++
-		tables, truncated := parseLeagueTables(f.Body, uid, stageCount)
+		tables, truncated := parseLeagueTables(f.Body, uid, f.Header.Version, stageCount)
 		out.Tables = append(out.Tables, tables...)
 		if truncated {
 			out.Skipped++
@@ -117,14 +131,14 @@ func compFileUID(path string) (uint32, bool) {
 // stat record of team -1. It is kept when every row parses and validates
 // (see validTable); the partner list that follows it, holding the same
 // teams in another order, is skipped. truncated reports that the scan
-// stopped at its budget.
-func parseLeagueTables(body []byte, uid uint32, stageCount int) (tables []LeagueTable, truncated bool) {
-	return scanLeagueTables(body, uid, stageCount, tableScanFactor*len(body)+tableScanSlack)
+// stopped at its budget. The row layout follows the comp file's version.
+func parseLeagueTables(body []byte, uid uint32, compVersion uint16, stageCount int) (tables []LeagueTable, truncated bool) {
+	return scanLeagueTables(body, uid, tableRowTailSize(compVersion), stageCount, tableScanFactor*len(body)+tableScanSlack)
 }
 
-// scanLeagueTables is parseLeagueTables with a budget: the bytes every
-// candidate and partner-list parse may read in total.
-func scanLeagueTables(body []byte, uid uint32, stageCount, budget int) (tables []LeagueTable, truncated bool) {
+// scanLeagueTables is parseLeagueTables with a row tail size and a budget:
+// the bytes every candidate and partner-list parse may read in total.
+func scanLeagueTables(body []byte, uid uint32, tail, stageCount, budget int) (tables []LeagueTable, truncated bool) {
 	for pos, done := 0, 0; ; {
 		i := bytes.Index(body[pos:], firstStatRef)
 		if i < 0 {
@@ -136,14 +150,14 @@ func scanLeagueTables(body []byte, uid uint32, stageCount, budget int) (tables [
 		if o < done || body[o] == 0 || body[o] > maxTableRows || body[o+1] != 0 || body[o+tablePositionOffset] != 0 {
 			continue
 		}
-		rows, end, ok := readTableList(body, o)
+		rows, end, ok := readTableList(body, o, tail)
 		if budget -= end - o; budget < 0 {
 			return tables, true
 		}
 		if !ok || !validTable(rows) {
 			continue
 		}
-		partner, pend, pok := readTableList(body, end)
+		partner, pend, pok := readTableList(body, end, tail)
 		if budget -= pend - end; budget < 0 {
 			return tables, true
 		}
@@ -166,9 +180,9 @@ func tableStage(body []byte, o, stageCount int) int16 {
 	return s
 }
 
-// readTableList reads a u8 count and that many rows at o. It returns where
-// reading stopped, also on failure.
-func readTableList(body []byte, o int) ([]TableRow, int, bool) {
+// readTableList reads a u8 count and that many rows at o, each row base
+// ending in tail bytes. It returns where reading stopped, also on failure.
+func readTableList(body []byte, o, tail int) ([]TableRow, int, bool) {
 	r := newReader(body)
 	r.off = o
 	n := int(r.u8())
@@ -177,7 +191,7 @@ func readTableList(body []byte, o int) ([]TableRow, int, bool) {
 	}
 	var rows []TableRow // not sized from n: most candidates fail early
 	for range n {
-		row, ok := readTableRow(r, 0)
+		row, ok := readTableRow(r, tail, 0)
 		if !ok {
 			return nil, r.off, false
 		}
@@ -189,8 +203,8 @@ func readTableList(body []byte, o int) ([]TableRow, int, bool) {
 // readTableRow reads a row: the base, i16 n + n round positions, i8 m +
 // m × 8 bytes, u8 sub-object flag (1 is not decoded and rejects the row),
 // 10 form bytes, u8 flag (1 = a chained row follows; read and dropped).
-func readTableRow(r *reader, depth int) (TableRow, bool) {
-	row, ok := readTableRowBase(r)
+func readTableRow(r *reader, tail, depth int) (TableRow, bool) {
+	row, ok := readTableRowBase(r, tail)
 	if !ok {
 		return TableRow{}, false
 	}
@@ -212,7 +226,7 @@ func readTableRow(r *reader, depth int) (TableRow, bool) {
 		if depth >= maxTableRowChain {
 			return TableRow{}, false
 		}
-		if _, ok := readTableRow(r, depth+1); !ok {
+		if _, ok := readTableRow(r, tail, depth+1); !ok {
 			return TableRow{}, false
 		}
 	}
@@ -221,8 +235,8 @@ func readTableRow(r *reader, depth int) (TableRow, bool) {
 
 // readTableRowBase reads the row base: ref team, 14 × u8 (the first is the
 // position), i32, 5 stat records (overall, home, away, then two not
-// decoded), u8 flag + u8 n + n × 2 head-to-head stat records, 12 bytes.
-func readTableRowBase(r *reader) (TableRow, bool) {
+// decoded), u8 flag + u8 n + n × 2 head-to-head stat records, tail bytes.
+func readTableRowBase(r *reader, tail int) (TableRow, bool) {
 	var row TableRow
 	r.u8()
 	row.Team = r.i32()
@@ -244,7 +258,7 @@ func readTableRowBase(r *reader) (TableRow, bool) {
 			readTableStats(r)
 		}
 	}
-	r.take(tableRowTailSize)
+	r.take(tail)
 	return row, r.err == nil
 }
 

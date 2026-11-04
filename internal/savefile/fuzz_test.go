@@ -75,8 +75,10 @@ func FuzzParseFixtures(f *testing.F) {
 
 func FuzzParseLeagueTables(f *testing.F) {
 	f.Add(tableFile(74, testTableRows))
+	f.Add(tableFileTail(74, rowTail27, testTableRows))
 	f.Fuzz(func(t *testing.T, body []byte) {
-		_, _ = parseLeagueTables(body, 1, 285)
+		_, _ = parseLeagueTables(body, 1, compVersion26, 285)
+		_, _ = parseLeagueTables(body, 1, compVersion27, 285)
 	})
 }
 

@@ -213,3 +213,105 @@ func TestTestSave27bTactics(t *testing.T) {
 		}
 	}
 }
+
+// aLyga27 is the 2026 A Lyga's competition uid; its table lists nine teams
+// in name order.
+const aLyga27 = 2300046
+
+var aLyga27Teams = []int32{6215, 6217, 24793, kzTeam27, 16532, 16547, 4208, 25153, 983}
+
+// Every FM27 comp file reads. Group 41 of competition 150784 (six teams, six
+// rounds played) matches its fixtures row for row.
+func TestTestSave27LeagueTables(t *testing.T) {
+	for _, tc := range []struct {
+		path   string
+		tables int
+	}{{testSave27Path, 138}, {testSave27bPath, 141}} {
+		t.Run(tc.path, func(t *testing.T) {
+			a := openTestSaveAt(t, tc.path)
+			db, err := ReadGameDB(a)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tables, err := ReadLeagueTables(a, len(db.StageUIDs))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(tables.Tables) != tc.tables || tables.Skipped != 0 {
+				t.Errorf("%d tables, %d skipped files; want %d, 0", len(tables.Tables), tables.Skipped, tc.tables)
+			}
+			lyga := findTable(t, tables.Tables, aLyga27, -1)
+			for i, r := range lyga.Rows {
+				if i >= len(aLyga27Teams) || r.Team != aLyga27Teams[i] || r.Overall != (TableStats{}) {
+					t.Errorf("A Lyga row %d = %+v", i, r)
+				}
+			}
+			if len(lyga.Rows) != len(aLyga27Teams) {
+				t.Errorf("A Lyga has %d rows", len(lyga.Rows))
+			}
+			checkTableMatchesFixtures(t, a, db, findTable(t, tables.Tables, 150784, 41))
+		})
+	}
+}
+
+func findTable(t *testing.T, tables []LeagueTable, uid uint32, stage int16) LeagueTable {
+	t.Helper()
+	i := slices.IndexFunc(tables, func(tb LeagueTable) bool { return tb.CompetitionUID == uid && tb.Stage == stage })
+	if i < 0 {
+		t.Fatalf("no table for competition %d stage %d", uid, stage)
+	}
+	return tables[i]
+}
+
+// checkTableMatchesFixtures compares each row's overall record, points
+// aside, with the played fixtures of its competition and stage between the
+// table's teams.
+func checkTableMatchesFixtures(t *testing.T, a *Archive, db *GameDB, tb LeagueTable) {
+	t.Helper()
+	fs, err := ReadFixtures(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	comp := int32(slices.Index(db.CompetitionUIDs, tb.CompetitionUID)) //nolint:gosec // index of a slice
+	if comp < 0 {
+		t.Fatalf("no competition with uid %d", tb.CompetitionUID)
+	}
+	got := map[int32]*TableStats{}
+	for _, r := range tb.Rows {
+		got[r.Team] = &TableStats{}
+	}
+	for _, f := range fs {
+		k := db.CompetitionKeys[f.Key]
+		stage := k.Group
+		if stage < 0 {
+			stage = k.Stage
+		}
+		home, away := got[f.Home], got[f.Away]
+		if f.Result == nil || k.Comp != comp || stage != int32(tb.Stage) || home == nil || away == nil {
+			continue
+		}
+		addResult(home, f.Result.Home[0], f.Result.Away[0])
+		addResult(away, f.Result.Away[0], f.Result.Home[0])
+	}
+	for _, r := range tb.Rows {
+		want := r.Overall
+		want.Points = 0
+		if want.Played == 0 || *got[r.Team] != want {
+			t.Errorf("team %d: table %+v, fixtures %+v", r.Team, want, *got[r.Team])
+		}
+	}
+}
+
+func addResult(s *TableStats, scored, conceded uint8) {
+	s.Played++
+	s.GoalsFor += uint16(scored)
+	s.GoalsAgainst += uint16(conceded)
+	switch {
+	case scored > conceded:
+		s.Won++
+	case scored < conceded:
+		s.Lost++
+	default:
+		s.Drawn++
+	}
+}

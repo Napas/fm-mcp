@@ -16,10 +16,20 @@ func appendStats(b []byte, s TableStats) []byte {
 	return binary.LittleEndian.AppendUint16(b, uint16(s.Points)) //nolint:gosec // signed field
 }
 
-// tableRowBytes encodes a table row in the documented grammar: the base
+// Row tail sizes by comp file version.
+const (
+	rowTail26 = 12
+	rowTail27 = 13
+)
+
+// tableRowBytes encodes a 26.3.2 table row.
+func tableRowBytes(row TableRow) []byte { return tableRowBytesTail(row, rowTail26) }
+
+// tableRowBytesTail encodes a table row in the documented grammar: the base
 // (team ref, position and 13 more u8, i32, 5 stat records, no head-to-head,
-// 12 bytes), 2 round positions, no m items, no sub-object, form, no nested row.
-func tableRowBytes(row TableRow) []byte {
+// tail bytes), 2 round positions, no m items, no sub-object, form, no nested
+// row.
+func tableRowBytesTail(row TableRow, tail int) []byte {
 	b := append([]byte{0}, binary.LittleEndian.AppendUint32(nil, uint32(row.Team))...) //nolint:gosec // signed field
 	b = append(b, row.Position)
 	b = append(b, make([]byte, 13+4)...)
@@ -27,18 +37,21 @@ func tableRowBytes(row TableRow) []byte {
 		b = appendStats(b, s)
 	}
 	b = append(b, 0)
-	b = append(b, make([]byte, 12)...)
+	b = append(b, make([]byte, tail)...)
 	b = append(b, 2, 0, row.Position, 0xff)
 	b = append(b, 0, 0)
 	b = append(b, row.Form[:]...)
 	return append(b, 0)
 }
 
-// tableList encodes a u8-counted row list.
-func tableList(rows ...TableRow) []byte {
+// tableList encodes a u8-counted list of 26.3.2 rows.
+func tableList(rows ...TableRow) []byte { return tableListTail(rowTail26, rows...) }
+
+// tableListTail encodes a u8-counted row list with the given row tail size.
+func tableListTail(tail int, rows ...TableRow) []byte {
 	b := []byte{byte(len(rows))} //nolint:gosec // small test data
 	for _, r := range rows {
-		b = append(b, tableRowBytes(r)...)
+		b = append(b, tableRowBytesTail(r, tail)...)
 	}
 	return b
 }
@@ -62,29 +75,40 @@ var testTableRows = []TableRow{
 		Form: [10]uint8{2, 1}},
 }
 
-// tableFile is a comp file body holding one table with stage and its
-// partner list in reverse order.
-func tableFile(stage int16, rows []TableRow) []byte {
+// tableFile is a 26.3.2 comp file body holding one table with stage and
+// its partner list in reverse order.
+func tableFile(stage int16, rows []TableRow) []byte { return tableFileTail(stage, rowTail26, rows) }
+
+// tableFileTail is tableFile with the given row tail size.
+func tableFileTail(stage int16, tail int, rows []TableRow) []byte {
 	b := append([]byte{0xaa, 0xbb, 0xcc}, stagePrefix(stage)...)
-	b = append(b, tableList(rows...)...)
+	b = append(b, tableListTail(tail, rows...)...)
 	partner := slices.Clone(rows)
 	slices.Reverse(partner)
-	b = append(b, tableList(partner...)...)
+	b = append(b, tableListTail(tail, partner...)...)
 	return append(b, 0xdd, 0xee)
 }
 
 func TestParseLeagueTable(t *testing.T) {
-	got, truncated := parseLeagueTables(tableFile(74, testTableRows), 16, 285)
+	for _, tc := range []struct {
+		version     uint16
+		tail, other int
+	}{{compVersion26, rowTail26, rowTail27}, {compVersion27, rowTail27, rowTail26}} {
+		got, truncated := parseLeagueTables(tableFileTail(74, tc.tail, testTableRows), 16, tc.version, 285)
 
-	want := []LeagueTable{{CompetitionUID: 16, Stage: 74, Rows: testTableRows}}
-	if !reflect.DeepEqual(got, want) || truncated {
-		t.Errorf("tables = %+v, want %+v (the partner list skipped)", got, want)
+		want := []LeagueTable{{CompetitionUID: 16, Stage: 74, Rows: testTableRows}}
+		if !reflect.DeepEqual(got, want) || truncated {
+			t.Errorf("version %d: tables = %+v, want %+v (the partner list skipped)", tc.version, got, want)
+		}
+		if got, _ := parseLeagueTables(tableFileTail(74, tc.other, testTableRows), 16, tc.version, 285); len(got) != 0 {
+			t.Errorf("version %d: %d-byte row tails accepted: %+v", tc.version, tc.other, got)
+		}
 	}
 }
 
 func TestParseLeagueTableBadStage(t *testing.T) {
 	for _, stage := range []int16{2025, -248, 285} {
-		got, _ := parseLeagueTables(tableFile(stage, testTableRows), 16, 285)
+		got, _ := parseLeagueTables(tableFile(stage, testTableRows), 16, compVersion26, 285)
 		if len(got) != 1 || got[0].Stage != -1 {
 			t.Errorf("stage %d: tables = %+v, want one with no stage", stage, got)
 		}
@@ -101,12 +125,12 @@ func TestParseLeagueTableRejects(t *testing.T) {
 		rows := slices.Clone(testTableRows)
 		mutate(rows)
 		body := append(stagePrefix(-1), tableList(rows...)...)
-		if got, _ := parseLeagueTables(body, 16, 285); len(got) != 0 {
+		if got, _ := parseLeagueTables(body, 16, compVersion26, 285); len(got) != 0 {
 			t.Errorf("%s: tables = %+v, want none", name, got)
 		}
 	}
 	one := append(stagePrefix(-1), tableList(testTableRows[0])...)
-	if got, _ := parseLeagueTables(one, 16, 285); len(got) != 0 {
+	if got, _ := parseLeagueTables(one, 16, compVersion26, 285); len(got) != 0 {
 		t.Errorf("one-row table accepted: %+v", got)
 	}
 }
@@ -116,7 +140,7 @@ func TestParseLeagueTableRejectsSubObject(t *testing.T) {
 	// The second row's sub-object flag sits 12 bytes before its end.
 	end := len(body)
 	body[end-12] = 1
-	if got, _ := parseLeagueTables(body, 16, 285); len(got) != 0 {
+	if got, _ := parseLeagueTables(body, 16, compVersion26, 285); len(got) != 0 {
 		t.Errorf("tables = %+v, want none", got)
 	}
 }
@@ -224,7 +248,7 @@ func TestParseLeagueTableSkipsSameOrderPartner(t *testing.T) {
 	body := append(stagePrefix(-1), tableList(testTableRows...)...)
 	body = append(body, tableList(testTableRows...)...)
 
-	if got, _ := parseLeagueTables(body, 16, 285); len(got) != 1 {
+	if got, _ := parseLeagueTables(body, 16, compVersion26, 285); len(got) != 1 {
 		t.Errorf("%d tables, want 1 (the partner list skipped)", len(got))
 	}
 }
@@ -247,16 +271,16 @@ func TestScanLeagueTablesChargesEveryPartnerParse(t *testing.T) {
 
 	// The budget covers the table only; reading the following list, which
 	// is not its partner, must still be charged.
-	if _, truncated := scanLeagueTables(body, 16, 285, len(table)+1); !truncated {
+	if _, truncated := scanLeagueTables(body, 16, rowTail26, 285, len(table)+1); !truncated {
 		t.Error("following-list parse not charged to the budget")
 	}
-	if got, truncated := scanLeagueTables(body, 16, 285, 3*len(body)); truncated || len(got) != 1 {
+	if got, truncated := scanLeagueTables(body, 16, rowTail26, 285, 3*len(body)); truncated || len(got) != 1 {
 		t.Errorf("%d tables, truncated %v; want 1, false", len(got), truncated)
 	}
 }
 
 func TestScanLeagueTablesStopsAtBudget(t *testing.T) {
-	if got, truncated := scanLeagueTables(tableFile(74, testTableRows), 16, 285, 1); !truncated || len(got) != 0 {
+	if got, truncated := scanLeagueTables(tableFile(74, testTableRows), 16, rowTail26, 285, 1); !truncated || len(got) != 0 {
 		t.Errorf("%d tables, truncated %v; want 0, true", len(got), truncated)
 	}
 }
@@ -274,7 +298,7 @@ func TestParseLeagueTableDropsChainedRows(t *testing.T) {
 	body = append(body, chained(tableRowBytes(testTableRows[0]), extra)...)
 	body = append(body, tableRowBytes(testTableRows[1])...)
 
-	got, _ := parseLeagueTables(body, 16, 285)
+	got, _ := parseLeagueTables(body, 16, compVersion26, 285)
 	if len(got) != 1 || !reflect.DeepEqual(got[0].Rows, testTableRows[:2]) {
 		t.Errorf("tables = %+v, want the two rows without the chained one", got)
 	}
@@ -289,7 +313,7 @@ func TestParseLeagueTableRejectsDeepChains(t *testing.T) {
 	body = append(body, chained(tableRowBytes(testTableRows[0]), row)...)
 	body = append(body, tableRowBytes(testTableRows[1])...)
 
-	if got, _ := parseLeagueTables(body, 16, 285); len(got) != 0 {
+	if got, _ := parseLeagueTables(body, 16, compVersion26, 285); len(got) != 0 {
 		t.Errorf("tables = %+v, want none", got)
 	}
 }
@@ -300,7 +324,7 @@ func TestScanLeagueTablesChargesRejectedCandidates(t *testing.T) {
 	list := tableList(rows...)
 	body := append(stagePrefix(-1), list...)
 
-	if _, truncated := scanLeagueTables(body, 16, 285, len(list)-1); !truncated {
+	if _, truncated := scanLeagueTables(body, 16, rowTail26, 285, len(list)-1); !truncated {
 		t.Error("a rejected candidate's parse is not charged to the budget")
 	}
 }
