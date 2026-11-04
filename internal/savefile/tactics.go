@@ -1,7 +1,6 @@
 package savefile
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 )
@@ -13,16 +12,11 @@ const (
 	teamEntryTag        = 9
 	selectionTag        = 3
 	selectionSize       = 26 // the XI by tactic slot, then the bench
-	setPiecesVersion    = 0x42
-	personRefTag        = 2 // before each person in the set-piece lists
+	personRefTag        = 2  // before each person in the set-piece lists
 	tacticTag           = 0x22
-	tacticObjectVersion = 0x42
 	tacticHeaderTag     = 4
-	positionVersion     = 0x42
 	tacticSlots         = 11
 	tacticBlockSize     = 191 // u32, 11 × (u64 + 5 u8), u32 + 10 u8, 30 u8
-	lastLineupSize      = 242
-	lastLineupVersion   = 8
 	lastLineupFormation = 14  // offset of the in-possession formation, then the out-of-possession one
 	lastLineupPlayers   = 86  // offset of the 26 person indices in a record
 	lastLineupShirts    = 190 // offset of the 26 shirt numbers
@@ -35,7 +29,7 @@ const (
 	formationPhaseShift = 13
 	formationOOPBit     = 1 << formationPhaseShift
 
-	minPositionSize = 27 // a position with no role options
+	minPositionSize = 26 // position with no role options, smallest gap
 	minTacticSize   = tacticSlots * (2*minPositionSize + 1)
 	maxTacticList   = 1024 // sanity cap on every list; samples hold at most 22
 	maxTacticTeams  = 64   // team entries per human; samples hold at most 4
@@ -63,8 +57,45 @@ const (
 	maxTacticsSize = 32 << 20
 )
 
-// presetAnchor starts every tactic: tag and object version.
-var presetAnchor = []byte{tacticTag, tacticObjectVersion, 0}
+// Object versions of set pieces, tactics, tactic headers, positions and plan
+// items. Each object accepts either.
+const (
+	tacticObjectVersion26 = 0x42 // 26.2.0 and 26.3.2
+	tacticObjectVersion27 = 0x44 // 27.0.0
+)
+
+// tacticObjectVersions maps each accepted object version to the bytes between a
+// position's mask and its role options.
+var tacticObjectVersions = map[uint16]int{
+	tacticObjectVersion26: 4,
+	tacticObjectVersion27: 3,
+}
+
+// lastLineupSizes maps a last-lineup record version to its size; the fields
+// up to the shirt numbers have the same offsets in both.
+var lastLineupSizes = map[uint32]int{
+	8:  242, // 26.2.0 and 26.3.2
+	10: 243, // 27.0.0
+}
+
+// readObjectVersion reads an object version and fails r unless it is known.
+func readObjectVersion(r *reader, what string) uint16 {
+	v := r.u16()
+	if _, ok := tacticObjectVersions[v]; !ok {
+		r.fail("%s %#x", what, v)
+	}
+	return v
+}
+
+// isTacticStart reports whether b starts with a tactic tag and a known object
+// version.
+func isTacticStart(b []byte) bool {
+	if len(b) < 3 || b[0] != tacticTag {
+		return false
+	}
+	_, ok := tacticObjectVersions[binary.LittleEndian.Uint16(b[1:])]
+	return ok
+}
 
 // Tactics is the human manager's first team entry and every team's
 // last-match lineup.
@@ -407,13 +438,13 @@ func skipHumanTail(r *reader) {
 	}
 	r.expectU8(listTag, "tactic headers tag")
 	for range listCount(r, r.u32(), minHeaderItemSize, "tactic headers") {
-		r.expectU16(tacticObjectVersion, "tactic header version")
+		readObjectVersion(r, "tactic header version")
 		r.u32() // key
 		readTacticHeader(r)
 	}
 	r.expectU8(listTag, "named positions tag")
 	for range listCount(r, r.u32(), 2+4+2*minPositionSize, "named positions") {
-		r.expectU16(positionVersion, "named position version")
+		readObjectVersion(r, "named position version")
 		r.str()
 		readSlotRole(r)
 		readSlotRole(r)
@@ -443,7 +474,7 @@ func skipPlan(r *reader) {
 		r.i32()
 		r.str()
 		r.take(3)
-		r.expectU16(tacticObjectVersion, "plan item version")
+		readObjectVersion(r, "plan item version")
 		skipBitset(r)
 		r.take(2)
 	}
@@ -468,7 +499,7 @@ func listCount(r *reader, n uint32, minSize int, what string) int {
 
 // skipSetPieces skips the set-piece takers (not decoded).
 func skipSetPieces(r *reader) {
-	r.expectU16(setPiecesVersion, "set pieces version")
+	readObjectVersion(r, "set pieces version")
 	skipPersonLists(r, 2)
 	r.take(1 + 4 + 3) // u8, i32 person, 3 × u8
 	skipPersonLists(r, 3+7)
@@ -492,19 +523,22 @@ func skipPersonLists(r *reader, lists int) {
 func readTactic(r *reader) (Tactic, error) {
 	var t Tactic
 	r.expectU8(tacticTag, "tactic tag")
-	r.expectU16(tacticObjectVersion, "tactic version")
+	readObjectVersion(r, "tactic version")
 	r.take(5) // build stamp, u8 kind (2 human, 1 preset)
 	t.Name = r.str()
 	for range 3 {
 		r.str() // empty in every sample
 	}
 	t.Mentality = readTacticHeader(r)
+	var numbers uint16 // slot numbers seen; 0..10 in any order
 	for i := range t.Slots {
 		t.Slots[i].InPossession = readSlotRole(r)
 		t.Slots[i].OutOfPossession = readSlotRole(r)
-		if n := r.u8(); r.err == nil && int(n) != i {
+		n := r.u8()
+		if r.err == nil && (n >= tacticSlots || numbers&(1<<n) != 0) {
 			r.fail("slot %d numbered %d", i, n)
 		}
+		numbers |= 1 << n
 	}
 	if r.u8() != 0 {
 		skipPositionMap(r)
@@ -536,10 +570,10 @@ func readTacticHeader(r *reader) uint8 {
 // instructions (skipped), and the selected role.
 func readSlotRole(r *reader) SlotRole {
 	var p SlotRole
-	r.expectU16(positionVersion, "position version")
+	v := readObjectVersion(r, "position version")
 	r.u8()
 	p.Position = r.u32()
-	r.take(2 + 2)
+	r.take(tacticObjectVersions[v])
 	n := listCount(r, r.u32(), 16, "role options")
 	for range n {
 		r.u64() // role
@@ -570,15 +604,15 @@ func skipPositionMap(r *reader) {
 }
 
 // findLastLineups scans for the last-lineup table at or after from: a u16
-// count of 242-byte records sorted by team, the u16-counted presets, then
-// u16 0 at the end of the file.
+// count of records sorted by team, the u16-counted presets, then u16 0 at the
+// end of the file.
 func findLastLineups(b []byte, from int) (lineupTable, error) {
 	presets := newPresetChain(b)
 	tries := 0
 	for p := from; p+2 <= len(b); p++ {
-		n := int(binary.LittleEndian.Uint16(b[p:]))
-		end := p + 2 + n*lastLineupSize
-		if end+2+len(presetAnchor) > len(b) || !bytes.Equal(b[end+2:end+2+len(presetAnchor)], presetAnchor) {
+		n, size, ok := lineupTableShape(b, p)
+		end := p + 2 + n*size
+		if !ok || end+2 > len(b) || !isTacticStart(b[end+2:]) {
 			continue
 		}
 		if tries++; tries > maxLineupCandidates {
@@ -591,14 +625,35 @@ func findLastLineups(b []byte, from int) (lineupTable, error) {
 	return lineupTable{}, fmt.Errorf("%w: last-lineup table not found", ErrCorrupt)
 }
 
-// validLastLineups reports whether b holds n records with the right version
-// and zero bytes, sorted by team.
-func validLastLineups(b []byte, n int) bool {
+// lineupTableShape reads the u16 record count of a last-lineup table at
+// b[at:] and the record size of its first record's version (0 when empty).
+// ok is false when the version is unknown or the records run past b.
+func lineupTableShape(b []byte, at int) (n, size int, ok bool) {
+	if at+2 > len(b) {
+		return 0, 0, false
+	}
+	if n = int(binary.LittleEndian.Uint16(b[at:])); n == 0 {
+		return 0, 0, true
+	}
+	if at+6 > len(b) {
+		return 0, 0, false
+	}
+	size, ok = lastLineupSizes[binary.LittleEndian.Uint32(b[at+2:])]
+	return n, size, ok && at+2+n*size <= len(b)
+}
+
+// validLastLineups reports whether b holds n records of one version with
+// zero bytes, sorted by team.
+func validLastLineups(b []byte, n, size int) bool {
 	prev := int32(-1)
+	var first uint32
 	for i := range n {
-		r := newReader(b[i*lastLineupSize : (i+1)*lastLineupSize])
+		r := newReader(b[i*size : (i+1)*size])
 		version, z1, team, z2 := r.u32(), r.u8(), r.i32(), r.u8()
-		if version != lastLineupVersion || z1 != 0 || z2 != 0 || team <= prev {
+		if i == 0 {
+			first = version
+		}
+		if version != first || z1 != 0 || z2 != 0 || team <= prev {
 			return false
 		}
 		prev = team
@@ -607,10 +662,10 @@ func validLastLineups(b []byte, n int) bool {
 }
 
 // readLastLineups decodes n records that validLastLineups accepted.
-func readLastLineups(b []byte, n int) map[int32]LastLineup {
+func readLastLineups(b []byte, n, size int) map[int32]LastLineup {
 	out := make(map[int32]LastLineup, n)
 	for i := range n {
-		rec := b[i*lastLineupSize : (i+1)*lastLineupSize]
+		rec := b[i*size : (i+1)*size]
 		r := newReader(rec)
 		r.take(5) // version, u8 0
 		team := r.i32()
@@ -675,19 +730,16 @@ func newPresetChain(b []byte) *presetChain {
 // tableAt reads b[at:] as u16 n + n last-lineup records sorted by team, the
 // presets and u16 0 at the end of b.
 func (c *presetChain) tableAt(at int) (lineupTable, bool) {
-	if at+2 > len(c.b) {
-		return lineupTable{}, false
-	}
-	n := int(binary.LittleEndian.Uint16(c.b[at:]))
-	end := at + 2 + n*lastLineupSize
-	if end > len(c.b) || !validLastLineups(c.b[at+2:end], n) {
+	n, size, ok := lineupTableShape(c.b, at)
+	end := at + 2 + n*size
+	if !ok || !validLastLineups(c.b[at+2:end], n, size) {
 		return lineupTable{}, false
 	}
 	count, ok := c.read(end)
 	if !ok {
 		return lineupTable{}, false
 	}
-	return lineupTable{at: at, presets: count, lineups: readLastLineups(c.b[at+2:end], n)}, true
+	return lineupTable{at: at, presets: count, lineups: readLastLineups(c.b[at+2:end], n, size)}, true
 }
 
 // read reports whether b[at:] is u16 n, n tactics and u16 0, and returns n.

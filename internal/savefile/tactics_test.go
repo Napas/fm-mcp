@@ -13,11 +13,24 @@ import (
 
 // Synthetic tactics_man.dat bodies (layout in docs/format.md).
 
-func appendPosition(b []byte, p SlotRole, options int) []byte {
-	b = binary.LittleEndian.AppendUint16(b, 0x42)
+// tacticsEncoding holds what one build writes differently.
+type tacticsEncoding struct {
+	object        uint16 // version of set pieces, tactics, positions and plan items
+	positionGap   []byte // between a POSITION's mask and its role options
+	lineupVersion uint32
+	lineupTail    int // LAST_LINEUP bytes after the shirt numbers
+}
+
+var (
+	enc26 = tacticsEncoding{object: 0x42, positionGap: []byte{0xff, 0, 1, 1}, lineupVersion: 8, lineupTail: 26}
+	enc27 = tacticsEncoding{object: 0x44, positionGap: []byte{0, 1, 1}, lineupVersion: 10, lineupTail: 27}
+)
+
+func (e tacticsEncoding) appendPosition(b []byte, p SlotRole, options int) []byte {
+	b = binary.LittleEndian.AppendUint16(b, e.object)
 	b = append(b, 2)
 	b = binary.LittleEndian.AppendUint32(b, p.Position)
-	b = append(b, 0xff, 0, 1, 1)
+	b = append(b, e.positionGap...)
 	b = binary.LittleEndian.AppendUint32(b, uint32(options)) //nolint:gosec // test sizes
 	for i := range options {
 		b = binary.LittleEndian.AppendUint64(b, p.Role|uint64(i))
@@ -33,9 +46,9 @@ func appendPosition(b []byte, p SlotRole, options int) []byte {
 }
 
 // appendTactic encodes t; extra adds the optional maps and block.
-func appendTactic(b []byte, t Tactic, extra bool) []byte {
+func (e tacticsEncoding) appendTactic(b []byte, t Tactic, extra bool) []byte {
 	b = append(b, tacticTag)
-	b = binary.LittleEndian.AppendUint16(b, tacticObjectVersion)
+	b = binary.LittleEndian.AppendUint16(b, e.object)
 	b = append(b, 0x1a, 3, 0, 1, 2)
 	b = appendString(b, t.Name)
 	for range 3 {
@@ -49,8 +62,8 @@ func appendTactic(b []byte, t Tactic, extra bool) []byte {
 	b = appendString(b, "Custom")
 	b = append(b, "LLUN"...)
 	for i, s := range t.Slots {
-		b = appendPosition(b, s.InPossession, 2)
-		b = appendPosition(b, s.OutOfPossession, 1)
+		b = e.appendPosition(b, s.InPossession, 2)
+		b = e.appendPosition(b, s.OutOfPossession, 1)
 		b = append(b, byte(i))
 	}
 	if !extra {
@@ -61,7 +74,7 @@ func appendTactic(b []byte, t Tactic, extra bool) []byte {
 		b = binary.LittleEndian.AppendUint32(b, 1)
 		b = binary.LittleEndian.AppendUint32(b, 5)
 		b = binary.LittleEndian.AppendUint32(b, 1)
-		b = appendPosition(b, SlotRole{Position: 0x10, Role: 0x200002}, 1)
+		b = e.appendPosition(b, SlotRole{Position: 0x10, Role: 0x200002}, 1)
 	}
 	b = binary.LittleEndian.AppendUint32(b, 1)
 	b = binary.LittleEndian.AppendUint32(b, 5)
@@ -80,8 +93,8 @@ func appendPersonList(b []byte, persons ...int32) []byte {
 	return b
 }
 
-func appendSetPieces(b []byte) []byte {
-	b = binary.LittleEndian.AppendUint16(b, setPiecesVersion)
+func (e tacticsEncoding) appendSetPieces(b []byte) []byte {
+	b = binary.LittleEndian.AppendUint16(b, e.object)
 	b = appendPersonList(b, 55473, 40427)
 	b = appendPersonList(b)
 	b = append(b, 1)
@@ -112,15 +125,15 @@ func appendSelection(b []byte, sel [selectionSize]int32) []byte {
 // appendTeamEntry encodes a team entry keyed by team: its head (selection,
 // set pieces, tactics) and a tail with keyed records and routine vectors of
 // the given lengths.
-func appendTeamEntry(b []byte, team int32, sel [selectionSize]int32, active int32, keyed, routines int, tactics ...Tactic) []byte {
+func (e tacticsEncoding) appendTeamEntry(b []byte, team int32, sel [selectionSize]int32, active int32, keyed, routines int, tactics ...Tactic) []byte {
 	b = binary.LittleEndian.AppendUint32(b, uint32(team)) //nolint:gosec // test values
 	b = append(b, teamEntryTag)
 	b = appendSelection(b, sel)
-	b = appendSetPieces(b)
+	b = e.appendSetPieces(b)
 	b = binary.LittleEndian.AppendUint32(b, uint32(active))       //nolint:gosec // test values
 	b = binary.LittleEndian.AppendUint16(b, uint16(len(tactics))) //nolint:gosec // test sizes
 	for _, t := range tactics {
-		b = appendTactic(b, t, true)
+		b = e.appendTactic(b, t, true)
 	}
 	return appendTeamEntryTail(b, keyed, routines)
 }
@@ -199,15 +212,15 @@ func appendCount(b []byte, n int) []byte {
 
 // appendHumanTail encodes the lists after a human's team entries, each with
 // n items.
-func appendHumanTail(b []byte, n int) []byte {
+func (e tacticsEncoding) appendHumanTail(b []byte, n int) []byte {
 	b = binary.LittleEndian.AppendUint16(b, uint16(n)) //nolint:gosec // test sizes
 	for range n {
-		b = appendTactic(b, zazTactic(), false)
+		b = e.appendTactic(b, zazTactic(), false)
 	}
 	b = append(b, 1)
 	b = appendCount(b, n)
 	for range n {
-		b = binary.LittleEndian.AppendUint16(b, tacticObjectVersion)
+		b = binary.LittleEndian.AppendUint16(b, e.object)
 		b = binary.LittleEndian.AppendUint32(b, 0)
 		b = appendBitset(append(b, tacticHeaderTag, 2, 1))
 		b = append(appendString(b, "Custom"), "LLUN"...)
@@ -215,10 +228,10 @@ func appendHumanTail(b []byte, n int) []byte {
 	b = append(b, 1)
 	b = appendCount(b, n)
 	for range n {
-		b = binary.LittleEndian.AppendUint16(b, positionVersion)
+		b = binary.LittleEndian.AppendUint16(b, e.object)
 		b = appendString(b, "Wide")
-		b = appendPosition(b, SlotRole{Position: 0x800, Role: 0x8800000}, 1)
-		b = appendPosition(b, SlotRole{Position: 0x800, Role: 0x4000400000}, 0)
+		b = e.appendPosition(b, SlotRole{Position: 0x800, Role: 0x8800000}, 1)
+		b = e.appendPosition(b, SlotRole{Position: 0x800, Role: 0x4000400000}, 0)
 	}
 	b = appendCount(b, n)
 	for range n {
@@ -235,7 +248,7 @@ func appendHumanTail(b []byte, n int) []byte {
 		b = binary.LittleEndian.AppendUint32(b, 0x200001)
 		b = binary.LittleEndian.AppendUint32(append(b, 1), 5)
 		b = append(appendString(b, ""), 1, 2, 3)
-		b = binary.LittleEndian.AppendUint16(b, tacticObjectVersion)
+		b = binary.LittleEndian.AppendUint16(b, e.object)
 		b = append(appendBitset(b), 0, 0)
 		b = binary.LittleEndian.AppendUint32(append(b, 1), 0)
 		b = append(appendString(b, ""), 0, 0, 0, 0, 0, 7)
@@ -306,8 +319,8 @@ func reverseLookup[V comparable](m map[int8]V, v V) (int8, bool) {
 
 // appendLastLineup encodes l; a nil formation is written as zero bytes,
 // which do not decode.
-func appendLastLineup(b []byte, team int32, l LastLineup) []byte {
-	b = binary.LittleEndian.AppendUint32(b, 8)
+func (e tacticsEncoding) appendLastLineup(b []byte, team int32, l LastLineup) []byte {
+	b = binary.LittleEndian.AppendUint32(b, e.lineupVersion)
 	b = append(b, 0)
 	b = binary.LittleEndian.AppendUint32(b, uint32(team)) //nolint:gosec // test values
 	b = append(b, 0)
@@ -322,41 +335,41 @@ func appendLastLineup(b []byte, team int32, l LastLineup) []byte {
 		b = binary.LittleEndian.AppendUint32(b, uint32(p)) //nolint:gosec // test values
 	}
 	b = append(b, l.ShirtNumbers[:]...)
-	return append(b, bytes.Repeat([]byte{0xee}, 26)...)
+	return append(b, bytes.Repeat([]byte{0xee}, e.lineupTail)...)
 }
 
 // appendHuman encodes a human whose first team entry is team with the given
 // selection, active index and tactics, followed by team+1 holding a copy of
 // the tactic, a keyed record and routine vectors of two.
-func appendHuman(b []byte, human uint32, team int32, sel [selectionSize]int32, active int32, tactics []Tactic) []byte {
+func (e tacticsEncoding) appendHuman(b []byte, human uint32, team int32, sel [selectionSize]int32, active int32, tactics []Tactic) []byte {
 	b = append(b, humanTacticsTag)
 	b = binary.LittleEndian.AppendUint32(b, human)
 	b = binary.LittleEndian.AppendUint32(b, 2)
-	b = appendTeamEntry(b, team, sel, active, 0, 1, tactics...)
-	b = appendTeamEntry(b, team+1, emptySelection(), 0, 1, 2, Tactic{Name: "copy"})
-	return appendHumanTail(b, 1)
+	b = e.appendTeamEntry(b, team, sel, active, 0, 1, tactics...)
+	b = e.appendTeamEntry(b, team+1, emptySelection(), 0, 1, 2, Tactic{Name: "copy"})
+	return e.appendHumanTail(b, 1)
 }
 
 // appendTablesAfterHumans encodes the last-lineup table, the presets and an
 // empty fourth list.
-func appendTablesAfterHumans(b []byte, lineups map[int32]LastLineup, teams []int32, presets ...Tactic) []byte {
+func (e tacticsEncoding) appendTablesAfterHumans(b []byte, lineups map[int32]LastLineup, teams []int32, presets ...Tactic) []byte {
 	b = binary.LittleEndian.AppendUint16(b, uint16(len(teams))) //nolint:gosec // test sizes
 	for _, t := range teams {
-		b = appendLastLineup(b, t, lineups[t])
+		b = e.appendLastLineup(b, t, lineups[t])
 	}
 	b = binary.LittleEndian.AppendUint16(b, uint16(len(presets))) //nolint:gosec // test sizes
 	for _, p := range presets {
-		b = appendTactic(b, p, false)
+		b = e.appendTactic(b, p, false)
 	}
 	return binary.LittleEndian.AppendUint16(b, 0)
 }
 
 // tacticsBody encodes a one-human tactics_man.dat body (see appendHuman),
 // the last-lineup table, the presets and an empty fourth list.
-func tacticsBody(human uint32, team int32, sel [selectionSize]int32, active int32, tactics []Tactic, lineups map[int32]LastLineup, teams []int32, presets ...Tactic) []byte {
+func (e tacticsEncoding) tacticsBody(human uint32, team int32, sel [selectionSize]int32, active int32, tactics []Tactic, lineups map[int32]LastLineup, teams []int32, presets ...Tactic) []byte {
 	b := binary.LittleEndian.AppendUint16(nil, 1)
-	b = appendHuman(b, human, team, sel, active, tactics)
-	return appendTablesAfterHumans(b, lineups, teams, presets...)
+	b = e.appendHuman(b, human, team, sel, active, tactics)
+	return e.appendTablesAfterHumans(b, lineups, teams, presets...)
 }
 
 // copyEntry is the second team entry appendHuman writes.
@@ -513,7 +526,7 @@ func TestParseTacticsDropsUndecodedFormations(t *testing.T) {
 		652: {Opponent: 1545, Players: zazSelection(), Formation: zazFormation()},
 		670: {Opponent: 652, Players: zazSelection()}, // formation bytes all zero
 	}
-	got, err := parseTactics(tacticsBody(158530, 652, zazSelection(), 0, []Tactic{zazTactic()}, lineups, []int32{652, 670}, zazTactic()))
+	got, err := parseTactics(enc26.tacticsBody(158530, 652, zazSelection(), 0, []Tactic{zazTactic()}, lineups, []int32{652, 670}, zazTactic()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -529,38 +542,76 @@ func TestParseTactics(t *testing.T) {
 	other := LastLineup{Opponent: 652, Players: emptySelection(), Formation: zazFormation()}
 	lineups := map[int32]LastLineup{652: last, 670: other}
 
-	tests := []struct {
-		name string
-		body []byte
-		want Tactics
-	}{
-		{
-			name: "selected XI and one tactic",
-			body: tacticsBody(158530, 652, zazSelection(), 0, []Tactic{zazTactic()}, lineups, []int32{652, 670}, preset),
-			want: Tactics{
-				Human: 158530, Team: 652, Selection: zazSelection(), Active: 0, Tactics: []Tactic{zazTactic()},
-				LastLineups: lineups,
+	for _, enc := range []struct {
+		build string
+		e     tacticsEncoding
+	}{{"26", enc26}, {"27", enc27}} {
+		tests := []struct {
+			name string
+			body []byte
+			want Tactics
+		}{
+			{
+				name: "selected XI and one tactic",
+				body: enc.e.tacticsBody(158530, 652, zazSelection(), 0, []Tactic{zazTactic()}, lineups, []int32{652, 670}, preset),
+				want: Tactics{
+					Human: 158530, Team: 652, Selection: zazSelection(), Active: 0, Tactics: []Tactic{zazTactic()},
+					LastLineups: lineups,
+				},
 			},
-		},
-		{
-			name: "no tactic, empty selection, no last lineups",
-			body: tacticsBody(88351, 547, emptySelection(), -1, nil, nil, nil, preset),
-			want: Tactics{
-				Human: 88351, Team: 547, Selection: emptySelection(), Active: -1, Tactics: []Tactic{},
-				LastLineups: map[int32]LastLineup{},
+			{
+				name: "no tactic, empty selection, no last lineups",
+				body: enc.e.tacticsBody(88351, 547, emptySelection(), -1, nil, nil, nil, preset),
+				want: Tactics{
+					Human: 88351, Team: 547, Selection: emptySelection(), Active: -1, Tactics: []Tactic{},
+					LastLineups: map[int32]LastLineup{},
+				},
 			},
-		},
+		}
+		for _, tt := range tests {
+			t.Run(enc.build+"/"+tt.name, func(t *testing.T) {
+				got, err := parseTactics(tt.body)
+				if err != nil {
+					t.Fatalf("parseTactics: %v", err)
+				}
+				if !reflect.DeepEqual(got, tt.want) {
+					t.Errorf("got %+v\nwant %+v", got, tt.want)
+				}
+			})
+		}
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseTactics(tt.body)
-			if err != nil {
-				t.Fatalf("parseTactics: %v", err)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %+v\nwant %+v", got, tt.want)
-			}
-		})
+}
+
+// TestParseTacticsFallsBackToScan27 breaks the walk of a 27.0.0 body: the
+// scan finds its 243-byte last lineups and 0x44 presets.
+func TestParseTacticsFallsBackToScan27(t *testing.T) {
+	lineups := map[int32]LastLineup{652: {Opponent: 1, Players: zazSelection(), Formation: zazFormation(), ShirtNumbers: zazShirtNumbers()}}
+	body := enc27.tacticsBody(158530, 652, zazSelection(), 0, []Tactic{zazTactic()}, lineups, []int32{652}, zazTactic())
+	body[2] = 0x0e // human tag
+
+	got, err := parseTactics(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.WalkErr == nil || got.WalkErr.Part != walkPartHuman || !reflect.DeepEqual(got.LastLineups, lineups) {
+		t.Errorf("walk error %v, last lineups %+v; want a human error and %+v", got.WalkErr, got.LastLineups, lineups)
+	}
+}
+
+func TestParseTacticsRejectsMixedLastLineupVersions(t *testing.T) {
+	b := binary.LittleEndian.AppendUint16(nil, 0) // no humans
+	b = binary.LittleEndian.AppendUint16(b, 2)
+	b = enc27.appendLastLineup(b, 652, LastLineup{Opponent: -1, Players: emptySelection()})
+	// 27.0.0 record size with version 8.
+	v8 := enc27
+	v8.lineupVersion = enc26.lineupVersion
+	b = v8.appendLastLineup(b, 670, LastLineup{Opponent: -1, Players: emptySelection()})
+	b = binary.LittleEndian.AppendUint16(b, 1)
+	b = enc27.appendTactic(b, zazTactic(), false)
+	b = binary.LittleEndian.AppendUint16(b, 0)
+
+	if _, err := parseTactics(b); !errors.Is(err, ErrCorrupt) {
+		t.Errorf("err = %v, want ErrCorrupt", err)
 	}
 }
 
@@ -568,7 +619,7 @@ func TestParseTacticsNoHumans(t *testing.T) {
 	body := binary.LittleEndian.AppendUint16(nil, 0)
 	body = binary.LittleEndian.AppendUint16(body, 0) // no last lineups
 	body = binary.LittleEndian.AppendUint16(body, 1)
-	body = appendTactic(body, zazTactic(), false)
+	body = enc26.appendTactic(body, zazTactic(), false)
 	body = binary.LittleEndian.AppendUint16(body, 0)
 
 	got, err := parseTactics(body)
@@ -583,7 +634,7 @@ func TestParseTacticsNoHumans(t *testing.T) {
 
 // validTacticsBody is a one-human body with one last lineup and one preset.
 func validTacticsBody() []byte {
-	return tacticsBody(158530, 652, zazSelection(), 0, []Tactic{zazTactic()},
+	return enc26.tacticsBody(158530, 652, zazSelection(), 0, []Tactic{zazTactic()},
 		map[int32]LastLineup{652: {Opponent: 1, Players: emptySelection(), Formation: zazFormation()}}, []int32{652}, zazTactic())
 }
 
@@ -634,7 +685,7 @@ func TestParseTacticsFallsBackToScan(t *testing.T) {
 	// Tactic head 8, four strings, header 3 + bitset 16 + style + "NULL".
 	firstSlot := firstTactic + 8 + 4*4 + len("ZaZ - Autumn 3.39 ST") + 3 + 16 + 4 + len("Custom") + 4
 	firstOptions := firstSlot + 9 + 2
-	if valid[125] != setPiecesVersion || valid[firstSlot] != positionVersion || valid[firstOptions] != 2 {
+	if valid[125] != byte(enc26.object) || valid[firstSlot] != byte(enc26.object) || valid[firstOptions] != 2 {
 		t.Fatalf("offsets do not match the encoding")
 	}
 	// The first and second team entries' records and routines, and the
@@ -650,8 +701,8 @@ func TestParseTacticsFallsBackToScan(t *testing.T) {
 	}
 
 	trailing := binary.LittleEndian.AppendUint16(nil, 1)
-	trailing = appendHuman(trailing, 158530, 652, zazSelection(), 0, []Tactic{zazTactic()})
-	trailing = appendTablesAfterHumans(append(trailing, 0xde, 0xad, 0xbe, 0xef), want.LastLineups, []int32{652}, zazTactic())
+	trailing = enc26.appendHuman(trailing, 158530, 652, zazSelection(), 0, []Tactic{zazTactic()})
+	trailing = enc26.appendTablesAfterHumans(append(trailing, 0xde, 0xad, 0xbe, 0xef), want.LastLineups, []int32{652}, zazTactic())
 
 	tests := []struct {
 		name      string
@@ -706,7 +757,7 @@ func TestParseTacticsScanStartsAfterTheFirstEntry(t *testing.T) {
 	decoys := zazTactic()
 	decoys.Name = strings.Repeat("\x00\x00\x01\x00\x22\x42\x00", maxLineupCandidates+1)
 	lineups := map[int32]LastLineup{652: {Opponent: 1, Players: emptySelection(), Formation: zazFormation()}}
-	body := tacticsBody(158530, 652, zazSelection(), 0, []Tactic{decoys}, lineups, []int32{652}, zazTactic())
+	body := enc26.tacticsBody(158530, 652, zazSelection(), 0, []Tactic{decoys}, lineups, []int32{652}, zazTactic())
 	body[bytes.LastIndex(body, []byte{routinesVersion, 0, 0, 0, 0, 0, 0, 1, 2})] = 0x3d // second entry
 	if _, err := findLastLineups(body, 0); !errors.Is(err, ErrCorrupt) || !strings.Contains(err.Error(), "candidates") {
 		t.Fatalf("scan from 0: err = %v, want the candidate cap", err)
@@ -724,10 +775,10 @@ func TestParseTacticsScanStartsAfterTheFirstEntry(t *testing.T) {
 // 158 531 (team 900), and one last lineup.
 func twoHumansBody() ([]byte, map[int32]LastLineup) {
 	b := binary.LittleEndian.AppendUint16(nil, 2)
-	b = appendHuman(b, 158530, 652, zazSelection(), 0, []Tactic{zazTactic()})
-	b = appendHuman(b, 158531, 900, emptySelection(), -1, nil)
+	b = enc26.appendHuman(b, 158530, 652, zazSelection(), 0, []Tactic{zazTactic()})
+	b = enc26.appendHuman(b, 158531, 900, emptySelection(), -1, nil)
 	lineups := map[int32]LastLineup{652: {Opponent: 900, Players: zazSelection(), Formation: zazFormation()}}
-	return appendTablesAfterHumans(b, lineups, []int32{652}, zazTactic()), lineups
+	return enc26.appendTablesAfterHumans(b, lineups, []int32{652}, zazTactic()), lineups
 }
 
 func TestTacticsWalkReadsEveryHuman(t *testing.T) {
@@ -834,7 +885,7 @@ func TestSkipTeamEntryTail(t *testing.T) {
 }
 
 func TestReadTeamEntry(t *testing.T) {
-	b := appendTeamEntry(nil, 652, zazSelection(), 0, 2, 2, zazTactic())
+	b := enc26.appendTeamEntry(nil, 652, zazSelection(), 0, 2, 2, zazTactic())
 	var got teamEntry
 	consumes(t, b[4:], func(r *reader) {
 		got = readTeamEntryHead(r, 652)
@@ -848,26 +899,61 @@ func TestReadTeamEntry(t *testing.T) {
 
 func TestSkipHumanTail(t *testing.T) {
 	for _, n := range []int{0, 2} {
-		consumes(t, appendHumanTail(nil, n), skipHumanTail)
+		consumes(t, enc26.appendHumanTail(nil, n), skipHumanTail)
 	}
-	b := appendHumanTail(nil, 1)
-	headers := 2 + len(appendTactic(nil, zazTactic(), false)) // the tactic headers' list tag
+	b := enc26.appendHumanTail(nil, 1)
+	headers := 2 + len(enc26.appendTactic(nil, zazTactic(), false)) // the tactic headers' list tag
 	b[headers] = 2
 	if err := skipError(b, skipHumanTail); !errors.Is(err, ErrCorrupt) {
 		t.Errorf("list tag 2: err = %v, want ErrCorrupt", err)
 	}
 }
 
-func TestParseTacticsRejectsWrongSlotNumber(t *testing.T) {
-	bad := appendTactic(nil, zazTactic(), false)
-	bad[len(bad)-2] = 9 // slot 10's number, just before the flag byte
-	if _, err := readTactic(newReader(bad)); !errors.Is(err, ErrCorrupt) {
-		t.Errorf("err = %v, want ErrCorrupt", err)
+// tacticSlotNumbers returns the offsets of the 11 slot numbers in a tactic
+// encoded by appendTactic without the optional maps: slot 10's number is
+// just before the flag byte.
+func tacticSlotNumbers(e tacticsEncoding, tac []byte) [tacticSlots]int {
+	slot := len(e.appendPosition(nil, SlotRole{}, 2)) + len(e.appendPosition(nil, SlotRole{}, 1)) + 1
+	var at [tacticSlots]int
+	for i := range at {
+		at[i] = len(tac) - 2 - (tacticSlots-1-i)*slot
+	}
+	return at
+}
+
+func TestReadTacticSlotNumbers(t *testing.T) {
+	valid := enc27.appendTactic(nil, zazTactic(), false)
+	at := tacticSlotNumbers(enc27, valid)
+	for i, off := range at {
+		if valid[off] != byte(i) {
+			t.Fatalf("slot %d number at %d is %d", i, off, valid[off])
+		}
+	}
+	numbered := func(numbers ...byte) []byte {
+		b := bytes.Clone(valid)
+		for i, n := range numbers {
+			b[at[i]] = n
+		}
+		return b
+	}
+	// Seen in a save after editing a 4-3-3.
+	got, err := readTactic(newReader(numbered(0, 1, 2, 3, 4, 5, 7, 8, 6, 9, 10)))
+	if err != nil || got != zazTactic() {
+		t.Errorf("permuted numbers: got %+v, %v; want the tactic", got, err)
+	}
+	for name, b := range map[string][]byte{
+		"number used twice": numbered(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9),
+		"number 11":         numbered(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11),
+		"number 255":        numbered(255, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+	} {
+		if _, err := readTactic(newReader(b)); !errors.Is(err, ErrCorrupt) {
+			t.Errorf("%s: err = %v, want ErrCorrupt", name, err)
+		}
 	}
 }
 
 func TestReadTacticsChecksVersion(t *testing.T) {
-	body := tacticsBody(7, 1, emptySelection(), -1, nil, nil, nil, zazTactic())
+	body := enc26.tacticsBody(7, 1, emptySelection(), -1, nil, nil, nil, zazTactic())
 	a := openSave(t, buildSave(t, testInner{path: "tactics_man.dat", data: append(innerFile("tad.", 25, ""), body...)}))
 	if _, err := ReadTactics(a); !errors.Is(err, ErrUnsupported) {
 		t.Errorf("version 25: err = %v, want ErrUnsupported", err)
@@ -997,10 +1083,10 @@ func TestParseTacticsHumanWithoutTeams(t *testing.T) {
 		b = append(b, humanTacticsTag)
 		b = binary.LittleEndian.AppendUint32(b, 88351)
 		b = binary.LittleEndian.AppendUint32(b, teams)
-		b = appendHumanTail(b, 0)
+		b = enc26.appendHumanTail(b, 0)
 		b = binary.LittleEndian.AppendUint16(b, 0) // no last lineups
 		b = binary.LittleEndian.AppendUint16(b, 1)
-		b = appendTactic(b, zazTactic(), false)
+		b = enc26.appendTactic(b, zazTactic(), false)
 		return binary.LittleEndian.AppendUint16(b, 0)
 	}
 	got, err := parseTactics(body(0))
@@ -1016,17 +1102,19 @@ func TestParseTacticsHumanWithoutTeams(t *testing.T) {
 	}
 }
 
-// ladderBody holds a u16 n for every n in 1..rungs, each n × 242 bytes plus
-// two before one preset anchor, so every n is a candidate last-lineup table
-// whose records are invalid.
+// ladderBody holds a u16 n and a record version for every n in 1..rungs,
+// each n × 242 bytes plus two before one preset anchor, so every n is a
+// candidate last-lineup table whose records are invalid.
 func ladderBody(rungs int) []byte {
-	anchor := 2 + 4 + lastLineupSize*rungs
+	size := len(enc26.appendLastLineup(nil, 0, LastLineup{}))
+	anchor := 2 + 4 + size*rungs
 	b := make([]byte, anchor, anchor+64)
 	for n := 1; n <= rungs; n++ {
-		binary.LittleEndian.PutUint16(b[anchor-4-lastLineupSize*n:], uint16(n)) //nolint:gosec // n ≤ 65535
+		binary.LittleEndian.PutUint16(b[anchor-4-size*n:], uint16(n))           //nolint:gosec // n ≤ 65535
+		binary.LittleEndian.PutUint32(b[anchor-2-size*n:], enc26.lineupVersion) // first record's version
 	}
 	binary.LittleEndian.PutUint16(b[anchor-2:], 1) // one preset that does not parse
-	b = append(b, presetAnchor...)
+	b = binary.LittleEndian.AppendUint16(append(b, tacticTag), enc26.object)
 	return append(b, bytes.Repeat([]byte{0xee}, 61)...)
 }
 
@@ -1053,7 +1141,7 @@ func presetChainBody(k int) []byte {
 	b = binary.LittleEndian.AppendUint16(b, 0)
 	b = binary.LittleEndian.AppendUint16(b, 0xffff)
 	for range k {
-		tac := appendTactic(nil, zazTactic(), true)
+		tac := enc26.appendTactic(nil, zazTactic(), true)
 		copy(tac[len(tac)-4:], []byte{0, 0, 0xff, 0xff})
 		b = append(b, tac...)
 	}
