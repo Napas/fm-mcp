@@ -13,16 +13,30 @@ const (
 	statsScopes        = 8  // scope slots per player
 	statsTeamScopes    = 6  // scope slots per earlier team
 	seasonScope        = 5  // club competitions of the current season
-	statsScopeVersion  = 6  // first byte of every scope block
 	statsTotalsSize    = 17
-	statsDetailSize    = 120
-	statsScopeSize     = 1 + statsTotalsSize + statsDetailSize
 	statsSummarySize   = 8 // u8 2, u16, 5 × u8
 	statsSummaryTag    = 2
 	recentRatings      = 16 // match ratings kept per player
 	recentRatingSize   = 3
 	statsTrailerSize   = 16
 )
+
+// Scope block versions (first byte of a scope block).
+const (
+	scopeVersion6 = 6 // 60 detail values
+	scopeVersion7 = 7 // 27.0.0: 68 detail values; 60..67 are not decoded
+)
+
+// statsDetailSize returns the detail block size for a version, 0 if unsupported.
+func statsDetailSize(version byte) int {
+	switch version {
+	case scopeVersion6:
+		return 60 * 2
+	case scopeVersion7:
+		return 68 * 2
+	}
+	return 0
+}
 
 // Scope slots kept per player. Slots 6 and 7 (club and international matches
 // of the calendar year) are not kept.
@@ -235,11 +249,13 @@ func (r *reader) statsScope() (MatchStats, bool) {
 		r.fail("scope flag %d", present)
 		return MatchStats{}, false
 	}
-	if v := r.u8(); v != statsScopeVersion {
+	v := r.u8()
+	size := statsDetailSize(v)
+	if size == 0 {
 		r.fail("scope version %d", v)
 	}
 	t := r.take(statsTotalsSize)
-	detail := r.take(statsDetailSize)
+	detail := r.take(size)
 	if r.err != nil {
 		return MatchStats{}, false
 	}
