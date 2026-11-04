@@ -7,18 +7,15 @@ import (
 
 const (
 	fixtureManFile = "rgman/fix_man.dat"
-	// fixtureVersion is the version byte of FIXTURE and FIXTURE_RESULT
-	// (0x1c in 26.2.0 and 26.3.2).
-	fixtureVersion  = 0x1c
-	fixtureBaseSize = 63
-	// Base offsets: u8 version, u32 key, u32 stadium, u16, u8, u32 home,
-	// 3 × u8, u32 away, 2 × u8, date, date, u32, u8, u16 season, …, round.
-	fixtureKeyOff    = 1
-	fixtureHomeOff   = 12
-	fixtureAwayOff   = 19
-	fixtureDateOff   = 25
-	fixtureSeasonOff = 38
-	fixtureRoundOff  = 50
+	// Version bytes of FIXTURE and FIXTURE_RESULT; each accepts either.
+	fixtureVersion26 = 0x1c // 26.2.0 and 26.3.2
+	fixtureVersion27 = 0x1f // 27.0.0
+	// Base offsets in every version: u8 version, u32 key, u32 stadium, u16,
+	// u8, u32 home, 3 × u8, u32 away, 2 × u8, date, date.
+	fixtureKeyOff  = 1
+	fixtureHomeOff = 12
+	fixtureAwayOff = 19
+	fixtureDateOff = 25
 	// fixtureEventSize is a FIXTURE_RESULT event (not decoded).
 	fixtureEventSize = 16
 
@@ -26,6 +23,17 @@ const (
 	maxFixturesPerList = 1 << 20 // 12 575 and about 50 000 seen
 	maxFixtureEvents   = 1024    // 28 seen
 )
+
+// fixtureLayout is the size of a FIXTURE base and its season and round offsets.
+type fixtureLayout struct {
+	size, season, round int
+}
+
+// fixtureLayouts by version. Its keys are also the accepted FIXTURE_RESULT versions.
+var fixtureLayouts = map[byte]fixtureLayout{
+	fixtureVersion26: {size: 63, season: 38, round: 50},
+	fixtureVersion27: {size: 61, season: 34, round: 46},
+}
 
 // Fixture is a FIXTURE record (vtable 0x54e6c20, load 0x3e5c748).
 type Fixture struct {
@@ -118,7 +126,7 @@ func readFixtureList(r *reader, out []Fixture) []Fixture {
 // readFixtureResult reads u8 version, u32, 4 bytes home, 4 bytes away,
 // u32 attendance (guess), u32, 4 × u8, u32 n, n × 16-byte events.
 func readFixtureResult(r *reader) *FixtureResult {
-	r.expectU8(fixtureVersion, "fixture result version")
+	readFixtureVersion(r, "fixture result")
 	r.u32()
 	var res FixtureResult
 	copy(res.Home[:], r.take(4))
@@ -133,14 +141,27 @@ func readFixtureResult(r *reader) *FixtureResult {
 	return &res
 }
 
-// readFixtureBase reads a 63-byte FIXTURE base.
+// readFixtureVersion reads the version byte of what (a FIXTURE or
+// FIXTURE_RESULT) and returns its base layout.
+func readFixtureVersion(r *reader, what string) (fixtureLayout, bool) {
+	v := r.u8()
+	l, ok := fixtureLayouts[v]
+	if !ok {
+		r.fail("%s version %#x", what, v)
+	}
+	return l, ok
+}
+
+// readFixtureBase reads a FIXTURE base; its first byte is the version.
 func readFixtureBase(r *reader) (Fixture, bool) {
-	b := r.take(fixtureBaseSize)
-	if b == nil {
+	start := r.off
+	l, ok := readFixtureVersion(r, "fixture")
+	if !ok {
 		return Fixture{}, false
 	}
-	if b[0] != fixtureVersion {
-		r.fail("fixture version %#x", b[0])
+	r.off = start // offsets include the version byte
+	b := r.take(l.size)
+	if b == nil {
 		return Fixture{}, false
 	}
 	return Fixture{
@@ -148,7 +169,7 @@ func readFixtureBase(r *reader) (Fixture, bool) {
 		Home:   int32(binary.LittleEndian.Uint32(b[fixtureHomeOff:])), //nolint:gosec // signed field
 		Away:   int32(binary.LittleEndian.Uint32(b[fixtureAwayOff:])), //nolint:gosec // signed field
 		Date:   dateAt(b, fixtureDateOff),
-		Season: binary.LittleEndian.Uint16(b[fixtureSeasonOff:]),
-		Round:  b[fixtureRoundOff],
+		Season: binary.LittleEndian.Uint16(b[l.season:]),
+		Round:  b[l.round],
 	}, true
 }

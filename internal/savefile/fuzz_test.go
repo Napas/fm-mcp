@@ -67,7 +67,7 @@ func FuzzReadCompetitionKeys(f *testing.F) {
 }
 
 func FuzzParseFixtures(f *testing.F) {
-	f.Add(fixtureFile(fixtureList(2025, fixtureItem(0, playedFixture, 1), fixtureItem(1, upcomingFixture, 0))))
+	f.Add(fixtureFile(fixtureList(2025, fixtureItem(fixtureVersion26, 0, playedFixture, 1), fixtureItem(fixtureVersion27, 1, upcomingFixture, 0))))
 	f.Fuzz(func(t *testing.T, body []byte) {
 		_, _ = parseFixtures(body)
 	})
