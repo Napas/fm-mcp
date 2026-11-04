@@ -19,6 +19,7 @@ type basicPart struct {
 	birthplace  int64
 	traits      uint64 // the person part's last 8 bytes, just before this part
 	relations   []byte // written after the birthplace; when nil, the record's 0, 0 filler is read as the present flag
+	v27         bool   // 27.0.0: extra byte 1 ends the gap after the birth date
 }
 
 func (b basicPart) encode() []byte {
@@ -31,6 +32,9 @@ func (b basicPart) encode() []byte {
 	out = appendString(out, b.full)
 	out = appendDate(out, b.dob)
 	out = append(out, make([]byte, 9)...)
+	if b.v27 {
+		out = append(out, 1)
+	}
 	out = binary.LittleEndian.AppendUint64(out, uint64(b.nation)) //nolint:gosec // two's complement intended
 	out = append(out, b.hidden[:]...)
 	out = binary.LittleEndian.AppendUint64(out, uint64(b.birthplace)) //nolint:gosec // two's complement intended
@@ -88,7 +92,7 @@ func playerRecordWith(index, uid uint32, basic basicPart, personPart []byte) []b
 	b = binary.LittleEndian.AppendUint16(b, 175)      // +128 height
 	b = append(b, 3)                                  // +130
 	b = append(b, personPart...)
-	dummy := basicPart{first: 0, last: 0, common: -1, dob: Date{Raw: 1, Year: 1900}, nation: 3}
+	dummy := basicPart{first: 0, last: 0, common: -1, dob: Date{Raw: 1, Year: 1900}, nation: 3, v27: basic.v27}
 	b = append(b, dummy.encode()...)
 	b = append(b, 0x01)
 	b = binary.LittleEndian.AppendUint64(b, basic.traits)
@@ -114,7 +118,7 @@ func TestParsePlayerReadsFixedPartAndLastBasicPart(t *testing.T) {
 	body := append([]byte{0xff}, rec...)
 	pr := Record{Tag: 2, Index: 8804, UID: 28093567, Start: 1, End: len(body)}
 
-	p, err := parsePlayer(body, pr, testNames)
+	p, err := parsePlayer(body, pr, testNames, dbVersion26_3)
 	if err != nil {
 		t.Fatalf("parsePlayer: %v", err)
 	}
@@ -145,12 +149,41 @@ func TestParsePlayerReadsFixedPartAndLastBasicPart(t *testing.T) {
 	}
 }
 
+func TestParsePlayerReadsBasicPartOfEachVersion(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		version uint16
+		v27     bool
+	}{
+		{"26.3.2", dbVersion26_3, false},
+		{"27.0.0", dbVersion27_0, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tanghe := basicPart{
+				first: 1, last: 1, common: -1, dob: Date{Raw: 28, Year: 1999}, nation: 131,
+				hidden: [8]byte{9, 12, 10, 10, 13, 11, 10, 6}, birthplace: 32,
+				relations: relations(relationItem(5, 0, relationClub, relationFavoured, 10)), v27: tt.v27,
+			}
+			rec := playerRecord(3, 18096725, tanghe)
+			pr := Record{Tag: 2, Index: 3, UID: 18096725, Start: 0, End: len(rec)}
+
+			p, err := parsePlayer(rec, pr, testNames, tt.version)
+			if err != nil {
+				t.Fatalf("parsePlayer: %v", err)
+			}
+			if p.BirthDate != tanghe.dob || p.NationIndex != 131 || p.Hidden != tanghe.hidden || p.BirthplaceIndex != 32 || len(p.ClubAffinities) != 1 {
+				t.Errorf("dob %+v, nation %d, hidden %v, birthplace %d, affinities %v", p.BirthDate, p.NationIndex, p.Hidden, p.BirthplaceIndex, p.ClubAffinities)
+			}
+		})
+	}
+}
+
 func TestParsePlayerResolvesCommonName(t *testing.T) {
 	quinn := basicPart{first: noName, last: noName, common: 0, dob: Date{Raw: 40, Year: 2001}, nation: 139}
 	rec := playerRecord(1, 7, quinn)
 	pr := Record{Tag: 2, Index: 1, UID: 7, Start: 0, End: len(rec)}
 
-	p, err := parsePlayer(rec, pr, testNames)
+	p, err := parsePlayer(rec, pr, testNames, dbVersion26_3)
 	if err != nil {
 		t.Fatalf("parsePlayer: %v", err)
 	}
@@ -165,7 +198,7 @@ func TestParsePlayerReportsMissingBasicPart(t *testing.T) {
 	rec = append(rec, encodePersonTrailer(0x400400000, 0, 9)...)
 	pr := Record{Tag: 2, Index: 0, UID: 9, Start: 0, End: len(rec)}
 
-	_, err := parsePlayer(rec, pr, testNames)
+	_, err := parsePlayer(rec, pr, testNames, dbVersion26_3)
 
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)
@@ -180,7 +213,7 @@ func TestParsePlayerToleratesStaleCommonNameRef(t *testing.T) {
 	rec := playerRecord(98699, 2000455995, newgen)
 	pr := Record{Tag: 2, Index: 98699, UID: 2000455995, Start: 0, End: len(rec)}
 
-	p, err := parsePlayer(rec, pr, names)
+	p, err := parsePlayer(rec, pr, names, dbVersion26_3)
 	if err != nil {
 		t.Fatalf("parsePlayer: %v", err)
 	}
@@ -198,7 +231,7 @@ func TestParsePlayerReadsGenderFromTrailerFlags(t *testing.T) {
 		female bool
 	}{{0x400400000, false}, {0x400401000, true}} {
 		pr := Record{Tag: 2, Index: 3, UID: 9, Flags: tt.flags, Start: 0, End: len(rec)}
-		p, err := parsePlayer(rec, pr, testNames)
+		p, err := parsePlayer(rec, pr, testNames, dbVersion26_3)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -216,7 +249,7 @@ func TestParsePlayerReadsFlagBit3FromTrailerFlags(t *testing.T) {
 		bit3  bool
 	}{{0x400400000, false}, {0x400400008, true}, {0x400401000, false}} {
 		pr := Record{Tag: 2, Index: 3, UID: 9, Flags: tt.flags, Start: 0, End: len(rec)}
-		p, err := parsePlayer(rec, pr, testNames)
+		p, err := parsePlayer(rec, pr, testNames, dbVersion26_3)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -230,7 +263,7 @@ func parseWithRelations(t *testing.T, rel []byte) Player {
 	t.Helper()
 	basic := basicPart{first: 1, last: 1, common: -1, dob: Date{Raw: 100, Year: 2004}, nation: 139, birthplace: 1040, relations: rel}
 	rec := playerRecord(3, 9, basic)
-	p, err := parsePlayer(rec, Record{Tag: 2, Index: 3, UID: 9, Start: 0, End: len(rec)}, testNames)
+	p, err := parsePlayer(rec, Record{Tag: 2, Index: 3, UID: 9, Start: 0, End: len(rec)}, testNames, dbVersion26_3)
 	if err != nil {
 		t.Fatalf("parsePlayer: %v", err)
 	}
@@ -443,7 +476,7 @@ func parseWithBlock(t *testing.T, block []byte) Player {
 	person := binary.LittleEndian.AppendUint32([]byte{5, 0, 0}, 77) // stray copy of the person index
 	rec := playerRecordWith(77, 9, basic, append(person, block...))
 	pr := Record{Tag: 2, Index: 77, UID: 9, Start: 0, End: len(rec)}
-	p, err := parsePlayer(rec, pr, testNames)
+	p, err := parsePlayer(rec, pr, testNames, dbVersion26_3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -512,7 +545,7 @@ func TestParsePlayerWithoutContract(t *testing.T) {
 	rec := playerRecord(5, 9, basic)
 	pr := Record{Tag: 2, Index: 5, UID: 9, Start: 0, End: len(rec)}
 
-	p, err := parsePlayer(rec, pr, testNames)
+	p, err := parsePlayer(rec, pr, testNames, dbVersion26_3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -568,7 +601,7 @@ func TestParsePlayerPersonFields(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			basic := basicPart{first: 1, last: 1, common: -1, dob: Date{Raw: 100, Year: 1998}, nation: 143}
 			rec := playerRecordWith(77, 9, basic, tt.block)
-			p, err := parsePlayer(rec, Record{Tag: 2, Index: 77, UID: 9, Flags: tt.flags, Start: 0, End: len(rec)}, testNames)
+			p, err := parsePlayer(rec, Record{Tag: 2, Index: 77, UID: 9, Flags: tt.flags, Start: 0, End: len(rec)}, testNames, dbVersion26_3)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -724,7 +757,7 @@ func TestParsePlayersSkipsBadRecords(t *testing.T) {
 		{Tag: 1, Index: 2, UID: 9, Start: len(good) + len(bad), End: len(body)},
 	}
 
-	players, skipped, err := parsePlayers(body, recs, testNames)
+	players, skipped, err := parsePlayers(body, recs, testNames, dbVersion26_3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -732,7 +765,7 @@ func TestParsePlayersSkipsBadRecords(t *testing.T) {
 		t.Errorf("got %d players (skipped %d), want 1 (skipped 1)", len(players), skipped)
 	}
 
-	if _, _, err := parsePlayers(body, recs[1:2], testNames); err == nil {
+	if _, _, err := parsePlayers(body, recs[1:2], testNames, dbVersion26_3); err == nil {
 		t.Error("parsePlayers succeeded when every player failed")
 	}
 }

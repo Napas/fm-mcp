@@ -176,7 +176,7 @@ func ReadGameDB(a *Archive) (*GameDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if db.Players, db.SkippedPlayers, err = parsePlayers(f.Body, recs, nt); err != nil {
+	if db.Players, db.SkippedPlayers, err = parsePlayers(f.Body, recs, nt, h.DatabaseVersion); err != nil {
 		return nil, err
 	}
 	return db, nil

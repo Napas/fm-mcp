@@ -39,10 +39,9 @@ const (
 
 	// The basic person part (names, birth date, nation) is found by scanning;
 	// the person part before it is not decoded.
-	basicFixedSize = 19                // three (u32 ref + u8 flag) + u32 full-name length
-	basicTailSize  = 4 + 9 + 8 + 8 + 8 // date, unknown, nation, hidden attributes, birthplace
-	traitsSize     = 8                 // u64 trait mask ending the person part
-	minBirthYear   = 1901              // dummy name structs carry 1900
+	basicFixedSize = 19   // three (u32 ref + u8 flag) + u32 full-name length
+	traitsSize     = 8    // u64 trait mask ending the person part
+	minBirthYear   = 1901 // dummy name structs carry 1900
 	maxBirthYear   = 2199
 
 	// The relationship vector follows the birthplace (BASIC writer 0x2f85600,
@@ -53,6 +52,22 @@ const (
 	relationClub     = 1 // item +10, object kind: a CLUB table index
 	relationFavoured = 3 // item +11, relation type: favoured club (getter 0x2f92e50)
 )
+
+// basicGapGate is the first database version seen with the 10-byte gap; the
+// game's own gate may be lower.
+const basicGapGate = dbVersion27_0
+
+// basicGapSize is the unknown gap between birth date and nation: 10 bytes from
+// basicGapGate, 9 below. The tenth byte is always 1.
+func basicGapSize(dataVersion uint16) int {
+	if dataVersion >= basicGapGate {
+		return 10
+	}
+	return 9
+}
+
+// basicTailSize is the length from the birth date to the end of the birthplace.
+func basicTailSize(gap int) int { return 4 + gap + 8 + 8 + 8 }
 
 // PositionNames labels Player.Positions. Verified in game_plugin 26.3.2:
 // the string-keyed loader at 0x48c6228 and the side-flag table at
@@ -178,7 +193,8 @@ type Player struct {
 	ClubAffinities []ClubAffinity // in save order; nil when the vector is absent or does not decode
 }
 
-func parsePlayer(body []byte, rec Record, nt NameTables) (Player, error) {
+// parsePlayer decodes a player record. dataVersion selects the BASIC part layout.
+func parsePlayer(body []byte, rec Record, nt NameTables, dataVersion uint16) (Player, error) {
 	b := body[rec.Start:rec.End]
 	if len(b) < playerPartSize+personTrailerSize {
 		return Player{}, fmt.Errorf("%w: player %d is %d bytes", ErrCorrupt, rec.Index, len(b))
@@ -208,7 +224,8 @@ func parsePlayer(body []byte, rec Record, nt NameTables) (Player, error) {
 	copy(p.Attributes[:], b[offAttributes:])
 
 	person := b[:len(b)-personTrailerSize]
-	at, ok := findBasicPart(person, nt)
+	gap := basicGapSize(dataVersion)
+	at, ok := findBasicPart(person, nt, gap)
 	if !ok {
 		return Player{}, fmt.Errorf("%w: names and birth date of player %d", ErrNotFound, rec.Index)
 	}
@@ -234,7 +251,7 @@ func parsePlayer(body []byte, rec Record, nt NameTables) (Player, error) {
 	r.u8()
 	p.FullName = r.str()
 	p.BirthDate = r.date()
-	r.take(9)
+	r.take(gap)
 	p.NationIndex = r.i64()
 	copy(p.Hidden[:], r.take(8))
 	p.BirthplaceIndex = r.i64()
@@ -273,12 +290,13 @@ func clubAffinities(b []byte) []ClubAffinity {
 // followed by a zero flag byte), a short UTF-8 full name and a birth date.
 // The undecoded person part before it holds a dummy copy dated 1900, so the
 // last match wins.
-func findBasicPart(b []byte, nt NameTables) (int, bool) {
+func findBasicPart(b []byte, nt NameTables, gap int) (int, bool) {
+	tail := basicTailSize(gap)
 	// Common-name refs of generated players can exceed the common-name
 	// table (record 83559 in the test save; up to 646431 in a 26.3.2 save),
 	// so they are bounded by the largest name table.
 	maxCommon := max(len(nt.First), len(nt.Last), len(nt.Common))
-	for p := len(b) - basicFixedSize - basicTailSize; p >= 1; p-- {
+	for p := len(b) - basicFixedSize - tail; p >= 1; p-- {
 		first := binary.LittleEndian.Uint32(b[p:])
 		last := binary.LittleEndian.Uint32(b[p+5:])
 		common := binary.LittleEndian.Uint32(b[p+10:])
@@ -293,7 +311,7 @@ func findBasicPart(b []byte, nt NameTables) (int, bool) {
 		}
 		n := int(binary.LittleEndian.Uint32(b[p+15:]))
 		q := p + basicFixedSize + n
-		if n > maxNameLen || q+basicTailSize > len(b) || !utf8.Valid(b[p+basicFixedSize:q]) {
+		if n > maxNameLen || q+tail > len(b) || !utf8.Valid(b[p+basicFixedSize:q]) {
 			continue
 		}
 		doy := binary.LittleEndian.Uint16(b[q:])
@@ -307,7 +325,7 @@ func findBasicPart(b []byte, nt NameTables) (int, bool) {
 
 // parsePlayers decodes the player and player-coach records. Records that do
 // not decode are skipped and counted; it fails only when most do.
-func parsePlayers(body []byte, recs []Record, nt NameTables) ([]Player, int, error) {
+func parsePlayers(body []byte, recs []Record, nt NameTables, dataVersion uint16) ([]Player, int, error) {
 	var players []Player
 	var skipped int
 	var firstErr error
@@ -315,7 +333,7 @@ func parsePlayers(body []byte, recs []Record, nt NameTables) ([]Player, int, err
 		if rec.Tag != tagPlayer && rec.Tag != tagPlayerCoach {
 			continue
 		}
-		p, err := parsePlayer(body, rec, nt)
+		p, err := parsePlayer(body, rec, nt, dataVersion)
 		if err != nil {
 			skipped++
 			firstErr = cmp.Or(firstErr, err)

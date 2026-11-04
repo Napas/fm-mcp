@@ -315,3 +315,38 @@ func addResult(s *TableStats, scored, conceded uint8) {
 		s.Drawn++
 	}
 }
+
+func TestTestSave27Players(t *testing.T) {
+	for _, path := range []string{testSave27Path, testSave27bPath} {
+		t.Run(path, func(t *testing.T) {
+			a := openTestSaveAt(t, path)
+			db, err := ReadGameDB(a)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if db.SkippedPlayers != 0 {
+				t.Errorf("%d players skipped", db.SkippedPlayers)
+			}
+
+			for _, p := range db.Players {
+				if p.NationIndex < 0 || p.NationIndex >= int64(db.NationCount) {
+					t.Fatalf("player %d (%s %s): nation %d of %d", p.UID, p.FirstName, p.LastName, p.NationIndex, db.NationCount)
+				}
+				for _, h := range p.Hidden {
+					if h < 1 || h > 20 {
+						t.Fatalf("player %d (%s %s): hidden attributes %v", p.UID, p.FirstName, p.LastName, p.Hidden)
+					}
+				}
+			}
+			checkKnownPlayers(t, db.Players, map[uint32]Player{
+				18096725: {NationIndex: 131, Hidden: [8]uint8{9, 12, 10, 10, 13, 11, 10, 6}, BirthplaceIndex: 32},   // Anton Tanghe, Belgium
+				14192808: {NationIndex: 187, Hidden: [8]uint8{19, 12, 13, 10, 12, 11, 7, 8}, BirthplaceIndex: 1110}, // Franco Baldassarra, Argentina
+			}, func(p, w Player) {
+				if p.NationIndex != w.NationIndex || p.Hidden != w.Hidden || p.BirthplaceIndex != w.BirthplaceIndex {
+					t.Errorf("player %d: nation %d, hidden %v, birthplace %d; want %d, %v, %d",
+						p.UID, p.NationIndex, p.Hidden, p.BirthplaceIndex, w.NationIndex, w.Hidden, w.BirthplaceIndex)
+				}
+			})
+		})
+	}
+}
