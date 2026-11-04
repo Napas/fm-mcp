@@ -33,6 +33,6 @@ Unset dates are saved in 1900. Seen: joined dates of 1900-01-01 on loanees and f
 | [`clubs.md`](format/clubs.md) | CLUB/COMP/TEAM tables, club budgets, squad lists | Clubs, teams and competitions; 27.0.0 club layout; Club budgets (CLUB_FINANCE); Squad lists |
 | [`currencies.md`](format/currencies.md) | CURRENCY_RECORD rates, display rule, game preferences (currency, wage period) | Currencies (CURRENCY_RECORD); Display preferences (outside the save) |
 | [`nations.md`](format/nations.md) | CONTINENT strengths, NATION tail grammar, reputation factors | Continents, nations and national-team containers |
-| [`fixtures.md`](format/fixtures.md) | fix_man.dat lists, FIXTURE base, FIXTURE_RESULT scores | fix_man.dat; FIXTURE; FIXTURE_RESULT |
+| [`fixtures.md`](format/fixtures.md) | fix_man.dat lists, FIXTURE base, 27.0.0 base, FIXTURE_RESULT scores | fix_man.dat; FIXTURE; 27.0.0 FIXTURE base; FIXTURE_RESULT |
 | [`competitions.md`](format/competitions.md) | competition keys (ACTUAL_COMP_ID), stage names, league tables in comp files | Competition keys (ACTUAL_COMP_ID); Stage names (STAGE_NAME); League tables (LEAGUE_STAGE rows) |
 | [`language-db.md`](format/language-db.md) | lang_db.dat container, nation/injury/competition names by uid rank | Language database (names) |

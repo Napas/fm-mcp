@@ -1,6 +1,8 @@
 package savefile
 
 import (
+	"reflect"
+	"slices"
 	"testing"
 	"time"
 )
@@ -77,5 +79,44 @@ func TestTestSave27SeasonStats(t *testing.T) {
 		if *rec.Internationals != (MatchStats{}) {
 			t.Fatalf("person %d internationals = %+v, want empty", person, *rec.Internationals)
 		}
+	}
+}
+
+// Kauno Žalgiris (team 16521) open the 2026 A Lyga (key 379) at home to team
+// 6215 on 2026-02-28, in round 1 (bye in round 0). The first played fixture is
+// a 2026-01-03 friendly (key 2895) lost 0–1.
+func TestTestSave27Fixtures(t *testing.T) {
+	fs, err := ReadFixtures(openTestSaveAt(t, testSave27Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	played := 0
+	for _, f := range fs {
+		if f.Result != nil {
+			played++
+		}
+	}
+	if len(fs) != 23460 || played != 209 {
+		t.Errorf("%d fixtures, %d played; want 23460, 209", len(fs), played)
+	}
+	first := slices.IndexFunc(fs, func(f Fixture) bool { return f.Key == 379 && (f.Home == 16521 || f.Away == 16521) })
+	if first < 0 {
+		t.Fatal("no A Lyga fixture for Kauno Žalgiris")
+	}
+	got := fs[first]
+	want := Fixture{Key: 379, Home: 16521, Away: 6215, Date: got.Date, Season: 2026, Round: 1}
+	if !reflect.DeepEqual(got, want) || !got.Date.Time().Equal(time.Date(2026, 2, 28, 0, 0, 0, 0, time.UTC)) {
+		t.Errorf("first A Lyga fixture = %+v, want %+v on 2026-02-28", got, want)
+	}
+	i := slices.IndexFunc(fs, func(f Fixture) bool { return f.Result != nil })
+	if i < 0 {
+		t.Fatal("no played fixture")
+	}
+	friendly := fs[i]
+	if friendly.Key != 2895 || friendly.Season != 0 || friendly.Round != 255 ||
+		friendly.Result.Home != [4]uint8{0, 0xff, 0xff, 0xff} || friendly.Result.Away != [4]uint8{1, 0xff, 0xff, 0xff} ||
+		!friendly.Date.Time().Equal(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)) {
+		t.Errorf("first played fixture = %+v, result %+v", friendly, friendly.Result)
 	}
 }

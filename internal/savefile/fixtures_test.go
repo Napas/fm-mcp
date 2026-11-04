@@ -3,40 +3,49 @@ package savefile
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
 )
 
-// fixtureBase encodes a 63-byte FIXTURE base.
-func fixtureBase(f Fixture) []byte {
-	b := make([]byte, fixtureBaseSize)
-	b[0] = fixtureVersion
+// testFixtureLayouts repeats the parser's layouts so tests check them.
+var testFixtureLayouts = map[byte]fixtureLayout{
+	0x1c: {size: 63, season: 38, round: 50},
+	0x1f: {size: 61, season: 34, round: 46},
+}
+
+// fixtureBase encodes a FIXTURE base of the given version.
+func fixtureBase(version byte, f Fixture) []byte {
+	l := testFixtureLayouts[version]
+	b := make([]byte, l.size)
+	b[0] = version
 	binary.LittleEndian.PutUint32(b[1:], uint32(f.Key))   //nolint:gosec // signed field
 	binary.LittleEndian.PutUint32(b[12:], uint32(f.Home)) //nolint:gosec // signed field
 	binary.LittleEndian.PutUint32(b[19:], uint32(f.Away)) //nolint:gosec // signed field
 	binary.LittleEndian.PutUint16(b[25:], f.Date.Raw)
 	binary.LittleEndian.PutUint16(b[27:], f.Date.Year)
-	binary.LittleEndian.PutUint16(b[38:], f.Season)
-	b[50] = f.Round
+	binary.LittleEndian.PutUint16(b[l.season:], f.Season)
+	b[l.round] = f.Round
 	return b
 }
 
 // fixtureItem encodes a list item: i32 index, u8 flag, then a
-// FIXTURE_RESULT with events when played, then the base.
-func fixtureItem(index int32, f Fixture, events int) []byte {
+// FIXTURE_RESULT with events when played, then the base. Both records carry
+// version.
+func fixtureItem(version byte, index int32, f Fixture, events int) []byte {
 	b := binary.LittleEndian.AppendUint32(nil, uint32(index)) //nolint:gosec // signed field
 	if f.Result == nil {
 		b = append(b, 0)
-		return append(b, fixtureBase(f)...)
+		return append(b, fixtureBase(version, f)...)
 	}
-	b = append(b, 1, fixtureVersion, 0, 0, 0, 0)
+	b = append(b, 1, version, 0, 0, 0, 0)
 	b = append(b, f.Result.Home[:]...)
 	b = append(b, f.Result.Away[:]...)
 	b = append(b, make([]byte, 4+4+4)...)                   // attendance, u32, 3 × u8, u8
 	b = binary.LittleEndian.AppendUint32(b, uint32(events)) //nolint:gosec // small test data
 	b = append(b, make([]byte, 16*events)...)
-	return append(b, fixtureBase(f)...)
+	return append(b, fixtureBase(version, f)...)
 }
 
 // fixtureList encodes a present list with its items and item count.
@@ -69,20 +78,26 @@ var (
 )
 
 func TestParseFixtures(t *testing.T) {
-	body := fixtureFile(fixtureList(2025, fixtureItem(0, playedFixture, 1)), fixtureList(2026, fixtureItem(1, upcomingFixture, 0)))
+	for _, v := range []byte{fixtureVersion26, fixtureVersion27} {
+		t.Run(fmt.Sprintf("%#x", v), func(t *testing.T) {
+			body := fixtureFile(
+				fixtureList(2025, fixtureItem(v, 0, playedFixture, 1), fixtureItem(v, 1, upcomingFixture, 0)),
+				fixtureList(2026, fixtureItem(v, 2, upcomingFixture, 0)))
 
-	got, err := parseFixtures(body)
-	if err != nil {
-		t.Fatalf("parseFixtures: %v", err)
-	}
-	if want := []Fixture{playedFixture, upcomingFixture}; !reflect.DeepEqual(got, want) {
-		t.Errorf("fixtures = %+v, want %+v", got, want)
+			got, err := parseFixtures(body)
+			if err != nil {
+				t.Fatalf("parseFixtures: %v", err)
+			}
+			if want := []Fixture{playedFixture, upcomingFixture, upcomingFixture}; !reflect.DeepEqual(got, want) {
+				t.Errorf("fixtures = %+v, want %+v", got, want)
+			}
+		})
 	}
 }
 
 func TestParseFixturesSkipsAbsentList(t *testing.T) {
 	absent := []byte{0xe9, 0x07, 0}
-	body := fixtureFile(absent, fixtureList(2025, fixtureItem(0, upcomingFixture, 0)))
+	body := fixtureFile(absent, fixtureList(2025, fixtureItem(fixtureVersion26, 0, upcomingFixture, 0)))
 
 	got, err := parseFixtures(body)
 	if err != nil || len(got) != 1 {
@@ -91,7 +106,7 @@ func TestParseFixturesSkipsAbsentList(t *testing.T) {
 }
 
 func TestParseFixturesRejectsWrongCount(t *testing.T) {
-	list := fixtureList(2025, fixtureItem(0, upcomingFixture, 0))
+	list := fixtureList(2025, fixtureItem(fixtureVersion26, 0, upcomingFixture, 0))
 	binary.LittleEndian.PutUint32(list[len(list)-4:], 2)
 
 	if _, err := parseFixtures(fixtureFile(list)); !errors.Is(err, ErrCorrupt) {
@@ -100,7 +115,7 @@ func TestParseFixturesRejectsWrongCount(t *testing.T) {
 }
 
 func TestParseFixturesRejectsBadFlag(t *testing.T) {
-	item := fixtureItem(0, upcomingFixture, 0)
+	item := fixtureItem(fixtureVersion26, 0, upcomingFixture, 0)
 	item[4] = 2
 
 	if _, err := parseFixtures(fixtureFile(fixtureList(2025, item))); !errors.Is(err, ErrCorrupt) {
@@ -109,7 +124,7 @@ func TestParseFixturesRejectsBadFlag(t *testing.T) {
 }
 
 func TestParseFixturesRejectsUnknownVersion(t *testing.T) {
-	item := fixtureItem(0, upcomingFixture, 0)
+	item := fixtureItem(fixtureVersion26, 0, upcomingFixture, 0)
 	item[5] = 0x1d
 
 	if _, err := parseFixtures(fixtureFile(fixtureList(2025, item))); !errors.Is(err, ErrCorrupt) {
@@ -117,8 +132,20 @@ func TestParseFixturesRejectsUnknownVersion(t *testing.T) {
 	}
 }
 
+func TestParseFixturesRejectsTruncatedBase(t *testing.T) {
+	item := fixtureItem(fixtureVersion27, 0, upcomingFixture, 0)
+	body := fixtureFile(fixtureList(2025, item))
+	start := 4 + 4 + 2 + 4 + 2 + 1 + 8 + 4 + 1 // header, list head, index, flag
+
+	for _, n := range []int{start, start + 1} {
+		if _, err := parseFixtures(body[:n]); !errors.Is(err, ErrTruncated) {
+			t.Errorf("cut at %d: err = %v, want ErrTruncated", n, err)
+		}
+	}
+}
+
 func TestParseFixturesRejectsHugeEventCount(t *testing.T) {
-	item := fixtureItem(0, playedFixture, 0)
+	item := fixtureItem(fixtureVersion26, 0, playedFixture, 0)
 	binary.LittleEndian.PutUint32(item[5+1+4+8+12:], maxFixtureEvents+1)
 
 	if _, err := parseFixtures(fixtureFile(fixtureList(2025, item))); !errors.Is(err, ErrCorrupt) {
@@ -176,7 +203,7 @@ func checkRealSaveFixtures(t *testing.T, a *Archive, keys int) {
 }
 
 func TestParseFixturesRejectsUnknownResultVersion(t *testing.T) {
-	item := fixtureItem(0, playedFixture, 0)
+	item := fixtureItem(fixtureVersion26, 0, playedFixture, 0)
 	item[5] = 0x1d // the FIXTURE_RESULT version after the flag
 
 	if _, err := parseFixtures(fixtureFile(fixtureList(2025, item))); !errors.Is(err, ErrCorrupt) {

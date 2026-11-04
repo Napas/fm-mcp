@@ -23,3 +23,11 @@ func TestLoadTestSave27SeasonStats(t *testing.T) {
 		t.Errorf("season stats not loaded; warnings %q", g.Info.Warnings)
 	}
 }
+
+func TestLoadTestSave27Fixtures(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27Path, LoadOptions{})
+
+	if !g.hasFixtures || len(g.fixtures) == 0 {
+		t.Errorf("fixtures not loaded (%d); warnings %q", len(g.fixtures), g.Info.Warnings)
+	}
+}
