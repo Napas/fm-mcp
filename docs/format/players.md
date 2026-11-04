@@ -21,7 +21,7 @@ Player part, offsets from the record start:
 | 46 | 54 × u8 | attributes 1..100, in `AttributeNames` order (`internal/savefile/player.go`) | verified by code (loader `0x48c6228`, display table `0x520380c`, foot tie-break `0x48b97c4`). The game shows `clamp((v+2)/5, 1, 20)` (`0x48b9fc0`). "Off the Ball" is "Movement" in the engine |
 | 100 | i32 | value in GBP; the game caps it at 300 000 000, which it shows as "Not for Sale" | guess (strong): Maddison 51.5M, Kulusevski 84.7M; the cap verified as "Not for Sale" in game (Livramento, Sombath) |
 | 104 | u8 | 1..20, unknown | |
-| 105 | date | joined current club; 1900 = unset (see "Dates") | verified 26.3.2 in game: Leroux 2034-01-13 ("Transferred from Rennes") and Bernardi 2035-01-12 ("from Ajax"), both equal to the contract start; 1900-01-01 on loanees and free agents (seen in game) |
+| 105 | date | joined current club; 1900 = unset (see "Dates"). In 27.0.0 it can be after the game date (see the open questions) | verified 26.3.2 in game: Leroux 2034-01-13 ("Transferred from Rennes") and Bernardi 2035-01-12 ("from Ajax"), both equal to the contract start; 1900-01-01 on loanees and free agents (seen in game) |
 | 109 | date | 1900 | |
 | 113 | u16 | guess: match sharpness 0..10000 | 2035-12-09: the game shows icons only; the five players whose sharpness icon is not a tick have the five lowest stored values (5150–5913). Consistent; exact percentages not checkable |
 | 115 | i16 | 0 / −125 / −250 | |
@@ -126,7 +126,7 @@ u32 surname index     + u8 flag
 i32 common-name index + u8 flag (-1 = none)
 string full name      (often empty)
 date  birth date      (verified: Maddison 328/1996 = 1996-11-23)
-9 bytes               unknown
+9 bytes               unknown (10 in 27.0.0, see "27.0.0 BASIC part")
 i64 nation index      (names are not in the save; 139 = England is inferred)
 8 × u8                hidden attributes 1..20: Adaptability, Ambition, Loyalty, Pressure,
                       Professionalism, Sportsmanship, Temperament, Controversy (verified by code, below)
@@ -139,6 +139,16 @@ u8 present            1 when the person has relationships (below), else 0
 Verified on the test save: 37 011 players parse. 27 have team 547. Maddison: index 8804, uid 28 093 567, CA/PA 151/163, nation 139. Vicario: born 1996-10-07, GK 20. A Python implementation by a different route produces identical names, birth dates, nations, clubs and CA/PA for all 37 011.
 
 The 8 hidden attributes: verified by code (26.3.2). The string-keyed loader `0x2f89dac` stores adaptability → person `+0x40`, ambition `+0x41`, loyalty `+0x42`, pressure `+0x43`, professionalism `+0x44`, sportsmanship `+0x45`, temperament `+0x46`, controversy `+0x47`, each clamped to ≤ 20. The BASIC writer `0x2f85600` writes the nation ref (`+0x38`), then these 8 bytes (`0x36bd9e0(obj+0x40)`), then the birthplace, which is the save order. Getters `0x2f92cf8`…`0x2f92dd8`. All values are 1..20 in the real KŽ save; Controversy is skewed low. Determination is attribute 51 of the 54 (the player override `0x2ffedf8` of the getter reads player `+0x18a` and returns `clamp((v+2)/5, 1, 20)`). Leadership is attribute 40, read the same way at `+0x17f`; the offsets differ by 11, as the indices do. Samples (in-game personality below): Ashby `07 0b 10 0c 0f 11 11 03`, Sami `0d 13 0d 08 0d 08 0a 06`, Livramento (uid 28 124 569) `0c 0e 0e 0f 11 0f 10 02` (2035-12-02); Bernardi `0a 10 0e 10 0f 12 0f 06`, Leroux `0b 0b 0d 0b 0d 0c 0b 05` (2035-12-09). The server shows them with the other attributes, hidden like Consistency under fog of war. The game never shows them.
+
+### 27.0.0 BASIC part — verified 27.0.0 (bytes)
+
+Database version 3754 (FM 27.0.0) adds one byte to the end of the unknown gap after the birth date: 10 bytes, not 9. It is 1 in all 51 826 player records of both FM27 saves. 3754 is the first version seen; the game's gate may be lower. Everything after it (nation, hidden attributes, birthplace, relationships) keeps its 26.x layout. `savefile.basicGapSize` gates on the database version.
+
+Evidence (`data/test_save_27.fm` and `data/test_save_27b.fm`):
+
+- Read with 9 bytes, every FM27 nation is the true index × 256 + 1: Anton Tanghe 33537 (Belgium, 131), Franco Baldassarra 47873 (Argentina, 187), Yukiyoshi Karashima 15617 (Japan, 61). The low byte is the new 1.
+- Gap bytes 0–8 look alike in both builds: byte 3 is 0..4 and byte 8 is 2..6. FM26 sample: 131 441 tag-2 players of a copy of the real KŽ save (26.3.2, 2037-07-10).
+- With 10 bytes, every player's nation is below the save's 251 nations and every hidden attribute is 1..20, in both saves. Baldassarra reads Adaptability 19, Ambition 12, Loyalty 13, Pressure 10, Professionalism 12, Sportsmanship 11, Temperament 7, Controversy 8, birthplace 1110, then a present relationship vector of 7 items. The game's screens were not checked.
 
 ### Relationships and favoured clubs — verified 26.3.2 (code + bytes + 4 in-game samples)
 
@@ -285,5 +295,7 @@ The gate's exact condition is not decoded. `fm` hides media handling wherever it
 
 ## Open questions
 
+- 27.0.0 joined date (offset 105): 8 455 of 51 826 players in `data/test_save_27b.fm` (game date 2026-01-22) have a date after the game date, e.g. Anton Tanghe 2026-10-06. They cluster in transfer windows (4 747 in 2026-07, 1 224 in 2026-08, none after 2026-12), so the field likely holds the database's real-life joining date (inference). For all 8 455 the ACTUAL_PERSON joined date (`+0xec`) is before the game date (Tanghe: 2026-01-19). Which one the game shows is not checked; `fm` still serves offset 105 as `joined_club`.
+- 27.0.0 BASIC part: what the new gap byte (always 1) and the other 9 bytes hold.
 - Personality: the meaning of trailer flags bit 3, and an in-game Devoted sample. Relationships: reasons other than 1 and 2, item bytes 13–15, relation types other than 3, the second vector, which list builder the profile screen uses, Enzo Fernández's fifth favoured person, and the non-player person records that name managers and staff. Traits: bits 48 and 53. Media handling: the fog-of-war gate's condition (knowledge type `0x5b`), and whether flag bit 3 clear turns negative styles into Outspoken in game.
 - Reputation level: the words for levels 1, 4, 5 and 6 (order inference); women's players (the women's container's factor); player-coaches (the staff rule's inputs); players without a team (vt `+0x210`, assumed to be the nationality).

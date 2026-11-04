@@ -39,8 +39,13 @@ func FuzzParsePlayer(f *testing.F) {
 	withClubs := basic
 	withClubs.relations = relations(relationItem(1115, 1, relationClub, relationFavoured, 100), relationItem(6, 0, relationClub, 72, 1))
 	f.Add(playerRecordWith(77, 9, withClubs, block))
+	basic27 := withClubs
+	basic27.v27 = true
+	f.Add(playerRecordWith(77, 9, basic27, block))
 	f.Fuzz(func(t *testing.T, rec []byte) {
-		_, _ = parsePlayer(rec, Record{Tag: 2, Index: 77, UID: 9, Start: 0, End: len(rec)}, testNames)
+		for _, v := range []uint16{dbVersion26_3, dbVersion27_0} {
+			_, _ = parsePlayer(rec, Record{Tag: 2, Index: 77, UID: 9, Start: 0, End: len(rec)}, testNames, v)
+		}
 	})
 }
 
