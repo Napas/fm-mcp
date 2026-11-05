@@ -472,11 +472,16 @@ func loanSlot(c testContract) []byte {
 
 func parseWithBlock(t *testing.T, block []byte) Player {
 	t.Helper()
-	basic := basicPart{first: 1, last: 1, common: -1, dob: Date{Raw: 100, Year: 1998}, nation: 143}
+	return parseWithBlockAt(t, block, dbVersion26_3)
+}
+
+func parseWithBlockAt(t *testing.T, block []byte, dataVersion uint16) Player {
+	t.Helper()
+	basic := basicPart{first: 1, last: 1, common: -1, dob: Date{Raw: 100, Year: 1998}, nation: 143, v27: dataVersion >= dbVersion27_0}
 	person := binary.LittleEndian.AppendUint32([]byte{5, 0, 0}, 77) // stray copy of the person index
 	rec := playerRecordWith(77, 9, basic, append(person, block...))
 	pr := Record{Tag: 2, Index: 77, UID: 9, Start: 0, End: len(rec)}
-	p, err := parsePlayer(rec, pr, testNames, dbVersion26_3)
+	p, err := parsePlayer(rec, pr, testNames, dataVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -635,7 +640,17 @@ func injuryList(injuries ...Injury) []byte {
 
 // injuryItem encodes one current injury with its match records.
 func injuryItem(in Injury, matches ...[]byte) []byte {
-	b := []byte{2}
+	return append(injuryItemBody(2, in, matches...), 0xff, 0xff)
+}
+
+// injuryItem27 encodes a 27.0.0 current injury.
+func injuryItem27(in Injury) []byte {
+	return append(injuryItemBody(3, in), 0xff)
+}
+
+// injuryItemBody encodes an item up to its end bytes.
+func injuryItemBody(typ byte, in Injury, matches ...[]byte) []byte {
+	b := []byte{typ}
 	b = binary.LittleEndian.AppendUint16(b, in.ID)
 	b = append(b, byte(len(matches))) //nolint:gosec // small test data
 	for _, m := range matches {
@@ -650,7 +665,7 @@ func injuryItem(in Injury, matches ...[]byte) []byte {
 	b = le32(b, 547)
 	b = append(b, 0)
 	b = le32(b, -1)
-	return append(b, 0, 0, 0, 0xff, 0xff)
+	return append(b, 0, 0, 0)
 }
 
 // veigaMatch is the match record of Danilo Veiga's bruised ankle (26.3.2
@@ -693,6 +708,40 @@ func TestParsePlayerReadsInjuryWithBothRefsSet(t *testing.T) {
 	}
 }
 
+func TestParsePlayerReadsInjuryFormatOfVersion(t *testing.T) {
+	// Ben Fox (person 1466) in data/test_save_27b.fm: index 118 from
+	// 2026-01-01, 213–243 days, plus the byte after the list.
+	fox := []byte{
+		0x03, 0x76, 0x00, 0x00,
+		0x01, 0x00, 0xea, 0x07, 0xd5, 0x00, 0xf3, 0x00, 0x00, 0x01, 0x00, 0xff, 0xff, 0xff, 0xff,
+		0x00, 0x6f, 0x1a, 0x00, 0x00, 0x03, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00,
+	}
+	foxInjury := Injury{ID: 118, Start: Date{Raw: 1, Year: 2026}, DaysMin: 213, DaysMax: 243}
+	acl := Injury{ID: 27, Start: Date{Raw: 188, Year: 2025}, DaysMin: 267, DaysMax: 297}
+	tests := []struct {
+		name        string
+		dataVersion uint16
+		block       []byte
+		want        []Injury
+	}{
+		{"27.0.0 Ben Fox", dbVersion27_0, append([]byte{1}, fox...), []Injury{foxInjury}},
+		{"27.0.0 two items", dbVersion27_0, append(append([]byte{2}, injuryItem27(foxInjury)...), injuryItem27(acl)...), []Injury{foxInjury, acl}},
+		{"27.0.0 type 3 without its end byte", dbVersion27_0, append([]byte{1}, injuryItemBody(3, foxInjury)...), nil},
+		{"27.0.0 types 3 and 2 in one list", dbVersion27_0, append(append([]byte{2}, injuryItem27(foxInjury)...), injuryItem(acl)...), nil},
+		{"27.0.0 type 2", dbVersion27_0, append([]byte{1}, injuryItem(acl)...), nil},
+		{"26.3 type 2 ending ff 00", dbVersion26_3, append([]byte{1}, append(injuryItemBody(2, acl), 0xff, 0x00)...), nil},
+		{"26.3 type 3", dbVersion26_3, append([]byte{1}, append(injuryItemBody(3, foxInjury), 0xff, 0xff)...), nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parseWithBlockAt(t, tt.block, tt.dataVersion)
+			if !reflect.DeepEqual(p.Injuries, tt.want) {
+				t.Errorf("Injuries = %+v, want %+v", p.Injuries, tt.want)
+			}
+		})
+	}
+}
+
 func TestParsePlayerRejectsBadMatchRecords(t *testing.T) {
 	knock := Injury{ID: 84, Start: Date{Raw: 0x6b50, Year: 2035}, DaysMin: 0, DaysMax: 2}
 	bad := append([]byte{7}, veigaMatch[1:]...) // match records start with 1
@@ -723,7 +772,7 @@ func TestFindInjuriesStopsAtTruncatedMatchRecord(t *testing.T) {
 	b := append([]byte{1}, injuryItem(knock, veigaMatch)...)
 	record := 1 + injuryHeadSize
 	for to := record + 1; to < record+matchRecordSize; to++ {
-		if got := findInjuries(b[:to], 0, to); got != nil {
+		if got := findInjuries(b[:to], 0, to, injuryFormat(dbVersion26_3)); got != nil {
 			t.Errorf("region ending %d bytes into the match record: Injuries = %+v, want none", to-record, got)
 		}
 	}

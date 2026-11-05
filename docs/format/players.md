@@ -116,6 +116,31 @@ The game shows the days left counted from the next day: Veiga's and Bernardi's s
 
 Example (test save): Maddison, index 27 (torn anterior cruciate ligament) since 2025-07-07, back 2026-03-31..05-01.
 
+### 27.0.0 injury items — type and window verified 27.0.0 (bytes), tail length inference
+
+The item's first byte is 3, not 2. The fields from the start date to the 3 × u8 read the same (bytes). The end is a single `0xff` byte where 26.3.2 has `u16 0xffff`, so the tail is 29 bytes, not 30 (inference, below).
+
+`savefile` reads type 3 from database version 3754 (27.0.0), type 2 below it. 3754 is the first version seen; the game's gate may be lower. Scanning every player record of the 26.3.2 KŽ save of 2037 for type 3 finds one list that validates: person 271 735, 350 bytes after his real type-2 list. The scan returns the first list, so he gets the real one, but a record with no real list could pick up a false one.
+
+| Save | Items | Queue entries (`injury_manager.dat`) | Same window |
+|------|-------|--------------------------------------|-------------|
+| `data/test_save_27.fm` (2026-01-19) | 1 579 | 1 579 | 1 579 |
+| `data/test_save_27b.fm` (2026-01-22) | 1 632 | 1 632 | 1 632 |
+
+Each item matches its person's queue entry (same earliest and latest return), and no item's person is missing from the queues (see "injury_manager.dat"). With the installed 27.0.0 database all 1 632 items of 27b get a name by the rank rule (not checked in game).
+
+Example (27b, person 1466): Ben Fox (uid 215 502). The byte before the list is `01`, then the count `01`, then `03 76 00 00` + `01 00 ea 07 d5 00 f3 00 00 01 00 ff ff ff ff 00 6f 1a 00 00 03 ff ff ff ff 00 00 00 ff`: index 118 (ruptured ankle ligaments) from 2026-01-01, 213–243 days. The byte after it is `00`.
+
+Evidence for 29 bytes. Every list in both 27.0.0 saves has one item and no match record, so the length comes from the following bytes. Counts cover one-item lists without a match record: 4 819 in the 26.3.2 KŽ save of 2037, 1 632 in 27b. Byte numbers count from the start date.
+
+- Byte 29 in 27b is 0, 1 or 2 (1 626 / 5 / 1), so it is not part of an end marker.
+- The three bytes from byte 29 in 27b: `(0,0,0)` ×1 607, `(0,1,4)` ×19, `(1,n,0)` ×5, `(2,n,0)` ×1.
+- The three bytes after a 26.3.2 item, from byte 30: `(0,0,0)` ×3 670, `(0,1,3)` ×771, `(0,0,1)` ×326, `(1,n,0)` ×48, `(2,n,0)` ×4.
+- The `(0,1,x)`, `(1,n,0)` and `(2,n,0)` shapes line up. `(0,0,1)` is not seen in 27b.
+- From byte 30 in 27b the shapes do not appear: `(0,0,0)` ×1 607, `(1,4,n)` ×19, `(0,0,255)` ×5, `(247,0,1)` ×1.
+
+No list of two items or match record is seen in 27.0.0, so the 29-byte tail and the 26-byte match record are unchecked there.
+
 ### BASIC person part — verified (code + bytes)
 
 Found by scanning for the record's last match; the ACTUAL_PERSON part before it holds a dummy copy dated 1900:
@@ -295,6 +320,7 @@ The gate's exact condition is not decoded. `fm` hides media handling wherever it
 
 ## Open questions
 
+- 27.0.0 injury items: a list of two items and an item with a match record, to confirm the 29-byte tail and the 26-byte match record.
 - 27.0.0 joined date (offset 105): 8 455 of 51 826 players in `data/test_save_27b.fm` (game date 2026-01-22) have a date after the game date, e.g. Anton Tanghe 2026-10-06. They cluster in transfer windows (4 747 in 2026-07, 1 224 in 2026-08, none after 2026-12), so the field likely holds the database's real-life joining date (inference). For all 8 455 the ACTUAL_PERSON joined date (`+0xec`) is before the game date (Tanghe: 2026-01-19). Which one the game shows is not checked; `fm` still serves offset 105 as `joined_club`.
 - 27.0.0 BASIC part: what the new gap byte (always 1) and the other 9 bytes hold.
 - Personality: the meaning of trailer flags bit 3, and an in-game Devoted sample. Relationships: reasons other than 1 and 2, item bytes 13–15, relation types other than 3, the second vector, which list builder the profile screen uses, Enzo Fernández's fifth favoured person, and the non-player person records that name managers and staff. Traits: bits 48 and 53. Media handling: the fog-of-war gate's condition (knowledge type `0x5b`), and whether flag bit 3 clear turns negative styles into Outspoken in game.

@@ -83,6 +83,33 @@ func TestLoadTestSave27Table(t *testing.T) {
 	}
 }
 
+// Ben Fox's injury in data/test_save_27b.fm: index 118 from 2026-01-01,
+// 213–243 days.
+func TestLoadTestSave27Injuries(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27bPath, LoadOptions{})
+
+	injured := 0
+	for _, p := range g.players {
+		if p.Injured() {
+			injured++
+		}
+	}
+	if injured != 1632 {
+		t.Errorf("%d injured players, want 1632", injured)
+	}
+	p := g.byUID[215502]
+	if p == nil {
+		t.Fatal("no Ben Fox")
+	}
+	if len(p.Injuries) != 1 {
+		t.Fatalf("Ben Fox: %+v", p.Injuries)
+	}
+	if in := p.Injuries[0]; in.ID != 118 || in.Since.Format(time.DateOnly) != "2026-01-01" ||
+		in.ReturnEarliest.Format(time.DateOnly) != "2026-08-02" || in.ReturnLatest.Format(time.DateOnly) != "2026-09-02" {
+		t.Errorf("Ben Fox: %+v, want index 118 since 2026-01-01, back 2026-08-02..09-02", in)
+	}
+}
+
 // 33 arranged moves count, 17 of them dated before the game date.
 func TestLoadTestSave27ArrangedMoves(t *testing.T) {
 	for _, path := range []string{testSave27Path, testSave27bPath} {

@@ -36,6 +36,7 @@ func FuzzParsePlayer(f *testing.F) {
 	f.Add(playerRecordWith(77, 9, basic, block))
 	knock := Injury{ID: 84, Start: Date{Raw: 0x6b50, Year: 2035}, DaysMin: 0, DaysMax: 2}
 	f.Add(playerRecordWith(77, 9, basic, append([]byte{1}, injuryItem(knock, veigaMatch)...)))
+	f.Add(playerRecordWith(77, 9, basic, append([]byte{1}, injuryItem27(knock)...)))
 	withClubs := basic
 	withClubs.relations = relations(relationItem(1115, 1, relationClub, relationFavoured, 100), relationItem(6, 0, relationClub, 72, 1))
 	f.Add(playerRecordWith(77, 9, withClubs, block))

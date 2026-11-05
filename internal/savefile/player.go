@@ -193,7 +193,8 @@ type Player struct {
 	ClubAffinities []ClubAffinity // in save order; nil when the vector is absent or does not decode
 }
 
-// parsePlayer decodes a player record. dataVersion selects the BASIC part layout.
+// parsePlayer decodes a player record. dataVersion selects the BASIC part
+// layout and the injury item format.
 func parsePlayer(body []byte, rec Record, nt NameTables, dataVersion uint16) (Player, error) {
 	b := body[rec.Start:rec.End]
 	if len(b) < playerPartSize+personTrailerSize {
@@ -236,7 +237,7 @@ func parsePlayer(body []byte, rec Record, nt NameTables, dataVersion uint16) (Pl
 		p.JoinedClubPerson, p.PreviousClub, p.TransferIDs = readPersonFields(b, m)
 		injuriesEnd = m.at
 	}
-	p.Injuries = findInjuries(b, offValue, injuriesEnd)
+	p.Injuries = findInjuries(b, offValue, injuriesEnd, injuryFormat(dataVersion))
 	// The ACTUAL_PERSON writer (0x2f424a0) ends with the trait mask.
 	if at >= playerPartSize+traitsSize {
 		p.Traits = binary.LittleEndian.Uint64(b[at-traitsSize:])
