@@ -38,6 +38,9 @@ type TacticSlot struct {
 	// RoleAbility is the player's role ability in the in-possession role and
 	// position; nil without both, or when fog of war hides his current ability.
 	RoleAbility *int `json:"role_ability,omitempty"`
+	// OutOfPossessionRoleAbility is RoleAbility for the out-of-possession role:
+	// never halved, FM27's rules for every build.
+	OutOfPossessionRoleAbility *int `json:"out_of_possession_role_ability,omitempty"`
 }
 
 // SlotRole is a slot's position and role in one phase; empty where unnamed.
@@ -155,12 +158,19 @@ func newTactic(t *savefile.Tactics, w World, players map[uint32]*Player, aux []p
 	out.Mentality, _ = tac.MentalityName()
 	for i, s := range tac.Slots {
 		p := l.player(i)
-		at, ok := placeOf(s.InPossession)
-		if p == nil || !ok {
+		if p == nil {
 			continue
 		}
-		if v, ok := aux[p.auxIdx].roles.ability(s.InPossession.RoleBit(), at, rules); ok {
-			out.Slots[i].RoleAbility = &v
+		roles := &aux[p.auxIdx].roles
+		if at, ok := placeOf(s.InPossession); ok {
+			if v, ok := roles.ability(s.InPossession.RoleBit(), at, rules); ok {
+				out.Slots[i].RoleAbility = &v
+			}
+		}
+		if at, ok := placeOf(s.OutOfPossession); ok {
+			if v, ok := roles.oopAbility(s.OutOfPossession.RoleBit(), at, rules); ok {
+				out.Slots[i].OutOfPossessionRoleAbility = &v
+			}
 		}
 	}
 	return out
@@ -247,8 +257,8 @@ func (v View) Tactic() (Tactic, bool) {
 	if v.fog {
 		t.Slots = slices.Clone(t.Slots)
 		for i, s := range t.Slots {
-			if s.RoleAbility != nil && !v.see(v.g.byUID[s.Player.UID]).s.full() {
-				t.Slots[i].RoleAbility = nil
+			if (s.RoleAbility != nil || s.OutOfPossessionRoleAbility != nil) && !v.see(v.g.byUID[s.Player.UID]).s.full() {
+				t.Slots[i].RoleAbility, t.Slots[i].OutOfPossessionRoleAbility = nil, nil
 			}
 		}
 	}

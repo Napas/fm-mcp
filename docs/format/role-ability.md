@@ -53,7 +53,7 @@ It feeds the role list for a position (`0x2ffd7b4`), the shortlist's best roles 
 
 **Stars: not reproduced.** The Tactics Planner and role list show role ability as stars. The mapping is not found: exact stars from save data match 0 of 38 samples. Across players a higher role ability never has fewer stars in 28 of 38 (10 of 11 on 12-09, 21 of 27 on 12-14). The stars follow a per-player assessment that changes over time: Rodríguez's 129 shows 3.5 stars and Matković's 129 shows 4 on the same day, and Ly's Channel Forward went from 3.5 to 4 stars between 12-09 and 12-14 with the same attributes, current ability and role ability. Hypothesis: the staff's assessed current-ability stars, scaled by role ability / CA.
 
-Out-of-possession roles (selector `0x48c34a8`, 26.3.2 build stamp; not used by `fm`):
+Out-of-possession roles (selector `0x48c34a8`, 26.3.2 build stamp; 27.0.0 has the same lists, which `fm` uses, see "27.0.0 role ability"):
 
 | Role | Mask | Classifier | Key | Preferable | Negative |
 |------|------|------------|-----|------------|----------|
@@ -117,7 +117,9 @@ Change 1, the pull-up: `0x4918654` moves r towards b whenever b > r (`0x49186c8`
 
 Change 2, the scale step: `0x491871c`–`0x4918738` computes trunc(min(r/b, 1) × CA) in float32 (`ucvtf`, `fdiv s`, `fmul s`, `fcvtzs`). Float32 and float64 can truncate one apart: r 105, b 150, CA 90 gives 63 in float32, 62 in float64. On `data/test_save_27b.fm`, 2 615 of 3.47M role abilities (every player and offered role) differ before halving (code review probe). From database version 3754 `fm` uses float32. Whether 26.3.2 did is unknown; its samples fit float64.
 
-Out of possession (not used by `fm`):
+Out of possession. `fm` implements these rules in `internal/fm/oopability.go` (`get_tactic`'s `out_of_possession_role_ability`). It applies them to FM26 saves too, because the 26.3.2 code was not decoded:
+- **Rating:** `0x491ab5c` uses the same fused float32 weighting as the in-possession `0x491e624` (16 × key mean + 4 × preferable mean in one rounding, then + 3 × negative mean) and the same position penalty, applied to the blended position rating. `fm` reuses its in-possession weighting; a probe matched a fused-float32 emulation of this sequence for every player of `data/test_save_27b.fm`, every role of both phases and every p from 1 to 20 (40.4M combinations). Worked by hand on `data/test_save_27b.fm`: Ivan Fiolić as Wide Midfielder at MR 12 rates 105, less 20 % = 84 of his best 104, pulled up to 90; 90/104 × 105 = 90.
+- **Best role:** `0x491af40` covers every position rated 10 or more (SW offers none).
 - **Thresholds:** none. The role ability `0x491aa68` never halves, and the best role `0x491af40` takes the highest rating with no threshold.
 - **Pull-up:** the role ability applies it as in possession.
 - **Position blending:** the rating blends from p ≥ 12 as `(p + other) / 2` when the other position is higher; the first matching row wins:
@@ -125,12 +127,12 @@ Out of possession (not used by `fm`):
 | Roles | Blended with |
 |-------|--------------|
 | Wide, Stopping Wide and Covering Wide Centre-Back (`0x1c0`) | DL or DR by side, else the higher of the two |
-| Pressing Full-Back, Wide Covering Defensive Midfielder, Tracking Wide Midfielder | WBL or WBR by side; no side, no blend |
-| Pressing Wing-Back, Wide Covering Central Midfielder, Tracking Winger | ML or MR by side |
+| Pressing Full-Back, Wide Covering Defensive Midfielder, Tracking Wide Midfielder | WBL or WBR by side; needs a side |
+| Pressing Wing-Back, Wide Covering Central Midfielder, Tracking Winger | ML or MR by side; needs a side |
 | Dropping Defensive Midfielder | DC |
 | Pressing Defensive Midfielder, Tracking Attacking Midfielder | MC |
 | Pressing Central Midfielder, Inside Outlet Winger, Tracking Centre-Forward | AMC |
-| Splitting Outlet Attacking Midfielder, Splitting Outlet Centre-Forward | AML or AMR by side |
+| Splitting Outlet Attacking Midfielder, Splitting Outlet Centre-Forward | AML or AMR by side; needs a side |
 
 - **Roles offered per position** (`0x491d7c4` with no side context): GK `0x7`, DL and DR `0xe00`, DC `0x1f8`, WBL and WBR `0x7000`, DM `0xf8000`, MC `0x38100000`, ML and MR `0x3800000000`, AMC `0x3c0000000`, AML and AMR `0x3c000000000`, ST `0x3c0000000000`, SW none. With a nonzero second argument, some roles also need a side bit: the wide centre-back roles at DC (in possession, Wide and Overlapping Centre-Back also need a third argument ≥ 3); Box To Box Midfielder, Box To Box Playmaker and Wide Covering Defensive Midfielder at DM; Wide Central Midfielder and Wide Covering Central Midfielder at MC; and the two Splitting Outlet roles at AMC and ST. Inference: the Tactics screen's context; the third argument counts centre-backs.
 

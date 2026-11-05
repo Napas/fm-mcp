@@ -1870,12 +1870,16 @@ func TestGetTactic(t *testing.T) {
 			InPossession:    fm.SlotRole{Position: "GK", Role: "Ball-Playing Goalkeeper"},
 			OutOfPossession: fm.SlotRole{Position: "GK", Role: "Goalkeeper"},
 			Player:          &fm.TacticPlayer{UID: 7, Name: "Bruno Sami"},
-			RoleAbility:     ptr(140)},
+			RoleAbility:     ptr(140),
+			// Goalkeeper rates 120, his best out of possession: his current ability.
+			OutOfPossessionRoleAbility: ptr(140)},
 		{Slot: 10,
 			InPossession:    fm.SlotRole{Position: "ST", Role: "Channel Forward"},
 			OutOfPossession: fm.SlotRole{Position: "AMC", Role: "Attacking Midfielder"},
 			Player:          &fm.TacticPlayer{UID: 8, Name: "Stephen Ly"},
-			RoleAbility:     ptr(130)},
+			RoleAbility:     ptr(130),
+			// AMC 0: rating 24, pulled up to 36 of his best 120 (ST): 36/120 × 130.
+			OutOfPossessionRoleAbility: ptr(39)},
 	}
 	if gotSlots := []fm.TacticSlot{got.Slots[0], got.Slots[10]}; !reflect.DeepEqual(gotSlots, want) {
 		t.Errorf("slots 0 and 10 = %+v, want %+v", gotSlots, want)
@@ -1907,13 +1911,13 @@ func TestGetTacticIsExplained(t *testing.T) {
 	if i < 0 {
 		t.Fatal("no get_tactic tool")
 	}
-	for _, want := range []string{"lineup_source", "search_players", "squad_depth", "guesses", lastMatchCaveat, tacticPairing, `"none"`, "may belong to another of his teams", "roles FM26 renamed", "unnamed_player"} {
+	for _, want := range []string{"lineup_source", "search_players", "squad_depth", "guesses", lastMatchCaveat, tacticPairing, `"none"`, "may belong to another of his teams", "roles FM26 renamed", "unnamed_player", "out_of_possession_role_ability"} {
 		if !strings.Contains(tools.Tools[i].Description, want) {
 			t.Errorf("get_tactic description lacks %q", want)
 		}
 	}
 	text := h.session.InitializeResult().Instructions
-	for _, want := range []string{"get_tactic", `"last_match"`, "in_possession", "out_of_possession", lastMatchCaveat, tacticPairing, `"none"`, "may belong to another of his teams"} {
+	for _, want := range []string{"get_tactic", `"last_match"`, "in_possession", "out_of_possession", lastMatchCaveat, tacticPairing, `"none"`, "may belong to another of his teams", "out_of_possession_role_ability"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("instructions lack %q", want)
 		}

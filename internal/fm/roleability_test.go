@@ -259,7 +259,7 @@ func TestBestRoleRating(t *testing.T) {
 		"AWB under 60 does not count": {roleTestPlayer(10, "Advanced Wing-Back", 12, map[string]uint8{"WBL": 20}), 22},
 		"inside forward":              {roleTestPlayer(50, "Inside Forward", 70, map[string]uint8{"AML": 20, "AMR": 14}), 132},
 	} {
-		if got := newRoleInputs(tt.p).best; got != tt.want {
+		if got := int(newRoleInputs(tt.p).best); got != tt.want {
 			t.Errorf("%s: best %d, want %d", name, got, tt.want)
 		}
 	}
@@ -384,7 +384,7 @@ func TestRoleAbilityMatchesTheModel(t *testing.T) {
 			role, at := uint64(num(f[2])), positionAt(t, f[3]) //nolint:gosec // a role bit
 			at.mask |= side
 			ability, _ := in.ability(role, at, roleRules26)
-			if got, want := [3]int{in.rating(role, at), in.best, ability}, [3]int{num(f[5]), num(f[6]), num(f[7])}; got != want {
+			if got, want := [3]int{in.rating(role, at), int(in.best), ability}, [3]int{num(f[5]), num(f[6]), num(f[7])}; got != want {
 				t.Errorf("%s: rating, best, ability = %v, want %v", strings.TrimSpace(line), got, want)
 			}
 			cases++
@@ -436,7 +436,7 @@ func TestRealSaveRoleAbility(t *testing.T) {
 		in := g.auxOf(g.byUID[s.Player.UID]).roles
 		at := positionAt(t, s.InPossession.Position)
 		at.mask |= sideBits[s.InPossession.Side]
-		if r := in.rating(mustRole(t, s.InPossession.Role), at); r != w.rating || in.best != w.best {
+		if r := in.rating(mustRole(t, s.InPossession.Role), at); r != w.rating || int(in.best) != w.best {
 			t.Errorf("%s: rating %d, best %d; want %d, %d", w.name, r, in.best, w.rating, w.best)
 		}
 	}

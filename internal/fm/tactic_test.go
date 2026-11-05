@@ -82,7 +82,10 @@ func TestTacticNamesSlotsAndSelectedPlayers(t *testing.T) {
 			InPossession:    SlotRole{Position: "GK", Role: "Ball-Playing Goalkeeper"},
 			OutOfPossession: SlotRole{Position: "GK", Role: "Goalkeeper"},
 			Player:          &TacticPlayer{UID: 1, Name: "Guglielmo Vicario"},
-			RoleAbility:     ptr(49)}, // GK rated 1
+			RoleAbility:     ptr(49), // GK rated 1
+			// Out of possession: rating 24 at GK 1, pulled up to 33 of the
+			// best 100 (AMC 20): 33/100 × 151.
+			OutOfPossessionRoleAbility: ptr(49)},
 		{Slot: 1,
 			InPossession:    SlotRole{Position: "WBR", Role: "Advanced Wing-Back"},
 			OutOfPossession: SlotRole{Position: "DR", Role: "Full-Back"}},
@@ -90,7 +93,9 @@ func TestTacticNamesSlotsAndSelectedPlayers(t *testing.T) {
 			InPossession:    SlotRole{Position: "DC", Side: "right", Role: "Overlapping Centre-Back"},
 			OutOfPossession: SlotRole{Position: "DC", Side: "right", Role: "Centre-Back"},
 			Player:          &TacticPlayer{UID: 2, Name: "Cristian Romero"},
-			RoleAbility:     ptr(45)},
+			RoleAbility:     ptr(45),
+			// DC 0: rating 20, pulled up to 30 of 100: 30/100 × 151.
+			OutOfPossessionRoleAbility: ptr(45)},
 	}
 	if !reflect.DeepEqual(tac.Slots[:3], want) {
 		t.Errorf("slots 0-2 = %+v, want %+v", tac.Slots[:3], want)
@@ -115,7 +120,7 @@ func TestTacticJSON(t *testing.T) {
 	for _, want := range []string{
 		`"team_index":547`, `"name":"ZaZ - Autumn 3.39 ST"`, `"mentality":"Attacking"`, `"lineup_source":"selected"`,
 		`"in_possession":{"position":"DC","side":"right","role":"Overlapping Centre-Back"}`,
-		`"player":{"uid":2,"name":"Cristian Romero"},"role_ability":45`, `"bench":[{"uid":4`,
+		`"player":{"uid":2,"name":"Cristian Romero"},"role_ability":45,"out_of_possession_role_ability":45`, `"bench":[{"uid":4`,
 	} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("JSON lacks %s: %s", want, b)
@@ -134,10 +139,13 @@ func TestTacticHidesRoleAbilityWithCurrentAbility(t *testing.T) {
 	if fogged.Slots[0].RoleAbility == nil || fogged.Slots[2].RoleAbility != nil {
 		t.Errorf("with fog of war: Vicario %v, Romero %v; want only Vicario's", fogged.Slots[0].RoleAbility, fogged.Slots[2].RoleAbility)
 	}
+	if fogged.Slots[0].OutOfPossessionRoleAbility == nil || fogged.Slots[2].OutOfPossessionRoleAbility != nil {
+		t.Errorf("with fog of war, out of possession: Vicario %v, Romero %v; want only Vicario's", fogged.Slots[0].OutOfPossessionRoleAbility, fogged.Slots[2].OutOfPossessionRoleAbility)
+	}
 	if clear.Slots[2].RoleAbility == nil || *clear.Slots[2].RoleAbility != 45 {
 		t.Errorf("without fog of war: Romero %v, want 45", clear.Slots[2].RoleAbility)
 	}
-	if again, _ := g.View(false).Tactic(); again.Slots[2].RoleAbility == nil {
+	if again, _ := g.View(false).Tactic(); again.Slots[2].RoleAbility == nil || again.Slots[2].OutOfPossessionRoleAbility == nil {
 		t.Error("the fogged view changed the game's tactic")
 	}
 }
