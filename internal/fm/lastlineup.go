@@ -18,6 +18,8 @@ var (
 
 // LastLineup is a team's lineup, formation and roles in its most recent
 // match. Roles have no duty (not stored); the match date is unknown.
+// Out-of-possession positions are in stored order; after an FM27 tactic edit
+// they may belong to other players.
 type LastLineup struct {
 	TeamIndex     int64  `json:"team_index"`
 	Team          string `json:"team,omitempty"`

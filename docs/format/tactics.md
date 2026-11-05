@@ -47,7 +47,9 @@ list           = u32 n + n × (u8 2, i32 person index)
 TACTIC         = u8 0x22, u16 0x42, 4 bytes build stamp (1a 03 00 01 in 26.3.2, 1a 02 00 01 in 26.2.0),
                  u8 (2 human, 1 preset), string name, 3 × string (empty)
                  u8 4, u8 2, u8 mentality, bitset, string style ("Custom"), u32 "NULL"   (0x47ac118)
-                 11 × (POSITION in possession, POSITION out of possession, u8 slot number 0..10)
+                 11 × (POSITION in possession, POSITION out of possession, u8 slot number n: this slot takes
+                   the out-of-possession POSITION stored in slot n; checked in game in 27.0.0,
+                   assumed for 26.x; see "27.0.0 tactics")
                  u8 flag; when set: 2 × (u32 n + n × (u32, u32 m + m × POSITION)),
                    u32 n + n × (u32, u32 m + m × (u8, u8, u32)), 191-byte block (0x473d81c; all zero)
 POSITION       = u16 0x42, u8, u32 position mask, u8 0xff, u8 0                                   (0x4923d74)
@@ -123,7 +125,7 @@ The opponent field: every opponent ≥ 0 has its own record (12 093 of 12 093 on
 
 Unnamed persons (2035-12-09, served lineups): 58 % of the XI places that hold a person (74 796 of 128 380) hold one the save does not decode as a player, mostly tag-7 records (VIRTUAL_PLAYER, hypothesis; 72 165; tag 19 1 671, tag 16 675, tag 1 285). 4 253 lineups have no player in the XI. They are mostly women's teams and clubs outside Europe (Portland Thorns Women 2 of 11 named, Raja Club Athletic 1, Club Sport Emelec 0); big European men's clubs are complete.
 
-### 27.0.0 tactics — verified 27.0.0 (bytes only)
+### 27.0.0 tactics — verified 27.0.0 (bytes + in game)
 
 File version 26 and the grammar above, with four changes. `savefile` accepts either build's values per object, so mixed files parse (on purpose). Last-lineup records must all share one version.
 
@@ -138,12 +140,13 @@ Both FM27 saves keep the routine version 0x3c, the `u16 3, u32 26` team records,
 
 Evidence (`data/test_save_27.fm`, 2026-01-19; `data/test_save_27b.fm`, 2026-01-22): the walk reaches the end of the file in both and the scan finds the last-lineup table at the same place (body offsets 10 417 and 15 849; 1 646 and 2 506 records), with 19 presets and every formation decoding. The 19 presets decode to the same tactics as in 26.3.2 (names, order, mentality, every slot). Each is 22 bytes shorter, one per POSITION. 26.3.2 has `ff 00 01 01` there and 27.0.0 `00 01 01`, so the dropped byte is probably the 0xff (inference). Human 115 841 has 4 team entries (16 521 Kauno Žalgiris, 16 546, 16 573, 50 315). In the first save they are all active -1 with no tactic. In the second they are all active 0, each holding a copy of "4-3-3 DM Wide" (mentality 4). It differs from the preset only in the out-of-possession positions and roles of slots 5–10.
 
-- **Slot numbers**: that tactic numbers its slots 0, 1, 2, 3, 4, 5, 7, 8, 6, 9, 10. What the number means is unknown; the presets number their slots in order. Players follow the stored slot order: KŽ's last-match formation equals the tactic slot for slot in stored order (all 22 positions and roles, without duties), so `Players[i]` is in slot i.
+- **Slot numbers**: that tactic numbers its slots 0, 1, 2, 3, 4, 5, 7, 8, 6, 9, 10; the presets number theirs in order. Slot i with number n takes the out-of-possession POSITION stored in slot n, so slot 6 takes slot 7's, 7 takes 8's and 8 takes 6's. Verified in game (copy of the real save, 2026-01-23, Tactics screen): CM (MC right) → CM, AM (MC left) → CM, W (AMR) → WMF (MR). Read in stored order, the CM would go to MR and the winger to MC. The reverse mapping (the n-th slot takes this slot's stored position) gives the AM a WMF and does not fit. Players follow the in-possession order: `Players[i]` is in slot i, and the 20 Jan friendly's match screen shows all 11 starters in their in-possession positions and sides, with shirts 1–11.
+- **Last-match formation**: KŽ's equals the tactic's POSITIONs in stored order (all 22 positions and roles, without duties), so slots 6 to 8 are paired out of possession as stored, not as the tactic pairs them. The record has no slot numbers, and no 0..10 permutation is in its trailing bytes. Which out-of-possession position the game gives each last-match player is not checked.
 - **Last lineup**: the 243-byte record keeps every offset up to the shirt numbers. Empty records hold the formation tags at 14 and 50, then exactly 130 bytes of 0xff for the 26 persons and 26 shirt numbers. KŽ's record (opponent 6215 FK Banga, which points back) holds 26 persons, the XI with shirts 1–11 and the bench with 12–27; the goalkeeper is Deividas Mikelionis (`fm`). The 27 bytes after the shirt numbers are not decoded. They look like `u32` bitfield, `3 × u32`, `11 × u8`, against `u32`, `4 × u32`, `6 × u8` in 26.x (inference).
 - All roles and positions in both saves' tactics and formations have names in `tacticnames.go`.
 
-Not checked in game. The FM27 game code was not traced.
+Checked in game: the human's tactic (name, mentality, all 22 positions and roles) and KŽ's last-match XI (positions, sides and shirt numbers in possession). The FM27 game code was not traced.
 
 ## Open questions
 
-- `tactics_man.dat`: the style string ("Custom" shows as "Clean Slate"); whether duties appear anywhere in game or affect the match engine; the active-tactic index and where other tactic slots live; team instructions and per-role player instructions (bitsets); the set-piece lists; the meanings in the rest of a team entry and human section (set-piece routines, REC22, plans, the two team maps); saves with more than one human; the last-lineup record's 26 bytes after the shirt numbers (bitfield and unknown values) and the formation byte that is always 2; where the date of a team's last match is (not in the record; probably a fixture in `rgman/comp_*`); the renamed role labels. 27.0.0: what the slot numbers mean when they are out of order (`savefile` assumes stored slot order in both builds); the last-lineup record's 27 trailing bytes; which POSITION byte was dropped.
+- `tactics_man.dat`: the style string ("Custom" shows as "Clean Slate"); whether duties appear anywhere in game or affect the match engine; the active-tactic index and where other tactic slots live; team instructions and per-role player instructions (bitsets); the set-piece lists; the meanings in the rest of a team entry and human section (set-piece routines, REC22, plans, the two team maps); saves with more than one human; the last-lineup record's 26 bytes after the shirt numbers (bitfield and unknown values) and the formation byte that is always 2; where the date of a team's last match is (not in the record; probably a fixture in `rgman/comp_*`); the renamed role labels. Whether 26.x pairs slot numbers the same way (`savefile` assumes so; no 26.x sample has out-of-order numbers). 27.0.0: how the game pairs a last-match formation's out-of-possession positions when the tactic's slot numbers are out of order; the last-lineup record's 27 trailing bytes; which POSITION byte was dropped.

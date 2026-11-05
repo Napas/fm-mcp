@@ -936,10 +936,16 @@ func TestReadTacticSlotNumbers(t *testing.T) {
 		}
 		return b
 	}
-	// Seen in a save after editing a 4-3-3.
+	// Seen in a save after editing a 4-3-3. Slot i takes the out-of-possession
+	// position stored in slot n: 6 takes 7's, 7 takes 8's and 8 takes 6's.
+	want := zazTactic()
+	stored := want.Slots
+	want.Slots[6].OutOfPossession = stored[7].OutOfPossession
+	want.Slots[7].OutOfPossession = stored[8].OutOfPossession
+	want.Slots[8].OutOfPossession = stored[6].OutOfPossession
 	got, err := readTactic(newReader(numbered(0, 1, 2, 3, 4, 5, 7, 8, 6, 9, 10)))
-	if err != nil || got != zazTactic() {
-		t.Errorf("permuted numbers: got %+v, %v; want the tactic", got, err)
+	if err != nil || got != want {
+		t.Errorf("permuted numbers: got %+v, %v\nwant %+v", got, err, want)
 	}
 	for name, b := range map[string][]byte{
 		"number used twice": numbered(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9),
