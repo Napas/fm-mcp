@@ -58,8 +58,21 @@ The first save also has 576 class-10 and one class-7 record, skipped as in 26.3.
 
 Evidence: record 0 is `02 14 00 f0cf0000 00 1a020000 00 1a020000 …`: Cavan Sullivan (uid 2 000 365 091, person 53 232, at team 20 023) to team 538, status 19, on 2028-01-01. Record 8 is Ibrahim Dosso (person 8 353) to team 463 on 2027-01-01 (`TestTestSave27Transfers`).
 
-17 of the 33 arranged moves are dated before the game date (2024-11-30 to 2025-02-02); 16 of those are to the player's current team, e.g. Lucas Beltrán (uid 14 217 414) to team 77 on 2025-01-01. They ship with the database. `fm` counts them as arranged; the 26.3.2 check `0x2f54e10` reads only the status. The 26.3.2 KŽ save of 2037 has 47 arranged, none dated earlier or to the current team. Whether the game treats these 17 as arranged is not checked in game.
+17 of the 33 arranged moves are dated before the game date (2024-11-30 to 2025-02-02); 16 of those are to the player's current team, e.g. Lucas Beltrán (uid 14 217 414) to team 77 on 2025-01-01. All 33 ship with the database (date at 56: 2024-12-30 on 31, 2024-12-31 on 2). The 26.3.2 KŽ save of 2037 has 47 arranged, none dated earlier or to the current team.
+
+In game (27b save, 2026-01-22), past- and future-dated moves look the same: status "Not set" and one transfer offer with a future date. `fm` counts all 33 as arranged, like the 26.3.2 check `0x2f54e10`, which reads only the status.
+
+| Player | Byte 37 | Date at 60 | Offer in game | Offer date in game |
+|--------|---------|------------|---------------|--------------------|
+| Lucas Beltrán (on loan at River Plate) | 0x21 | 2025-01-01 | River Plate, Transfer, €7.25M | 2027-07-01 |
+| Rafa Mir (on loan at Aris) | 0x21 | 2027-07-01 | Aris, End Of Contract, €0 | 2027-07-01 |
+| Mark McKenzie (Toulouse) | 0x20 | 2025-01-26 | Philadelphia, Transfer, €2.5M | 2027-01-01 |
+| Cavan Sullivan (Philadelphia) | 0x20 | 2028-01-01 | Man City, Transfer, €0 | 2028-01-01 |
+
+For a past date the game shows a later date that is not in the record (bytes: no 2027 date in Beltrán's, no 2027-01-01 in McKenzie's). Beltrán's is the day after his loan ends; how the game picks it is unknown. `fm` omits a past date from the interest reason.
+
+Byte 37 is 0x21 on the 19 moves to the club the player is on loan at and 0x20 on the other 14; it is 0 on all 47 in the 26.3.2 save. Its meaning is unknown.
 
 ## Open questions
 
-- `transfer_man.dat`: whether the game treats the 17 past-dated 27.0.0 arranged moves as arranged; the class parts of TRANSFER records, the fields marked unknown, status values other than 19, what the header count counts, and the 18.8 MB after the records (2036-01-16).
+- `transfer_man.dat`: how the game picks the offer date it shows for a past-dated 27.0.0 arranged move, and byte 37; the class parts of TRANSFER records, the fields marked unknown, status values other than 19, what the header count counts, and the 18.8 MB after the records (2036-01-16).

@@ -430,22 +430,24 @@ func TestInterestGates(t *testing.T) {
 			}
 		})
 	}
-	t.Run("arranged text", func(t *testing.T) {
-		p, in := interestPlayer()
-		in.arranged = &arrangedMove{team: 21, date: time.Date(2036, 7, 1, 0, 0, 0, 0, time.UTC)}
-		g := interestGame(p, in)
-		if text := g.interestOf(p).TransferReason.Text; text != "Has agreed a move to Stade Brestois on 1 July 2036" {
-			t.Errorf("text = %q", text)
-		}
-	})
-	t.Run("arranged text without a date", func(t *testing.T) {
-		p, in := interestPlayer()
-		in.arranged = &arrangedMove{team: 21}
-		g := interestGame(p, in)
-		if text := g.interestOf(p).TransferReason.Text; text != "Has agreed a move to Stade Brestois" {
-			t.Errorf("text = %q", text)
-		}
-	})
+	for _, tt := range []struct {
+		name string
+		date time.Time
+		want string
+	}{
+		{"arranged text", time.Date(2036, 7, 1, 0, 0, 0, 0, time.UTC), "Has agreed a move to Stade Brestois on 1 July 2036"},
+		{"arranged text without a date", time.Time{}, "Has agreed a move to Stade Brestois"},
+		{"arranged text without a past date", interestToday.AddDate(0, 0, -1), "Has agreed a move to Stade Brestois"},
+		{"arranged text on the game date", interestToday, "Has agreed a move to Stade Brestois on 16 January 2036"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			p, in := interestPlayer()
+			in.arranged = &arrangedMove{team: 21, date: tt.date}
+			if text := interestGame(p, in).interestOf(p).TransferReason.Text; text != tt.want {
+				t.Errorf("text = %q", text)
+			}
+		})
+	}
 	t.Run("left long ago", func(t *testing.T) {
 		p, in := interestPlayer()
 		in.previousClub, in.joined = 1, gameDaysAgo(interestToday, 151)
