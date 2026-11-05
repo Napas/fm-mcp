@@ -138,3 +138,30 @@ func TestLoadTestSave27ArrangedMoves(t *testing.T) {
 		}
 	}
 }
+
+// Offset 105 says 2026-09-02 for Enzo Fernández and 2026-08-05 for Mohamed
+// Salah; the game shows 2026-01-19 for both.
+func TestLoadTestSave27JoinedClub(t *testing.T) {
+	for _, path := range []string{testSave27Path, testSave27bPath} {
+		g := loadTestSaveAt(t, path, LoadOptions{})
+
+		for _, p := range g.players {
+			if p.JoinedClub != nil && p.JoinedClub.After(g.Info.Date) {
+				t.Errorf("%s: %s joined %s, after the game date", path, p.Name, p.JoinedClub.Format(time.DateOnly))
+				break
+			}
+		}
+		for _, uid := range []uint32{
+			14229525, // Enzo Fernández
+			98028755, // Mohamed Salah
+		} {
+			p := g.byUID[uid]
+			if p == nil {
+				t.Fatalf("%s: no player with uid %d", path, uid)
+			}
+			if p.JoinedClub == nil || p.JoinedClub.Format(time.DateOnly) != "2026-01-19" {
+				t.Errorf("%s: %s joined %v, want 2026-01-19", path, p.Name, p.JoinedClub)
+			}
+		}
+	}
+}

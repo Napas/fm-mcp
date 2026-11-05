@@ -21,7 +21,7 @@ Player part, offsets from the record start:
 | 46 | 54 × u8 | attributes 1..100, in `AttributeNames` order (`internal/savefile/player.go`) | verified by code (loader `0x48c6228`, display table `0x520380c`, foot tie-break `0x48b97c4`). The game shows `clamp((v+2)/5, 1, 20)` (`0x48b9fc0`). "Off the Ball" is "Movement" in the engine |
 | 100 | i32 | value in GBP; the game caps it at 300 000 000, which it shows as "Not for Sale" | guess (strong): Maddison 51.5M, Kulusevski 84.7M; the cap verified as "Not for Sale" in game (Livramento, Sombath) |
 | 104 | u8 | 1..20, unknown | |
-| 105 | date | joined current club; 1900 = unset (see "Dates"). In 27.0.0 it can be after the game date (see the open questions) | verified 26.3.2 in game: Leroux 2034-01-13 ("Transferred from Rennes") and Bernardi 2035-01-12 ("from Ajax"), both equal to the contract start; 1900-01-01 on loanees and free agents (seen in game) |
+| 105 | date | joined current club; 1900 = unset (see "Dates"). In 27.0.0 it can be later than the date the game shows (see "27.0.0 joined date") | verified 26.3.2 in game: Leroux 2034-01-13 ("Transferred from Rennes") and Bernardi 2035-01-12 ("from Ajax"), both equal to the contract start; 1900-01-01 on loanees and free agents (seen in game) |
 | 109 | date | 1900 | |
 | 113 | u16 | guess: match sharpness 0..10000 | 2035-12-09: the game shows icons only; the five players whose sharpness icon is not a tick have the five lowest stored values (5150–5913). Consistent; exact percentages not checkable |
 | 115 | i16 | 0 / −125 / −250 | |
@@ -175,6 +175,17 @@ Evidence (`data/test_save_27.fm` and `data/test_save_27b.fm`):
 - Gap bytes 0–8 look alike in both builds: byte 3 is 0..4 and byte 8 is 2..6. FM26 sample: 131 441 tag-2 players of a copy of the real KŽ save (26.3.2, 2037-07-10).
 - With 10 bytes, every player's nation is below the save's 251 nations and every hidden attribute is 1..20, in both saves. Baldassarra reads Adaptability 19, Ambition 12, Loyalty 13, Pressure 10, Professionalism 12, Sportsmanship 11, Temperament 7, Controversy 8, birthplace 1110, then a present relationship vector of 7 items. The game's screens were not checked.
 
+### 27.0.0 joined date — verified 27.0.0 (bytes + 2 in-game samples)
+
+In 27.0.0 offset 105 can be later than the ACTUAL_PERSON joined date (`+0xec`), which the game then shows. From database version 3754 `savefile` reads the earlier of the two (`+0xec` only when set). 3754 is the first version seen; the game's gate may be lower.
+
+Evidence:
+
+- 8 627 players in each FM27 save have offset 105 later than `+0xec`. In `data/test_save_27.fm` (game date 2026-01-19) 8 626 of them are after the game date. In `data/test_save_27b.fm` (2026-01-22) 8 455 are, and 171 are dated 2026-01-20 to 2026-01-22 with `+0xec` 2026-01-19. The last one, in both saves, is 2024-09-01 against 2024-06-30. The later dates cluster in transfer windows (4 747 in 2026-07, 1 224 in 2026-08, none after 2026-12), so offset 105 likely holds the database's real-life joining date (inference).
+- In game (27b): Enzo Fernández (Man City, offset 105 2026-09-02) and Mohamed Salah (Trabzonspor, 2026-08-05) show contract start 2026-01-19, their `+0xec` date. Their career screens list the 2026/27 move to that club. Offset 105's date appears on none of their screens.
+- Not changed: 4 908 players whose offset 105 is earlier than `+0xec` (27b), as in 26.3.2 (9 322 in a copy of the real KŽ save, 2037-07-10), and players with offset 105 in 1900. Which date the game shows for them is not checked in 27.0.0.
+- 26.3.2 has the same pattern but is not gated: in that KŽ copy 1 445 players have offset 105 later than `+0xec` (2025-01-28 to 2025-11-21), all with `+0xec` 2025-01-27, e.g. Julio Enciso (Strasbourg, offset 105 2025-09-01). That 2025-01-27 is the FM26 database's start date is an inference. No 26.3.2 sample was checked in game.
+
 ### Relationships and favoured clubs — verified 26.3.2 (code + bytes + 4 in-game samples)
 
 The BASIC writer `0x2f85600` writes, after the birthplace ref (`+0x50`), `u8 present` (1 when the vector at `+0x48` is set) and then the vector with `0x36e0d0c`: `u8 n` (the writer caps it at 125), n items written by `0x37bff84`, then a second vector `u32 m + m × …` (from `+0x18`; not decoded). Each item is 16 bytes, the same in memory and in the save except that the object pointer becomes a ref:
@@ -321,7 +332,7 @@ The gate's exact condition is not decoded. `fm` hides media handling wherever it
 ## Open questions
 
 - 27.0.0 injury items: a list of two items and an item with a match record, to confirm the 29-byte tail and the 26-byte match record.
-- 27.0.0 joined date (offset 105): 8 455 of 51 826 players in `data/test_save_27b.fm` (game date 2026-01-22) have a date after the game date, e.g. Anton Tanghe 2026-10-06. They cluster in transfer windows (4 747 in 2026-07, 1 224 in 2026-08, none after 2026-12), so the field likely holds the database's real-life joining date (inference). For all 8 455 the ACTUAL_PERSON joined date (`+0xec`) is before the game date (Tanghe: 2026-01-19). Which one the game shows is not checked; `fm` still serves offset 105 as `joined_club`.
+- Joined date: which date the game shows when offset 105 is earlier than `+0xec` (27.0.0 and 26.3.2), and in 26.3.2 when it is later (1 445 players).
 - 27.0.0 BASIC part: what the new gap byte (always 1) and the other 9 bytes hold.
 - Personality: the meaning of trailer flags bit 3, and an in-game Devoted sample. Relationships: reasons other than 1 and 2, item bytes 13–15, relation types other than 3, the second vector, which list builder the profile screen uses, Enzo Fernández's fifth favoured person, and the non-player person records that name managers and staff. Traits: bits 48 and 53. Media handling: the fog-of-war gate's condition (knowledge type `0x5b`), and whether flag bit 3 clear turns negative styles into Outspoken in game.
 - Reputation level: the words for levels 1, 4, 5 and 6 (order inference); women's players (the women's container's factor); player-coaches (the staff rule's inputs); players without a team (vt `+0x210`, assumed to be the nationality).

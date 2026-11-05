@@ -66,6 +66,20 @@ func basicGapSize(dataVersion uint16) int {
 	return 9
 }
 
+// joinedDateGate is the first database version seen where offset 105 can be
+// later than the person's joined date (+0xec), which the game shows instead.
+// The game's own gate may be lower.
+const joinedDateGate = dbVersion27_0
+
+// joinedClub returns offset 105, or from joinedDateGate the person's joined
+// date when it is set and earlier.
+func joinedClub(offset105, person Date, dataVersion uint16) Date {
+	if dataVersion >= joinedDateGate && person.Year > UnsetYear && person.before(offset105) {
+		return person
+	}
+	return offset105
+}
+
 // basicTailSize is the length from the birth date to the end of the birthplace.
 func basicTailSize(gap int) int { return 4 + gap + 8 + 8 + 8 }
 
@@ -175,7 +189,7 @@ type Player struct {
 	Traits     uint64    // bit i set: the player has TraitNames[i]
 
 	Value      int32  // guess (strong): GBP; the game caps it at 300 000 000
-	JoinedClub Date   // date joined the current club; 1900 when unset
+	JoinedClub Date   // joined the current club (see joinedClub); 1900 when unset
 	Sharpness  uint16 // guess: match sharpness 0..10000
 	Condition  uint16 // guess (strong): condition 0..10000
 	Height     int16  // cm
@@ -194,7 +208,7 @@ type Player struct {
 }
 
 // parsePlayer decodes a player record. dataVersion selects the BASIC part
-// layout and the injury item format.
+// layout, the injury item format and the joined date.
 func parsePlayer(body []byte, rec Record, nt NameTables, dataVersion uint16) (Player, error) {
 	b := body[rec.Start:rec.End]
 	if len(b) < playerPartSize+personTrailerSize {
@@ -235,6 +249,7 @@ func parsePlayer(body []byte, rec Record, nt NameTables, dataVersion uint16) (Pl
 	if cs, m, ok := readContracts(b, playerPartSize, at, rec.Index); ok {
 		p.Contract, p.Loan, p.FutureContract = cs.main, cs.loan, cs.future
 		p.JoinedClubPerson, p.PreviousClub, p.TransferIDs = readPersonFields(b, m)
+		p.JoinedClub = joinedClub(p.JoinedClub, p.JoinedClubPerson, dataVersion)
 		injuriesEnd = m.at
 	}
 	p.Injuries = findInjuries(b, offValue, injuriesEnd, injuryFormat(dataVersion))

@@ -35,7 +35,7 @@ func calendarDate(t time.Time) savefile.Date {
 	return savefile.Date{Raw: uint16(t.YearDay()), Year: uint16(t.Year())} //nolint:gosec // test dates
 }
 
-var unsetDate = savefile.Date{Raw: 1, Year: unsetYear}
+var unsetDate = savefile.Date{Raw: 1, Year: savefile.UnsetYear}
 
 // interestWorld has club 1 (nation 5) with first team 10 and reserves 11,
 // club 2 with first team 20, and national team 30.
@@ -137,7 +137,7 @@ func TestJustJoined(t *testing.T) {
 		{"loan, b = Emergency Backup (level 5)", func(_ *Player, in *interestInputs) { in.main.PlayingTime = 9 }, 7, true, true, 4 * 98 * 9 * 100},
 		{"joined and signed unset (1900)", func(_ *Player, in *interestInputs) { in.joined, in.main.Signed = unsetDate, unsetDate }, 10, false, true, 0},
 		{"joined zero, signed unset", func(_ *Player, in *interestInputs) { in.joined, in.main.Signed = savefile.Date{}, unsetDate }, 10, false, true, 0},
-		{"end unset", func(_ *Player, in *interestInputs) { in.main.End = savefile.Date{Raw: 2, Year: unsetYear} }, 10, false, true, 98 * 9 * 100},
+		{"end unset", func(_ *Player, in *interestInputs) { in.main.End = savefile.Date{Raw: 2, Year: savefile.UnsetYear} }, 10, false, true, 98 * 9 * 100},
 		{"free agent", func(_ *Player, in *interestInputs) { in.main = nil }, 10, false, true, 0},
 		{"on loan", func(p *Player, _ *interestInputs) { p.Loan = &Contract{TeamIndex: 20} }, 10, false, true, 0},
 	}

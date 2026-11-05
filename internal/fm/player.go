@@ -89,13 +89,9 @@ type Player struct {
 // with it show "Not for Sale".
 const notForSaleValue = 300_000_000
 
-// unsetYear is the year of unset dates, e.g. the joined date of loanees and
-// free agents (1900-01-01) and some contract ends (1900-01-02).
-const unsetYear = 1900
-
 // knownDate converts d; unset gives the zero time.
 func knownDate(d savefile.Date) time.Time {
-	if d.IsZero() || d.Year == unsetYear {
+	if d.IsZero() || d.Year == savefile.UnsetYear {
 		return time.Time{}
 	}
 	return d.Time()
