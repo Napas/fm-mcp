@@ -57,6 +57,30 @@ func TestTestSave27Currencies(t *testing.T) {
 	}
 }
 
+const (
+	nationLithuania27 = 153
+	nationSerbia27    = 176
+)
+
+// Lithuania's and Serbia's men's factors, the inputs of the reputation
+// levels checked in game (fm's TestLoadTestSave27bReputationLevel).
+func TestTestSave27NationFactors(t *testing.T) {
+	for _, path := range []string{testSave27Path, testSave27bPath} {
+		t.Run(path, func(t *testing.T) {
+			db, err := ReadGameDB(openTestSaveAt(t, path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if db.NationsErr != nil {
+				t.Fatal(db.NationsErr)
+			}
+			if lt, rs := db.Nations[nationLithuania27].MensFactor, db.Nations[nationSerbia27].MensFactor; lt != 74 || rs != 131 {
+				t.Errorf("factors Lithuania %d, Serbia %d; want 74, 131", lt, rs)
+			}
+		})
+	}
+}
+
 func TestTestSave27GameDBHeader(t *testing.T) {
 	a := openTestSaveAt(t, testSave27Path)
 	f, err := a.ReadFile("game_db.dat")

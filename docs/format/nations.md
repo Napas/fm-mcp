@@ -38,6 +38,12 @@ The parser tries every position whose first byte is ≤ 20 and continent −1 or
 
 The CONTINENT and NATION tables and the factors are identical in the 12-09 and 12-14 saves. In the 26.2.0 test save the three tables parse and give the same continent counts; the factors were not compared with another source. When a table does not parse, `fm` leaves out every reputation level and adds a load warning.
 
+## 27.0.0 national-team containers — verified 27.0.0 (bytes + in game)
+
+The reputation factor is the i16 at record offset 168, one byte earlier than in 26.x (`savefile` gates on database version 3754, the first version seen; the game's gate may be lower: any version from 3734 up). Read at 169, every factor had a zero low byte (Lithuania `0xb300`). The 4 bytes before offset 168 match the 26.3.2 KŽ save (2037-07-10) in all 251 men's containers, and the 5 after the factor in 238. The u8 at 168 was 0 in all 251 containers of that save, so the dropped byte is probably that u8 (inference: no 27.0.0 writer code read). `savefile` rejects the table when a factor is outside 0..255, so a moved field gives the "reputation levels unavailable" load warning, not wrong levels.
+
+Evidence: Lithuania 74 and Serbia 131 in `data/test_save_27.fm`, `test_save_27b.fm` and the 2026-01-23 save, whose factors range 0..189 with 22 nations at 0. Against the 26.3.2 save the factors correlate at 0.98: France 171 → 173, United States 140 → 140, Serbia 129 → 131, Slovenia 131 → 125, Lithuania 121 → 74. In game (2026-01-23), Davis Akusobi (KŽ B, Lithuania, current 2500, world 500) and Haris Kadrić (on loan at FK Novi Pazar, Serbia, 5000, 2000) are both National; the 26.3.2 rule gives that with these factors (Lithuania's national cut is the 2150 floor).
+
 ## Open questions
 
 - The national-team container body beyond the factor (the women's container → nation rule is inferred); the NATION record before its tail.

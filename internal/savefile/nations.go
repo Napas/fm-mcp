@@ -32,10 +32,10 @@ const (
 	maxNationTailHead  = 20
 	maxNationTailItems = 1000
 
-	// containerFactorOffset is the i16 reputation factor (+0x572) in a
-	// NATIONAL_TEAM_CONTAINER record (writer 0x35f0368).
-	containerFactorOffset = 169
-	maxContainerRecord    = 1 << 20
+	maxContainerRecord = 1 << 20
+	// maxNationFactor: factors seen 0..187 in 26.3.2, 0..189 in 27.0.0. A read
+	// at the wrong offset falls outside.
+	maxNationFactor = 255
 
 	// maxNationCandidates caps the places each reader tries, and the spans
 	// below bound how far one try scans, so crafted input cannot make the
@@ -67,10 +67,24 @@ type Nation struct {
 	MensFactor int16 // men's container +0x572, 0 when the container is not read
 }
 
+// containerFactorGate is the first database version seen without the u8
+// before the container's factor; the game's own gate may be lower.
+const containerFactorGate = dbVersion27_0
+
+// containerFactorOffset is the record offset of the i16 reputation factor
+// (+0x572) in a NATIONAL_TEAM_CONTAINER record (writer 0x35f0368, 26.3.2):
+// 168 from containerFactorGate, 169 below.
+func containerFactorOffset(dataVersion uint16) int {
+	if dataVersion >= containerFactorGate {
+		return 168
+	}
+	return 169
+}
+
 // readNationData reads the CONTINENT and NATION tables and the men's
 // national-team containers' factors. The memory pools give the NATION,
 // container and CURRENCY_RECORD counts.
-func readNationData(body []byte, pools map[string]uint32) ([]Continent, []Nation, error) {
+func readNationData(body []byte, pools map[string]uint32, dataVersion uint16) ([]Continent, []Nation, error) {
 	cs, err := readContinents(body, pools[currencyName])
 	if err != nil {
 		return nil, nil, err
@@ -79,7 +93,7 @@ func readNationData(body []byte, pools map[string]uint32) ([]Continent, []Nation
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := readNationFactors(body, pools[containerName], ns); err != nil {
+	if err := readNationFactors(body, pools[containerName], ns, dataVersion); err != nil {
 		return nil, nil, err
 	}
 	return cs, ns, nil
@@ -261,8 +275,10 @@ func nationTailEnd(b []byte, p int) int {
 
 // readNationFactors sets each nation's MensFactor from the NATIONAL_TEAM_CONTAINER
 // table of count records, whose first records are the men's containers in
-// nation order. Each ends with its nation's database record.
-func readNationFactors(body []byte, count uint32, ns []Nation) error {
+// nation order. Each ends with its nation's database record. dataVersion
+// picks the factor offset.
+func readNationFactors(body []byte, count uint32, ns []Nation, dataVersion uint16) error {
+	offset := containerFactorOffset(dataVersion)
 	if len(ns) > 0 && count >= uint32(len(ns)) { //nolint:gosec // record counts fit in uint32
 		head := tableHead(count, tagContainer)
 		tries := 0
@@ -271,7 +287,7 @@ func readNationFactors(body []byte, count uint32, ns []Nation) error {
 				return tooManyCandidates(containerName)
 			}
 			pos := p + len(head) - 1
-			if fs, ok := containerFactors(body[:min(len(body), pos+maxContainerTable)], pos, ns, count); ok {
+			if fs, ok := containerFactors(body[:min(len(body), pos+maxContainerTable)], pos, offset, ns, count); ok {
 				for i := range ns {
 					ns[i].MensFactor = fs[i]
 				}
@@ -282,9 +298,10 @@ func readNationFactors(body []byte, count uint32, ns []Nation) error {
 	return fmt.Errorf("%w: %s table with %d records", ErrNotFound, containerName, count)
 }
 
-// containerFactors reads the factors of the first len(ns) container records
-// starting at pos.
-func containerFactors(body []byte, pos int, ns []Nation, count uint32) ([]int16, bool) {
+// containerFactors reads the factor at offset in each of the first len(ns)
+// container records from pos. A factor outside 0..maxNationFactor fails the
+// read.
+func containerFactors(body []byte, pos, offset int, ns []Nation, count uint32) ([]int16, bool) {
 	out := make([]int16, 0, len(ns))
 	for _, n := range ns {
 		if pos >= len(body) || body[pos] != tagContainer {
@@ -294,10 +311,14 @@ func containerFactors(body []byte, pos int, ns []Nation, count uint32) ([]int16,
 		key = binary.LittleEndian.AppendUint32(key, n.UID)
 		key = binary.LittleEndian.AppendUint32(key, n.UID)
 		k := bytes.Index(body[pos:min(len(body), pos+maxContainerRecord)], key)
-		if k < containerFactorOffset+2 {
+		if k < offset+2 {
 			return nil, false
 		}
-		out = append(out, int16(binary.LittleEndian.Uint16(body[pos+containerFactorOffset:]))) //nolint:gosec // signed field
+		f := int16(binary.LittleEndian.Uint16(body[pos+offset:])) //nolint:gosec // signed field
+		if f < 0 || f > maxNationFactor {
+			return nil, false
+		}
+		out = append(out, f)
 		pos += k + databaseRecordSize
 	}
 	// A further container starts with its tag; the last one is followed by

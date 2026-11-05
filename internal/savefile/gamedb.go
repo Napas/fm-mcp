@@ -144,7 +144,7 @@ func ReadGameDB(a *Archive) (*GameDB, error) {
 	}
 	db := &GameDB{Header: h, NationCount: pools["NATION"], InjuryCount: pools["INJURY"]}
 	db.Currencies, db.CurrencyErr = readCurrencies(f.Body, pools)
-	db.Continents, db.Nations, db.NationsErr = readNationData(f.Body, pools)
+	db.Continents, db.Nations, db.NationsErr = readNationData(f.Body, pools, h.DatabaseVersion)
 	db.CompetitionKeys, db.CompetitionKeysErr = readCompetitionKeys(f.Body)
 	db.StageUIDs, db.StagesErr = readStageNames(f.Body, pools[stageNamePool])
 	db.LeagueStageCount = pools[leagueStagePool]
