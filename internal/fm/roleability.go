@@ -13,7 +13,6 @@ import (
 // Role ability follows game_plugin 26.3.2: the role rating 0x48c0a50, the
 // best role rating 0x48ba160 and the ability on the current-ability scale
 // 0x2fbcb20. 27.0.0 has the same tables and two rule changes (roleRules27).
-// Only in-possession roles are covered.
 
 // place is a position in a tactic: its index in savefile.PositionNames and
 // its position mask, with a side bit for one of a pair.
@@ -57,7 +56,14 @@ const (
 	positionIndexDC            = 3
 	positionIndexDR            = 4
 	positionIndexDM            = 5
+	positionIndexML            = 6
+	positionIndexMC            = 7
+	positionIndexMR            = 8
+	positionIndexAML           = 9
 	positionIndexAMC           = 10
+	positionIndexAMR           = 11
+	positionIndexWBL           = 13
+	positionIndexWBR           = 14
 )
 
 // positionRoles are the in-possession roles the game offers per position, in
@@ -76,10 +82,10 @@ var positionRoles = [len(savefile.PositionNames)]uint64{
 const bestRolePosition = 10
 
 // offeredRoles yields each position rated minRating or more with each role
-// offered there, in position then role bit order.
-func (in *roleInputs) offeredRoles(minRating uint8) iter.Seq2[place, uint64] {
+// the table offers there, in position then role bit order.
+func (in *roleInputs) offeredRoles(table [len(savefile.PositionNames)]uint64, minRating uint8) iter.Seq2[place, uint64] {
 	return func(yield func(place, uint64) bool) {
-		for i, roles := range positionRoles {
+		for i, roles := range table {
 			if in.positions[i] < minRating {
 				continue
 			}
@@ -96,8 +102,9 @@ func (in *roleInputs) offeredRoles(minRating uint8) iter.Seq2[place, uint64] {
 type roleInputs struct {
 	attributes     [len(savefile.AttributeNames)]uint8 // 1..100 as stored
 	positions      [len(savefile.PositionNames)]uint8  // 1..20
+	best           uint8                               // bestRating
+	oopBest        uint8                               // oopBestRating
 	currentAbility int
-	best           int // bestRating
 }
 
 // roleRules are the rules that differ between game builds.
@@ -134,19 +141,25 @@ func (rules roleRules) scale(r, b, ca int) int {
 
 func newRoleInputs(p savefile.Player) roleInputs {
 	in := roleInputs{attributes: p.Attributes, positions: p.Positions, currentAbility: int(p.CurrentAbility)}
-	in.best = in.bestRating()
+	in.best, in.oopBest = uint8(in.bestRating()), uint8(in.oopBestRating()) //nolint:gosec // ratings are 0..200
 	return in
 }
 
-// rating is the role rating at a position, 1..200; 0 for a role without
-// attributes. Attributes give 2 × (16 × key mean + 4 × preferable mean +
-// 3 × mean of (100 − negative)) / the weights of the lists with a non-zero
-// sum; a position rating under 20 then takes off a share (positionPenalty).
+// rating is the in-possession role rating at a position, 1..200 (weighted);
+// 0 for a role without attributes.
 func (in *roleInputs) rating(role uint64, at place) int {
 	a, ok := roleAttributesByRole[role]
 	if !ok {
 		return 0
 	}
+	return in.weighted(a, in.positionRating(role, at))
+}
+
+// weighted is the rating from a role's attributes at position rating p:
+// 2 × (16 × key mean + 4 × preferable mean + 3 × mean of (100 − negative)) /
+// the weights of the lists with a non-zero sum, less the position penalty,
+// at least 1; 0 when no list has a non-zero sum.
+func (in *roleInputs) weighted(a roleAttributes, p int) int {
 	var key, preferable, negative float64
 	weight := 0
 	if s := in.sum(a.key, false); s > 0 {
@@ -168,7 +181,7 @@ func (in *roleInputs) rating(role uint64, at place) int {
 	v = float32(float64(v) + negative*3)
 	v = float32(float64(v) / float64(weight))
 	r := int(float64(v) * 2)
-	r -= r * positionPenalty(in.positionRating(role, at)) / 100
+	r -= r * positionPenalty(p) / 100
 	return max(r, 1)
 }
 
@@ -192,25 +205,13 @@ func (in *roleInputs) sum(idx []int, negative bool) int {
 func (in *roleInputs) positionRating(role uint64, at place) int {
 	p := int(in.positions[at.index])
 	pos := func(i int) int { return int(in.positions[i]) }
-	blend := func(other int) int {
-		if other > p {
-			return (p + other) / 2
-		}
-		return p
-	}
 	switch {
 	case role&wideOverlappingCentreBacks != 0 && p >= 12:
-		switch {
-		case at.mask&leftPositions != 0:
-			return blend(pos(positionIndexDL))
-		case at.mask&rightPositions != 0:
-			return blend(pos(positionIndexDR))
-		}
-		return blend(max(pos(positionIndexDL), pos(positionIndexDR)))
+		return blend(p, in.fullBackRating(at))
 	case role&insideFullBack != 0 && p >= 12:
-		return blend(pos(positionIndexDC))
+		return blend(p, pos(positionIndexDC))
 	case role&insideWideForwards != 0 && p >= 12:
-		return blend(pos(positionIndexAMC))
+		return blend(p, pos(positionIndexAMC))
 	case role&falseNine != 0 && p >= 12:
 		amc := pos(positionIndexAMC)
 		if amc < naturalRating {
@@ -221,9 +222,38 @@ func (in *roleInputs) positionRating(role uint64, at place) int {
 		}
 		return (p + amc) / 2
 	case role&advancedCentreBack != 0 && p >= 12:
-		return blend(pos(positionIndexDM))
+		return blend(p, pos(positionIndexDM))
 	}
 	return p
+}
+
+// blend is position rating p averaged with other when that is higher.
+func blend(p, other int) int {
+	if other > p {
+		return (p + other) / 2
+	}
+	return p
+}
+
+// sideRating is the rating at left or right, by the place's side; false
+// without a side.
+func (in *roleInputs) sideRating(at place, left, right int) (int, bool) {
+	switch {
+	case at.mask&leftPositions != 0:
+		return int(in.positions[left]), true
+	case at.mask&rightPositions != 0:
+		return int(in.positions[right]), true
+	}
+	return 0, false
+}
+
+// fullBackRating is the DL or DR rating by the place's side; the higher of
+// the two without a side.
+func (in *roleInputs) fullBackRating(at place) int {
+	if v, ok := in.sideRating(at, positionIndexDL, positionIndexDR); ok {
+		return v
+	}
+	return int(max(in.positions[positionIndexDL], in.positions[positionIndexDR]))
 }
 
 // positionPenalty is the share, in percent, a position rating takes off a
@@ -242,7 +272,7 @@ func positionPenalty(p int) int {
 // and the roles offered there; a rating under bestThreshold counts as 0.
 func (in *roleInputs) bestRating() int {
 	best := 0
-	for at, role := range in.offeredRoles(bestRolePosition) {
+	for at, role := range in.offeredRoles(positionRoles, bestRolePosition) {
 		if v := in.rating(role, at); v >= bestThreshold(role) {
 			best = max(best, v)
 		}
@@ -258,25 +288,32 @@ func (in *roleInputs) ability(role uint64, at place, rules roleRules) (int, bool
 	if _, ok := roleAttributesByRole[role]; !ok {
 		return 0, false
 	}
-	r, b := in.rating(role, at), in.best
+	r, b := in.rating(role, at), int(in.best)
 	switch {
 	case r == 0:
 		return in.currentAbility, true
 	case b == 0:
 		return r, true
 	}
-	if b > r && rules.pullsUp(in.positions[at.index]) {
-		d := max(float64(float32(1-float64(r)/float64(b))), 0)
-		r += (b - r) / (int(float64(float32(d*800))/100) + 2)
-	}
-	v := in.currentAbility
-	if r != b {
-		v = rules.scale(r, b, in.currentAbility)
-	}
+	v := in.shareOfBest(r, b, rules.pullsUp(in.positions[at.index]), rules)
 	if v < abilityThreshold(role) {
 		v /= 2
 	}
 	return v, true
+}
+
+// shareOfBest puts rating r on the current-ability scale against the best
+// rating b (both nonzero): with pullUp, a rating below the best first moves
+// part of the way to it.
+func (in *roleInputs) shareOfBest(r, b int, pullUp bool, rules roleRules) int {
+	if b > r && pullUp {
+		d := max(float64(float32(1-float64(r)/float64(b))), 0)
+		r += (b - r) / (int(float64(float32(d*800))/100) + 2)
+	}
+	if r == b {
+		return in.currentAbility
+	}
+	return rules.scale(r, b, in.currentAbility)
 }
 
 // abilityThreshold is the role ability under which the game halves it.
@@ -305,9 +342,15 @@ func roleThreshold(role, roles80 uint64) int {
 // inPossessionRoleNamed returns the in-possession role bit with this name,
 // ignoring case.
 func inPossessionRoleNamed(name string) (uint64, bool) {
+	return roleNamed(name, roleAttributesByRole, savefile.InPossessionRoleName)
+}
+
+// roleNamed returns the bit of the role in roles that nameOf gives this name,
+// ignoring case.
+func roleNamed(name string, roles map[uint64]roleAttributes, nameOf func(uint64) (string, bool)) (uint64, bool) {
 	name = strings.TrimSpace(name)
-	for role := range roleAttributesByRole {
-		if n, _ := savefile.InPossessionRoleName(role); strings.EqualFold(n, name) {
+	for role := range roles {
+		if n, _ := nameOf(role); strings.EqualFold(n, name) {
 			return role, true
 		}
 	}
@@ -354,7 +397,7 @@ const bestRolesShown = 3
 // order.
 func (in *roleInputs) bestRoles(rules roleRules) []RoleFit {
 	var fits []RoleFit
-	for at, role := range in.offeredRoles(naturalRating) {
+	for at, role := range in.offeredRoles(positionRoles, naturalRating) {
 		v, _ := in.ability(role, at, rules)
 		name, _ := savefile.InPossessionRoleName(role)
 		fits = append(fits, RoleFit{Role: name, Position: savefile.PositionNames[at.index], RoleAbility: v})

@@ -228,7 +228,13 @@ func InPossessionRoleName(role uint64) (string, bool) {
 // OutOfPossessionRoleName names an out-of-possession role; false for unknown
 // values.
 func (s SlotRole) OutOfPossessionRoleName() (string, bool) {
-	n, ok := outOfPossessionRoles[s.RoleBit()]
+	return OutOfPossessionRoleName(s.RoleBit())
+}
+
+// OutOfPossessionRoleName names an out-of-possession role bit; false for
+// unknown values.
+func OutOfPossessionRoleName(role uint64) (string, bool) {
+	n, ok := outOfPossessionRoles[role]
 	return n, ok
 }
 

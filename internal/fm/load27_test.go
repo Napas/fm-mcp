@@ -86,6 +86,16 @@ func TestLoadTestSave27bTactic(t *testing.T) {
 			t.Errorf("slot %d: role ability %v, want %d", i, a, want)
 		}
 	}
+	// Out of possession (0x491aa68), by hand: Fiolić as Wide Midfielder at MR
+	// 12 rates 105 less 20 % = 84 of his best 104, pulled up to 90; 90/104 × 105.
+	if a := tac.Slots[8].OutOfPossessionRoleAbility; a == nil || *a != 90 {
+		t.Errorf("slot 8: out-of-possession role ability %v, want 90", a)
+	}
+	for i, s := range tac.Slots {
+		if s.OutOfPossessionRoleAbility == nil {
+			t.Errorf("slot %d: no out-of-possession role ability", i)
+		}
+	}
 	l, err := v.LastLineup(kzTeam27)
 	if err != nil {
 		t.Fatal(err)

@@ -233,3 +233,165 @@ var roleAttributesByRole = map[uint64]roleAttributes{
 		"Dribbling Tackling Anticipation Positioning Flair WorkRate Stamina Agility",
 		""),
 }
+
+// oopRoleAttributesByRole holds every out-of-possession role's attributes by
+// role bit, from the classifier the selector 0x4920d34 returns for it
+// (address after the name; game_plugin 27.0.0). The lists match 26.3.2's.
+var oopRoleAttributesByRole = map[uint64]roleAttributes{
+	0x1: roleAttrs( // Goalkeeper, 0x4921068
+		"Handling AerialReach CommandOfArea Communication Positioning Reflexes Agility Concentration",
+		"Anticipation Decisions OneOnOnes RushingOut",
+		""),
+	0x2: roleAttrs( // Sweeper Keeper, 0x49210c0
+		"Handling AerialReach CommandOfArea Communication Anticipation Decisions OneOnOnes Reflexes RushingOut Agility",
+		"Positioning Eccentricity Acceleration Concentration",
+		""),
+	0x4: roleAttrs( // Line-Holding Goalkeeper, 0x4921120
+		"Handling AerialReach CommandOfArea Communication Positioning Reflexes Agility Concentration",
+		"Anticipation Decisions OneOnOnes",
+		"RushingOut"),
+	0x8: roleAttrs( // Centre-Back, 0x49211a0
+		"Heading Marking Tackling Anticipation Positioning Strength JumpingReach",
+		"Decisions Pace Bravery Aggression Composure Concentration",
+		""),
+	0x10: roleAttrs( // Stopping Centre-Back, 0x4921260
+		"Heading Marking Tackling Anticipation Positioning Strength JumpingReach Bravery Aggression",
+		"Decisions Pace Concentration",
+		""),
+	0x20: roleAttrs( // Covering Centre-Back, 0x4921200
+		"Heading Marking Tackling Anticipation Decisions Positioning Strength Pace JumpingReach Concentration",
+		"Acceleration Bravery",
+		""),
+	0x40: roleAttrs( // Wide Centre-Back, 0x49212c0
+		"Heading Marking Tackling Anticipation Positioning Strength JumpingReach",
+		"Decisions Acceleration Pace Bravery Aggression Agility Concentration",
+		""),
+	0x80: roleAttrs( // Stopping Wide Centre-Back, 0x4921380
+		"Heading Marking Tackling Anticipation Positioning Strength JumpingReach Bravery Aggression",
+		"Decisions Acceleration Pace Agility Concentration",
+		""),
+	0x100: roleAttrs( // Covering Wide Centre-Back, 0x4921320
+		"Heading Marking Tackling Anticipation Decisions Positioning Strength Pace JumpingReach Concentration",
+		"Acceleration Bravery Agility",
+		""),
+	0x200: roleAttrs( // Full-Back, 0x49213e0
+		"Marking Tackling Anticipation Positioning Teamwork Acceleration",
+		"Decisions WorkRate Stamina Pace Aggression Agility Concentration",
+		""),
+	0x400: roleAttrs( // Pressing Full-Back, 0x492149c
+		"Marking Tackling Anticipation Positioning Teamwork WorkRate Acceleration Aggression",
+		"Decisions Stamina Pace Bravery Agility Concentration",
+		""),
+	0x800: roleAttrs( // Holding Full-Back, 0x4921440
+		"Marking Tackling Anticipation Decisions Positioning Acceleration Concentration",
+		"Teamwork Pace Agility",
+		""),
+	0x1000: roleAttrs( // Wing-Back, 0x49214fc
+		"Marking Tackling Anticipation Positioning Teamwork Acceleration Stamina",
+		"Decisions WorkRate Pace Aggression Agility Concentration",
+		""),
+	0x2000: roleAttrs( // Pressing Wing-Back, 0x49215bc
+		"Marking Tackling Anticipation Positioning Teamwork WorkRate Acceleration Stamina Aggression",
+		"Decisions Pace Bravery Agility Concentration",
+		""),
+	0x4000: roleAttrs( // Holding Wing-Back, 0x4921560
+		"Marking Tackling Anticipation Decisions Positioning Acceleration Concentration",
+		"Teamwork Stamina Pace Agility",
+		""),
+	0x8000: roleAttrs( // Defensive Midfielder, 0x492161c
+		"Tackling Anticipation Decisions Positioning Teamwork WorkRate",
+		"Marking Strength Stamina Aggression Concentration",
+		""),
+	0x10000: roleAttrs( // Dropping Defensive Midfielder, 0x4921678
+		"Marking Tackling Anticipation Decisions Positioning Teamwork WorkRate Strength JumpingReach Concentration",
+		"Stamina Aggression",
+		""),
+	0x20000: roleAttrs( // Pressing Defensive Midfielder, 0x49216d4
+		"Tackling Anticipation Decisions Positioning Teamwork WorkRate Stamina Aggression",
+		"Marking Strength Pace Concentration",
+		""),
+	0x40000: roleAttrs( // Screening Defensive Midfielder, 0x4921734
+		"Marking Tackling Anticipation Decisions Positioning Concentration",
+		"Teamwork WorkRate Strength Stamina",
+		""),
+	0x80000: roleAttrs( // Wide Covering Defensive Midfielder, 0x492178c
+		"Marking Tackling Anticipation Decisions Positioning Teamwork WorkRate Stamina Agility",
+		"Strength Pace Aggression Concentration",
+		""),
+	0x100000: roleAttrs( // Central Midfielder, 0x49217e8
+		"Tackling Decisions Teamwork WorkRate",
+		"Marking Anticipation Positioning Stamina Aggression Concentration",
+		""),
+	0x8000000: roleAttrs( // Pressing Central Midfielder, 0x4921844
+		"Tackling Anticipation Decisions Teamwork WorkRate Stamina Aggression",
+		"Marking Positioning Strength Pace Concentration",
+		""),
+	0x10000000: roleAttrs( // Screening Central Midfielder, 0x49218a4
+		"Marking Tackling Decisions Positioning Concentration",
+		"Anticipation Teamwork WorkRate Stamina",
+		""),
+	0x20000000: roleAttrs( // Wide Covering Central Midfielder, 0x4921900
+		"Marking Tackling Decisions Teamwork WorkRate Stamina Agility",
+		"Anticipation Positioning Pace Aggression Concentration",
+		""),
+	0x40000000: roleAttrs( // Attacking Midfielder, 0x4921960
+		"Anticipation Decisions WorkRate",
+		"Marking OffTheBall Teamwork Stamina Aggression",
+		""),
+	0x80000000: roleAttrs( // Tracking Attacking Midfielder, 0x4921af0
+		"Anticipation Decisions Teamwork WorkRate Stamina Aggression",
+		"Marking OffTheBall Positioning",
+		""),
+	0x100000000: roleAttrs( // Central Outlet Midfielder, 0x49219b8
+		"OffTheBall Anticipation Decisions Teamwork Balance Concentration",
+		"Marking FirstTouch Strength Composure",
+		"WorkRate Stamina"),
+	0x200000000: roleAttrs( // Splitting Outlet Attacking Midfielder, 0x4921a54
+		"OffTheBall Anticipation Decisions Teamwork Pace Concentration",
+		"Marking FirstTouch Acceleration Composure",
+		"WorkRate Stamina"),
+	0x800000000: roleAttrs( // Wide Midfielder, 0x4921b48
+		"Decisions Teamwork WorkRate Acceleration",
+		"Marking OffTheBall Anticipation Stamina Pace Aggression Agility",
+		""),
+	0x1000000000: roleAttrs( // Tracking Wide Midfielder, 0x4921c5c
+		"Anticipation Decisions Teamwork WorkRate Acceleration Stamina Aggression",
+		"Marking OffTheBall Tackling Positioning Pace Agility",
+		""),
+	0x2000000000: roleAttrs( // Wide Outlet Wide Midfielder, 0x4921ba4
+		"OffTheBall Anticipation Decisions Teamwork Pace Concentration",
+		"Dribbling Marking FirstTouch Acceleration Agility Composure",
+		"WorkRate Stamina"),
+	0x4000000000: roleAttrs( // Winger, 0x4921cb8
+		"Anticipation Decisions Teamwork WorkRate Acceleration",
+		"Marking OffTheBall Stamina Pace Aggression Agility",
+		""),
+	0x8000000000: roleAttrs( // Tracking Winger, 0x4921e74
+		"Anticipation Decisions Teamwork WorkRate Acceleration Stamina Aggression",
+		"Marking OffTheBall Tackling Positioning Pace Agility",
+		""),
+	0x10000000000: roleAttrs( // Inside Outlet Winger, 0x4921d10
+		"OffTheBall Anticipation Decisions Teamwork Balance Concentration",
+		"Dribbling Marking FirstTouch Acceleration Strength Composure",
+		"WorkRate Stamina"),
+	0x20000000000: roleAttrs( // Wide Outlet Winger, 0x4921dbc
+		"OffTheBall Anticipation Decisions Teamwork Pace Concentration",
+		"Dribbling Marking FirstTouch Acceleration Agility Composure",
+		"WorkRate Stamina"),
+	0x40000000000: roleAttrs( // Centre-Forward, 0x4921ed0
+		"Anticipation Decisions WorkRate",
+		"Marking OffTheBall Teamwork Stamina Aggression",
+		""),
+	0x80000000000: roleAttrs( // Tracking Centre-Forward, 0x4922060
+		"Anticipation Decisions Teamwork WorkRate Stamina Aggression",
+		"Marking OffTheBall Positioning",
+		""),
+	0x100000000000: roleAttrs( // Central Outlet Centre-Forward, 0x4921f28
+		"OffTheBall Anticipation Decisions Teamwork Balance Concentration",
+		"Marking FirstTouch Strength Composure",
+		"WorkRate Stamina"),
+	0x200000000000: roleAttrs( // Splitting Outlet Centre-Forward, 0x4921fc4
+		"OffTheBall Anticipation Decisions Teamwork Pace Concentration",
+		"Marking FirstTouch Acceleration Composure",
+		"WorkRate Stamina"),
+}
