@@ -334,7 +334,7 @@ func TestRoleAbilityIsExplained(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, wants := range map[string][]string{
-		"get_tactic":      {"role_ability"},
+		"get_tactic":      {"role_ability", "squad_depth or squad_roles"},
 		"get_player":      {"best_roles", "best_out_of_possession_roles"},
 		"compare_players": {"best_roles", "best_out_of_possession_roles"},
 		"search_players":  {"role", "role_ability", "interest", "out_of_possession_role", "out_of_possession_role_ability"},
@@ -1605,7 +1605,7 @@ func TestInstructionsCoverSeasonStatsAndNationalTeams(t *testing.T) {
 		"headers_lost is not recorded for goalkeepers",
 		"non_penalty_expected_goals",
 		"expected_goals_prevented",
-		"get_squad, squad_depth and search_players by team_index treat a called-up player as a player of both teams",
+		"get_squad, squad_depth, squad_roles and search_players by team_index treat a called-up player as a player of both teams",
 		"club filter matches club teams only",
 	} {
 		if !strings.Contains(text, want) {
@@ -2609,5 +2609,54 @@ func TestBestXIIsExplained(t *testing.T) {
 	}
 	if text := h.session.InitializeResult().Instructions; !strings.Contains(text, "best_xi") {
 		t.Error("instructions do not mention best_xi")
+	}
+}
+
+func TestSquadRoles(t *testing.T) {
+	h := newHarness(t)
+
+	var got fm.SquadRoles
+	if res := h.call("squad_roles", map[string]any{"position": "DC", "phase": "in_possession"}, &got); res.IsError {
+		t.Fatalf("squad_roles: %s", allText(res))
+	}
+	if got.TeamIndex != 547 || len(got.Roles) == 0 {
+		t.Fatalf("squad_roles = %+v", got)
+	}
+	i := slices.IndexFunc(got.Roles, func(r fm.RoleDepth) bool { return r.Role == "Overlapping Centre-Back" })
+	// Romero's best role (search_players gives the same).
+	if i < 0 || got.Roles[i].Position != "DC" || got.Roles[i].Phase != "in_possession" || len(got.Roles[i].Players) == 0 ||
+		got.Roles[i].Players[0].Name != "Cristian Romero" || got.Roles[i].Players[0].RoleAbility != 156 || got.Roles[i].Players[0].PositionRating != 20 {
+		t.Errorf("Overlapping Centre-Back row = %+v", got.Roles)
+	}
+	var one fm.SquadRoles
+	if res := h.call("squad_roles", map[string]any{"position": "DC", "limit": 1}, &one); res.IsError || slices.ContainsFunc(one.Roles, func(r fm.RoleDepth) bool { return len(r.Players) != 1 }) {
+		t.Errorf("limit 1 = %+v (%s)", one.Roles, allText(res))
+	}
+	if res := h.call("squad_roles", map[string]any{"phase": "attack"}, nil); !res.IsError || !strings.Contains(allText(res), `phase "attack"`) {
+		t.Errorf("a bad phase = %s, want an error", allText(res))
+	}
+}
+
+func TestSquadRolesIsExplained(t *testing.T) {
+	h := newHarness(t)
+
+	tools, err := h.session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(tools.Tools, func(tool *mcp.Tool) bool { return tool.Name == "squad_roles" })
+	if i < 0 {
+		t.Fatal("no squad_roles tool")
+	}
+	for _, want := range []string{"rated 10", "best first", "role_ability", "position_rating", "injured", "in_possession", "out_of_possession", "better of left and right", "hidden_by_fog", "limit"} {
+		if !strings.Contains(tools.Tools[i].Description, want) {
+			t.Errorf("squad_roles description lacks %q", want)
+		}
+	}
+	text := h.session.InitializeResult().Instructions
+	for _, want := range []string{"squad_roles ranks", "squad_roles' out_of_possession rows", "search_players, squad_roles and best roles have no side", "get_squad, squad_depth, squad_roles and search_players by team_index", "squad_depth or squad_roles", "pass position or phase"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("instructions lack %q", want)
+		}
 	}
 }
