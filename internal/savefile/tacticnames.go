@@ -1,5 +1,10 @@
 package savefile
 
+import (
+	"slices"
+	"strings"
+)
+
 // Values are the game's C# PositionMask, InPossessionRole and
 // OutOfPossessionRole enums (IL2CPP metadata). Roles FM26 renamed ("inferred")
 // are labelled from the English language file. A stored role also carries a
@@ -179,6 +184,32 @@ func (s SlotRole) Side() string {
 		return "right"
 	}
 	return ""
+}
+
+// pairedPositions (DC, DM, MC, AMC, ST) can hold two players, told apart by a
+// side bit (lineupCells).
+const pairedPositions = 0x10 | 0x80 | 0x400 | 0x2000 | 0x4000
+
+// SidedPosition returns a position code's mask, plus the side bit for "left"
+// or "right" at a paired position. Case and spaces are ignored. False for an
+// unknown code or side, or a side on an unpaired position.
+func SidedPosition(code, side string) (uint32, bool) {
+	i := slices.Index(PositionNames[:], strings.ToUpper(strings.TrimSpace(code)))
+	if i < 0 {
+		return 0, false
+	}
+	m := PositionMasks[i]
+	switch side := strings.ToLower(strings.TrimSpace(side)); {
+	case side == "":
+		return m, true
+	case m&pairedPositions == 0:
+		return 0, false
+	case side == "left":
+		return m | positionLeft, true
+	case side == "right":
+		return m | positionRight, true
+	}
+	return 0, false
 }
 
 // RoleBit returns Role without its duty bit.
