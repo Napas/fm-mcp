@@ -232,6 +232,11 @@ type Filter struct {
 	SortBy              string
 	Ascending           bool
 	Limit               int
+
+	// OutOfPossessionRole is an out-of-possession role; needs Position,
+	// ranks by its role ability when neither Role nor SortBy is set.
+	OutOfPossessionRole           string
+	MinOutOfPossessionRoleAbility int // needs OutOfPossessionRole
 }
 
 // checkRefs rejects team and nation references that match nothing, so an

@@ -14,7 +14,7 @@ import (
 
 func mustRole(t *testing.T, name string) uint64 {
 	t.Helper()
-	r, ok := inPossessionRoleNamed(name)
+	r, ok := inPossession.named(name)
 	if !ok {
 		t.Fatalf("no in-possession role %q", name)
 	}
@@ -38,7 +38,7 @@ func roleTestPlayer(attr uint8, role string, key uint8, positions map[string]uin
 	for i := range p.Attributes {
 		p.Attributes[i] = attr
 	}
-	if r, ok := inPossessionRoleNamed(role); ok {
+	if r, ok := inPossession.named(role); ok {
 		for _, i := range roleAttributesByRole[r].key {
 			p.Attributes[i] = key
 		}
@@ -118,10 +118,10 @@ func TestEveryNamedInPossessionRoleHasAttributes(t *testing.T) {
 }
 
 func TestInPossessionRoleNamedIgnoresCase(t *testing.T) {
-	if r, ok := inPossessionRoleNamed("overlapping centre-back"); !ok || r != 0x40000000000000 {
+	if r, ok := inPossession.named("overlapping centre-back"); !ok || r != 0x40000000000000 {
 		t.Errorf("got %#x, %v", r, ok)
 	}
-	if r, ok := inPossessionRoleNamed("Sweeper Keeper"); ok {
+	if r, ok := inPossession.named("Sweeper Keeper"); ok {
 		t.Errorf("an out-of-possession role gave %#x", r)
 	}
 }
@@ -647,11 +647,11 @@ func TestSearchRejectsBadRoles(t *testing.T) {
 		want string
 	}{
 		{Filter{Role: "Overlapping Centre-Back"}, "needs a position"},
-		{Filter{Position: "DC", Role: "Sweeper Keeper"}, `role "Sweeper Keeper"`},
+		{Filter{Position: "DC", Role: "Sweeper Keeper"}, `in-possession role "Sweeper Keeper" is an out-of-possession role; valid roles: `},
 		{Filter{Position: "DC", SortBy: "role_ability"}, "needs a role"},
 		{Filter{Position: "ST", Role: "Goalkeeper"}, `role "Goalkeeper" is not offered at ST; roles at ST: `},
 		{Filter{Position: "DM", Role: "Regista"}, `role "Regista" is not offered at DM; roles at DM: `},
-		{Filter{Position: "SW", Role: "Centre-Back"}, "no role is offered at SW"},
+		{Filter{Position: "SW", Role: "Centre-Back"}, "no in-possession role is offered at SW"},
 	} {
 		_, err := v.Search(tt.f)
 		if !errors.Is(err, ErrInvalidFilter) || !strings.Contains(err.Error(), tt.want) {
