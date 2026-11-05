@@ -182,6 +182,22 @@ func TestLoadTestSave27JoinedClub(t *testing.T) {
 	}
 }
 
+// Levels shown in game (2026-01-23 save; 27b is the same). Akusobi: KŽ B,
+// Lithuania. Kadrić: on loan at FK Novi Pazar, Serbia.
+func TestLoadTestSave27bReputationLevel(t *testing.T) {
+	v := loadTestSaveAt(t, testSave27bPath, LoadOptions{}).View(false)
+
+	for uid, name := range map[uint32]string{2000591747: "Davis Akusobi", 62220551: "Haris Kadrić"} {
+		p, ok := v.Profile(uid)
+		if !ok || p.Name != name {
+			t.Fatalf("uid %d: %q, %v; want %s", uid, p.Name, ok, name)
+		}
+		if p.ReputationLevel != "National" {
+			t.Errorf("%s: reputation level %q, want National", name, p.ReputationLevel)
+		}
+	}
+}
+
 // Values the game showed in the 2026-01-23 save; 27b holds the same ones.
 func TestLoadTestSave27bMatchesGame(t *testing.T) {
 	g := loadTestSaveAt(t, testSave27bPath, LoadOptions{})

@@ -119,7 +119,9 @@ func FuzzReadNationTables(f *testing.F) {
 	f.Fuzz(func(t *testing.T, body []byte, count uint32) {
 		_, _ = readContinents(body, count)
 		ns, _ := readNations(body, count, maxContinents)
-		_ = readNationFactors(body, count, append(ns, Nation{Index: 0, UID: 5}))
+		ns = append(ns, Nation{Index: 0, UID: 5})
+		_ = readNationFactors(body, count, ns, dbVersion26_3)
+		_ = readNationFactors(body, count, ns, dbVersion27_0)
 	})
 }
 
