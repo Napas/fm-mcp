@@ -2,7 +2,7 @@
 
 Part of the format reference. Conventions, dates and the index of all files: [`docs/format.md`](../format.md).
 
-## Currencies (CURRENCY_RECORD) — verified 26.2.0 and 26.3.2 (bytes)
+## Currencies (CURRENCY_RECORD) — verified 26.2.0 and 26.3.2 (bytes), 27.0.0 (bytes + in game)
 
 All money in the save is GBP. The CURRENCY_RECORD table holds the rates the game uses to show it in other currencies. It is located like the CLUB and TEAM tables: right after a table end marker, with the count from `memory_pools.dat` (CURRENCY_RECORD = 173 in both saves), a `u8 0` flag and the first record's tag 0. It comes after the CLUB table.
 
@@ -24,6 +24,8 @@ record   = u8     tag 0
 | real KŽ (26.3.2, 2035-12-02) | 28 095 699 | 28 171 812 |
 
 Each table head matches once in its save. The table (76 122 bytes with its end marker) is byte-identical in the 2025 test save and the 2035 real save, so rates do not drift during a career. Examples: uid 86 GBP 1.0, uid 28 EUR 1.1571305 (f32 `0x3f941cda`), uid 87 USD 1.3508246, uid 2 Albanian Lek (index 0), uid 87 000 022 Guatemalan Quetzal (index 172).
+
+27.0.0 (both FM27 test saves and the KŽ save of 2026-01-23): uid 28 EUR is 1.1641011 and uid 87 USD 1.347619, unlike FM26. Converted amounts match the Finances screen and contract wage ranges (see "27.0.0 club layout" in clubs.md and "27.0.0 saves" in container.md).
 
 Display (code `0x43de5b0`, from the investigation): shown amount = round(GBP amount × rate). Check: Ashby earns £15 315 a week; × 52 × 1.1571305 = €921 516, and the game shows "€922K p/a". Metz's bank balance £29 636 499 × the f32 rate (1.15713048…) rounds to €34 293 296, exactly the game's figure. `fm.Money` applies this rule; a wage is scaled to its period (52 weeks a year, 52/12 a month), then rounded once. It does the conversion for every amount the server returns. The parser rejects rates that are not finite and > 0.
 

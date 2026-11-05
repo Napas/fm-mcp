@@ -246,7 +246,7 @@ func TestRealSave(t *testing.T) {
 	if db.CurrencyErr != nil {
 		t.Errorf("currencies: %v", db.CurrencyErr)
 	}
-	checkKnownCurrencies(t, db.Currencies)
+	checkKnownCurrencies(t, db.Currencies, eur26, usd26)
 	checkNationalSquads(t, db)
 	checkNations(t, db, true)
 	checkRealSaveCompetitionKeys(t, db)
@@ -1041,32 +1041,37 @@ func TestTestSaveCurrencies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	checkCurrencyTable(t, db, eur26, usd26)
+}
 
+func checkCurrencyTable(t *testing.T, db *GameDB, eur, usd float64) {
+	t.Helper()
 	if db.CurrencyErr != nil || len(db.Currencies) != 173 {
 		t.Fatalf("%d currencies, err %v; want 173", len(db.Currencies), db.CurrencyErr)
 	}
-	checkKnownCurrencies(t, db.Currencies)
+	checkKnownCurrencies(t, db.Currencies, eur, usd)
 }
 
 // near reports whether rate is within 1e-6 of want.
 func near(rate float32, want float64) bool { return math.Abs(float64(rate)-want) < 1e-6 }
 
-// checkKnownCurrencies checks GBP, EUR and USD, whose records are the same
-// in every save seen.
-func checkKnownCurrencies(t *testing.T, currencies []Currency) {
+// Euro and dollar rates in every FM26 save seen.
+const eur26, usd26 = 1.15713, 1.350825
+
+func checkKnownCurrencies(t *testing.T, currencies []Currency, eur, usd float64) {
 	t.Helper()
 	byUID := map[uint32]Currency{}
 	for _, c := range currencies {
 		byUID[c.UID] = c
 	}
-	if eur := byUID[28]; eur.Symbol != "€" || eur.Name != "European Euro" || eur.ShortName != "Euro" || !near(eur.PerGBP, 1.15713) {
-		t.Errorf("uid 28 = %+v, want the euro at 1.15713", eur)
+	if euro := byUID[28]; euro.Symbol != "€" || euro.Name != "European Euro" || euro.ShortName != "Euro" || !near(euro.PerGBP, eur) {
+		t.Errorf("uid 28 = %+v, want the euro at %v", euro, eur)
 	}
 	if gbp := byUID[86]; gbp.PerGBP != 1 {
 		t.Errorf("uid 86 = %+v, want GBP at 1", gbp)
 	}
-	if usd := byUID[87]; usd.Symbol != "$" || !near(usd.PerGBP, 1.350825) {
-		t.Errorf("uid 87 = %+v, want USD at 1.350825", usd)
+	if dollar := byUID[87]; dollar.Symbol != "$" || !near(dollar.PerGBP, usd) {
+		t.Errorf("uid 87 = %+v, want USD at %v", dollar, usd)
 	}
 }
 

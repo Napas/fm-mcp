@@ -18,7 +18,7 @@ Unset dates are saved in 1900. Seen: joined dates of 1900-01-01 on loanees and f
 
 | File | Covers | Sections |
 |------|--------|----------|
-| [`container.md`](format/container.md) | archive header, directory tree, inner file header, 26.3.2 differences, parser robustness caps | Container header (26 bytes); Directory; Root files (test save); Inner file header; Robustness; 26.3.2 saves |
+| [`container.md`](format/container.md) | archive header, directory tree, inner file header, 26.3.2 differences, parser robustness caps, 27.0.0 saves | Container header (26 bytes); Directory; Root files (test save); Inner file header; Robustness; 26.3.2 saves; 27.0.0 saves |
 | [`small-files.md`](format/small-files.md) | game_info, memory_pools, save_game_summary, humans | game_info.dat; memory_pools.dat; save_game_summary.dat; humans.dat |
 | [`fog-of-war.md`](format/fog-of-war.md) | scouting knowledge, baseline, decay | fog_of_war.dat |
 | [`injuries.md`](format/injuries.md) | injury_manager.dat queues, INJURY table (player injury items are in players.md) | injury_manager.dat; Injury types (INJURY) |
