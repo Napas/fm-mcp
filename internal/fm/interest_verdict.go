@@ -219,7 +219,11 @@ func (g *Game) gateFactor(c interestCase) *InterestFactor {
 	switch c.gate {
 	case FactorTransferArranged:
 		a := c.in.arranged
-		return &InterestFactor{c.gate, fmt.Sprintf("Has agreed a move to %s on %s", g.world.teamName(int64(a.team)), a.date.Format(interestDateLayout))}
+		text := "Has agreed a move to " + g.world.teamName(int64(a.team))
+		if !a.date.IsZero() {
+			text += " on " + a.date.Format(interestDateLayout)
+		}
+		return &InterestFactor{c.gate, text}
 	case FactorRetiring:
 		return &InterestFactor{c.gate, "Is about to retire"}
 	case FactorOnlyOneClub:

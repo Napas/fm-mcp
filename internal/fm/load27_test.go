@@ -82,3 +82,32 @@ func TestLoadTestSave27Table(t *testing.T) {
 		}
 	}
 }
+
+// 33 arranged moves count, 17 of them dated before the game date.
+func TestLoadTestSave27ArrangedMoves(t *testing.T) {
+	for _, path := range []string{testSave27Path, testSave27bPath} {
+		g := loadTestSaveAt(t, path, LoadOptions{})
+
+		arranged := 0
+		for _, a := range g.aux {
+			if a.interest.arranged != nil {
+				arranged++
+			}
+		}
+		if arranged != 33 {
+			t.Errorf("%s: %d players with an arranged move, want 33", path, arranged)
+		}
+		for _, uid := range []uint32{
+			2000365091, // Cavan Sullivan, 2028-01-01
+			14217414,   // Lucas Beltrán, 2025-01-01 to his current club
+		} {
+			p := g.byUID[uid]
+			if p == nil {
+				t.Fatalf("%s: no player with uid %d", path, uid)
+			}
+			if g.aux[p.auxIdx].interest.arranged == nil {
+				t.Errorf("%s: uid %d has no arranged move", path, uid)
+			}
+		}
+	}
+}

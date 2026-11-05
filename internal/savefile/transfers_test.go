@@ -48,6 +48,12 @@ func transferHead(class uint8, person uint32, team int32, id uint32, status uint
 	return append(b, status)
 }
 
+func withTransferVersion(rec []byte, v uint16) []byte {
+	out := slices.Clone(rec)
+	binary.LittleEndian.PutUint16(out[1:], v)
+	return out
+}
+
 func transferBody(records ...[]byte) []byte {
 	b := binary.LittleEndian.AppendUint32([]byte{1}, uint32(len(records))) //nolint:gosec // test sizes
 	for _, r := range records {
@@ -74,6 +80,25 @@ func TestParseTransfers(t *testing.T) {
 			name: "two records",
 			body: transferBody(transferRecord(marcoTransfer, feb4, jul1), transferRecord(transferHead(3, 184193, 649, 10810, 15), feb4, jul1)),
 			want: []Transfer{marco, guingamp},
+		},
+		{
+			name: "version 0x14 (27.0.0)",
+			body: transferBody(transferRecord(withTransferVersion(marcoTransfer, 0x14), feb4, jul1)),
+			want: []Transfer{marco},
+		},
+		{
+			name: "a header count of 0",
+			body: func() []byte {
+				b := transferBody(transferRecord(marcoTransfer, feb4, jul1))
+				binary.LittleEndian.PutUint32(b[1:], 0)
+				return b
+			}(),
+			want: []Transfer{marco},
+		},
+		{
+			name: "record 0 sets the version",
+			body: transferBody(transferRecord(withTransferVersion(marcoTransfer, 0x14), feb4, jul1), transferRecord(transferHead(3, 184193, 649, 10810, 15), feb4, jul1)),
+			want: []Transfer{marco},
 		},
 		{
 			name: "unset first date",
@@ -136,15 +161,18 @@ func TestParseTransfersRejects(t *testing.T) {
 	tests := []struct {
 		name string
 		body []byte
+		want error
 	}{
-		{"shorter than its header", []byte{1, 0, 0, 0}},
-		{"empty", nil},
-		{"more candidates than the body can hold", transferBody(bytes.Repeat(period, 200))},
+		{"shorter than its header", []byte{1, 0, 0, 0}, ErrCorrupt},
+		{"empty", nil, ErrCorrupt},
+		{"more candidates than the body can hold", transferBody(bytes.Repeat(period, 200)), ErrCorrupt},
+		{"a header and one byte", append(binary.LittleEndian.AppendUint32([]byte{1}, 1), 2), ErrCorrupt},
+		{"unknown record version", transferBody(transferRecord(withTransferVersion(marcoTransfer, 0x15), feb4, jul1)), ErrUnsupported},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got, err := parseTransfers(tt.body); !errors.Is(err, ErrCorrupt) {
-				t.Errorf("got %d records, %v; want ErrCorrupt", len(got), err)
+			if got, err := parseTransfers(tt.body); !errors.Is(err, tt.want) {
+				t.Errorf("got %d records, %v; want %v", len(got), err, tt.want)
 			}
 		})
 	}
