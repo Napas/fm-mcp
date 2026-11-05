@@ -145,7 +145,9 @@ type Tactic struct {
 	Name string
 	// Mentality is the game's Mentality enum (4 Balanced, 6 Attacking; 6 verified in game).
 	Mentality uint8
-	Slots     [tacticSlots]TacticSlot
+	// Slots[i] pairs slot i's in-possession position with the
+	// out-of-possession one stored at its slot number.
+	Slots [tacticSlots]TacticSlot
 }
 
 // TacticSlot is one of a tactic's 11 positions, in and out of possession.
@@ -171,8 +173,10 @@ type LastLineup struct {
 	ShirtNumbers [selectionSize]uint8
 }
 
-// Formation is a last-match formation. Slot i is the slot of Players[i].
-// Roles carry no duty bit.
+// Formation is a last-match formation. Slots[i] is Players[i]'s in-possession
+// slot. Out-of-possession positions are in stored order, so after 27.0.0
+// tactic edits Slots[i] may hold another player's; the game's pairing is not
+// checked. Roles have no duty bit.
 type Formation struct {
 	// Mentality is the game's Mentality enum.
 	Mentality uint8
@@ -530,15 +534,25 @@ func readTactic(r *reader) (Tactic, error) {
 		r.str() // empty in every sample
 	}
 	t.Mentality = readTacticHeader(r)
-	var numbers uint16 // slot numbers seen; 0..10 in any order
+	// Slot i plays out of possession at the position stored in slot n, its
+	// number (checked in game in 27.0.0, assumed for 26.x; see "27.0.0 tactics").
+	var oop [tacticSlots]SlotRole
+	var numbers [tacticSlots]uint8
+	var seen uint16
 	for i := range t.Slots {
 		t.Slots[i].InPossession = readSlotRole(r)
-		t.Slots[i].OutOfPossession = readSlotRole(r)
+		oop[i] = readSlotRole(r)
 		n := r.u8()
-		if r.err == nil && (n >= tacticSlots || numbers&(1<<n) != 0) {
+		if r.err == nil && (n >= tacticSlots || seen&(1<<n) != 0) {
 			r.fail("slot %d numbered %d", i, n)
 		}
-		numbers |= 1 << n
+		seen |= 1 << n
+		numbers[i] = n
+	}
+	if r.err == nil {
+		for i, n := range numbers {
+			t.Slots[i].OutOfPossession = oop[n]
+		}
 	}
 	if r.u8() != 0 {
 		skipPositionMap(r)

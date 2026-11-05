@@ -2006,13 +2006,13 @@ func TestGetLastLineupIsExplained(t *testing.T) {
 		t.Fatal("no get_last_lineup tool")
 	}
 	for _, want := range []string{"lineup, formation and roles", "most recent match", "who it played", "no duty", "date is not known", "Fog of war does not hide it",
-		"shirt_number", "unnamed_player", "Names of roles FM26 renamed are guesses"} {
+		"shirt_number", "unnamed_player", "Names of roles FM26 renamed are guesses", "stored order"} {
 		if !strings.Contains(tools.Tools[i].Description, want) {
 			t.Errorf("get_last_lineup description lacks %q", want)
 		}
 	}
 	text := h.session.InitializeResult().Instructions
-	for _, want := range []string{"get_last_lineup", "opponent_team_index", "in_possession_shape", "no duty", "date is not known", "shirt_number", "unnamed_player"} {
+	for _, want := range []string{"get_last_lineup", "opponent_team_index", "in_possession_shape", "no duty", "date is not known", "shirt_number", "unnamed_player", "stored order"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("instructions lack %q", want)
 		}

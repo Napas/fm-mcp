@@ -68,6 +68,17 @@ func TestLoadTestSave27bTactic(t *testing.T) {
 	if p := tac.Slots[0].Player; p == nil || p.Name != "Deividas Mikelionis" {
 		t.Errorf("goalkeeper %+v, want Deividas Mikelionis", p)
 	}
+	// As in game (2026-01-23): Slivka and Kalik drop to the two CMs, Fiolić
+	// to wide midfield.
+	for i, want := range map[int]struct{ ip, oop SlotRole }{
+		6: {SlotRole{"MC", "right", "Central Midfielder"}, SlotRole{"MC", "right", "Central Midfielder"}},
+		7: {SlotRole{"MC", "left", "Attacking Midfielder"}, SlotRole{"MC", "left", "Central Midfielder"}},
+		8: {SlotRole{"AMR", "", "Winger"}, SlotRole{"MR", "", "Wide Midfielder"}},
+	} {
+		if s := tac.Slots[i]; s.InPossession != want.ip || s.OutOfPossession != want.oop {
+			t.Errorf("slot %d: %+v → %+v, want %+v → %+v", i, s.InPossession, s.OutOfPossession, want.ip, want.oop)
+		}
+	}
 	l, err := v.LastLineup(kzTeam27)
 	if err != nil {
 		t.Fatal(err)

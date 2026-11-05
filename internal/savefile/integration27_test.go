@@ -177,21 +177,38 @@ func TestTestSave27Tactics(t *testing.T) {
 	}
 }
 
-// kzTactic27 is Kauno Žalgiris's tactic after its first match: the 4-3-3 DM
-// Wide preset with slots 5 to 10 changed out of possession.
-func kzTactic27() Tactic {
+// kzSlots27 builds KŽ's 4-3-3 DM Wide slots: the preset in possession, the
+// given positions and roles out of possession.
+func kzSlots27(oopPos [11]uint32, oopRole [11]uint64) [tacticSlots]TacticSlot {
 	ipPos := [11]uint32{1, 4, 0x200010, 0x100010, 8, 0x80, 0x200400, 0x100400, 0x800, 0x1000, 0x4000}
-	oopPos := [11]uint32{1, 4, 0x200010, 0x100010, 8, 0x80, 0x100, 0x200400, 0x100400, 0x200, 0x4000}
 	ipRole := [11]uint64{0x200001, 0x400004, 0x200002, 0x200002, 0x400004, 0x200010, 0x400020, 0x800200, 0x400080, 0x400080, 0x800800}
-	oopRole := [11]uint64{0x400001, 0x200200, 0x200008, 0x200008, 0x200200, 0x208000, 0x800400000, 0x500000, 0x500000, 0x800400000, 0x40000400000}
-	t := Tactic{Name: "4-3-3 DM Wide", Mentality: 4}
-	for i := range t.Slots {
-		t.Slots[i] = TacticSlot{
+	var s [tacticSlots]TacticSlot
+	for i := range s {
+		s[i] = TacticSlot{
 			InPossession:    SlotRole{Position: ipPos[i], Role: ipRole[i]},
 			OutOfPossession: SlotRole{Position: oopPos[i], Role: oopRole[i]},
 		}
 	}
-	return t
+	return s
+}
+
+// kzTactic27 is the preset with slots 5 to 10 changed out of possession. In
+// game (2026-01-23) the CM (MC right) and AM (MC left) drop to CM, and the
+// right winger to WMF on the right.
+func kzTactic27() Tactic {
+	return Tactic{Name: "4-3-3 DM Wide", Mentality: 4, Slots: kzSlots27(
+		[11]uint32{1, 4, 0x200010, 0x100010, 8, 0x80, 0x200400, 0x100400, 0x100, 0x200, 0x4000},
+		[11]uint64{0x400001, 0x200200, 0x200008, 0x200008, 0x200200, 0x208000, 0x500000, 0x500000, 0x800400000, 0x800400000, 0x40000400000},
+	)}
+}
+
+// kzFormation27 is KŽ's last-match formation: out-of-possession positions in
+// the tactic's stored order, no slot numbers.
+func kzFormation27() [tacticSlots]TacticSlot {
+	return kzSlots27(
+		[11]uint32{1, 4, 0x200010, 0x100010, 8, 0x80, 0x100, 0x200400, 0x100400, 0x200, 0x4000},
+		[11]uint64{0x400001, 0x200200, 0x200008, 0x200008, 0x200200, 0x208000, 0x800400000, 0x500000, 0x500000, 0x800400000, 0x40000400000},
+	)
 }
 
 // Kauno Žalgiris played FK Banga (team 6215): the last lineup holds the XI
@@ -218,7 +235,7 @@ func TestTestSave27bTactics(t *testing.T) {
 	if want := [selectionSize]uint8{1, 2, 4, 5, 3, 6, 8, 7, 11, 10, 9, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27}; kz.ShirtNumbers != want {
 		t.Errorf("KŽ shirt numbers %v, want %v", kz.ShirtNumbers, want)
 	}
-	for i, s := range kzTactic27().Slots {
+	for i, s := range kzFormation27() {
 		s.InPossession.Role &^= dutyMask
 		s.OutOfPossession.Role &^= dutyMask
 		if kz.Formation.Slots[i] != s {

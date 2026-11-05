@@ -90,7 +90,10 @@ Checks:
   - Club budgets: "27.0.0 club layout" in clubs.md.
   - Season stats (Deividas Mikelionis's friendly against FK Banga): "27.0.0 scope block" in player-stats.md.
   - Joined date: "27.0.0 joined date" in players.md.
-- Not checked in game in 27.0.0: everything not listed above, including hidden attributes and the rest of the BASIC part, nations and reputations, fog of war, personality, media handling, relationships, traits, contract clauses, bonuses and playing time, squad lists and numbers, tactics and last lineups, fixtures, league tables, competition and stage names, injuries, transfer records beyond the arranged status, and the season stats not on the screen above. Role ratings and interest follow 26.3.2 game code.
+  - Tactic and KŽ's last-match XI: "27.0.0 tactics" in tactics.md.
+  - KŽ squad (screens of 2026-11-05, same save): the squad numbers of all 25 first-team players (none for Tanghe and Konatar); Anton Tolordava's 36 visible attributes, birth date, height, personality, wage, contract dates, playing time, bonuses (appearance €123, clean sheet €115, unused substitute €30, loyalty €1 397; the game rounds them to €120, €120, €30 and €1.4K), the 25 % relegation wage drop and his injury name; Léo Ribeiro's personality, injury name, wage, contract dates and playing time.
+  - Fixtures: KŽ's 0–3 friendly against FK Banga on 2026-01-20 and its next 11 fixtures (dates, opponents, venues, competitions).
+- Not checked in game in 27.0.0: everything not listed above, including hidden attributes and the rest of the BASIC part, nations and reputations, fog of war, media handling, relationships, traits, which team a B-team player belongs to in squad lists, the out-of-possession pairing of last-match formations, other teams' fixtures, league tables, competition and stage names, injury dates, player values (Tolordava's €380 120 and Ribeiro's €216 098 fall just outside the game's €45K–€375K and €220K–€400K ranges), transfer records beyond the arranged status, and the season stats not on the screen above. Role ratings and interest follow 26.3.2 game code.
 
 ## Open questions
 
