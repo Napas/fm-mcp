@@ -317,9 +317,13 @@ func addResult(s *TableStats, scored, conceded uint8) {
 }
 
 func TestTestSave27Players(t *testing.T) {
-	for _, path := range []string{testSave27Path, testSave27bPath} {
-		t.Run(path, func(t *testing.T) {
-			a := openTestSaveAt(t, path)
+	// injured is the number of entries in the save's injury_manager.dat queues.
+	for _, tt := range []struct {
+		path    string
+		injured int
+	}{{testSave27Path, 1579}, {testSave27bPath, 1632}} {
+		t.Run(tt.path, func(t *testing.T) {
+			a := openTestSaveAt(t, tt.path)
 			db, err := ReadGameDB(a)
 			if err != nil {
 				t.Fatal(err)
@@ -328,7 +332,11 @@ func TestTestSave27Players(t *testing.T) {
 				t.Errorf("%d players skipped", db.SkippedPlayers)
 			}
 
+			n := 0
 			for _, p := range db.Players {
+				if len(p.Injuries) > 0 {
+					n++
+				}
 				if p.NationIndex < 0 || p.NationIndex >= int64(db.NationCount) {
 					t.Fatalf("player %d (%s %s): nation %d of %d", p.UID, p.FirstName, p.LastName, p.NationIndex, db.NationCount)
 				}
@@ -338,6 +346,15 @@ func TestTestSave27Players(t *testing.T) {
 					}
 				}
 			}
+			if n != tt.injured {
+				t.Errorf("%d injured players, want %d", n, tt.injured)
+			}
+			fox := Injury{ID: 118, Start: Date{Raw: 1, Year: 2026}, DaysMin: 213, DaysMax: 243}
+			checkKnownPlayers(t, db.Players, map[uint32]Player{215502: {Injuries: []Injury{fox}}}, func(p, w Player) {
+				if !reflect.DeepEqual(p.Injuries, w.Injuries) {
+					t.Errorf("player %d (Ben Fox): injuries %+v, want %+v", p.UID, p.Injuries, w.Injuries)
+				}
+			})
 			checkKnownPlayers(t, db.Players, map[uint32]Player{
 				18096725: {NationIndex: 131, Hidden: [8]uint8{9, 12, 10, 10, 13, 11, 10, 6}, BirthplaceIndex: 32},   // Anton Tanghe, Belgium
 				14192808: {NationIndex: 187, Hidden: [8]uint8{19, 12, 13, 10, 12, 11, 7, 8}, BirthplaceIndex: 1110}, // Franco Baldassarra, Argentina

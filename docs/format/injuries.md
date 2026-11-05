@@ -2,7 +2,7 @@
 
 Part of the format reference. Conventions, dates and the index of all files: [`docs/format.md`](../format.md).
 
-## injury_manager.dat — partly decoded, verified 26.2.0 and 26.3.2 (bytes)
+## injury_manager.dat — partly decoded, verified 26.2.0, 26.3.2 and 27.0.0 (bytes)
 
 Body:
 
@@ -14,7 +14,7 @@ u32  n1, n1 × entry       queue 1, sorted by "to"
 entry = u8 1, date from, date to, u32 person index, u8 (0 or 1)
 ```
 
-`from`/`to` equal start + days min / start + days max of the person's injury item (all 1 321 entries of the test save, 1 176 + 145; all 8 631 of the real save, 4 669 + 3 962, of which 28 are for persons not decoded as players). Queue 0 holds injuries whose earliest return is today or later (5 of the test save's 1 176 are a day earlier). Queue 1 holds injuries whose earliest return is today or earlier, or whose window is a single day (days min = days max); their latest return is today or later. Diakhaté's bruised ankle (window 2035-11-30..12-03) is in queue 1 at 2035-12-02. Hypothesis: the game moves an injury from queue 0 to queue 1 at its earliest return, lets the player recover any day in the window, and removes it at the latest return, so a player in queue 1 is still injured. Code: the loader is `0x1a8a7d4` (references the `"injury_manager"` name); not decoded further.
+`from`/`to` equal start + days min / start + days max of the person's injury item (all 1 321 entries of the test save, 1 176 + 145; all 8 631 of the real save, 4 669 + 3 962, of which 28 are for persons not decoded as players). Queue 0 holds injuries whose earliest return is today or later (5 of the test save's 1 176 are a day earlier). Queue 1 holds injuries whose earliest return is today or earlier, or whose window is a single day (days min = days max); their latest return is today or later. Diakhaté's bruised ankle (window 2035-11-30..12-03) is in queue 1 at 2035-12-02. Hypothesis: the game moves an injury from queue 0 to queue 1 at its earliest return, lets the player recover any day in the window, and removes it at the latest return, so a player in queue 1 is still injured. 27.0.0 keeps this layout (file version 8): 1 579 and 1 632 entries in `data/test_save_27.fm` and `data/test_save_27b.fm`, one per injury item ("27.0.0 injury items" in players.md). Code: the loader is `0x1a8a7d4` (references the `"injury_manager"` name); not decoded further.
 
 ## Injury types (INJURY) — verified 26.2.0 and 26.3.2 (bytes)
 
