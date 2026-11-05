@@ -36,7 +36,7 @@ Ask "show me Chris Ashby's full profile" and open his player screen in FM.
 | Wage | €921 516 p/a | | the game shows €922K p/a |
 | Contract | 19 Jun 2034 – 30 Jun 2038 | | |
 | Clauses | appearance fee €3 544, clean sheet bonus €2 658, unused sub fee €885, relegation release clause €3.44M, 10% sell-on | | **clause names are guesses**: check each one |
-| Remaining loyalty bonus | €356 473 | | the game shows €350K (rounding to the nearest €25K above €100K is an inference) |
+| Remaining loyalty bonus | €356 473 | | the game shows €350K (rounded to the nearest €25K; "Display rounding" in docs/format/currencies.md) |
 | CA / PA | 135 / 159 | | only visible with an editor or FM Scout; skip if you can't see it |
 | Condition | 100% | | **guess** |
 | Match sharpness | 89% | | **guess** |

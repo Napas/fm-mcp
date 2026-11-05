@@ -19,7 +19,7 @@ Player part, offsets from the record start:
 | 23 | i64 | current **team** index (Tottenham's first team = 547); see "Teams" | verified |
 | 31 | 15 × u8 | position ratings 1..20: GK SW DL DC DR DM ML MC MR AML AMC AMR ST WBL WBR | verified by code (loader `0x48c6228`, side-flag table `0x51f9658`; SW by elimination) |
 | 46 | 54 × u8 | attributes 1..100, in `AttributeNames` order (`internal/savefile/player.go`) | verified by code (loader `0x48c6228`, display table `0x520380c`, foot tie-break `0x48b97c4`). The game shows `clamp((v+2)/5, 1, 20)` (`0x48b9fc0`). "Off the Ball" is "Movement" in the engine |
-| 100 | i32 | value in GBP; the game caps it at 300 000 000, which it shows as "Not for Sale" | guess (strong): Maddison 51.5M, Kulusevski 84.7M; the cap verified as "Not for Sale" in game (Livramento, Sombath) |
+| 100 | i32 | value in GBP; the game caps it at 300 000 000, which it shows as "Not for Sale" | guess (strong): Maddison 51.5M, Kulusevski 84.7M; the cap verified as "Not for Sale" in game (Livramento, Sombath). 27.0.0 profiles show a "Guide Value" range instead (see "27.0.0 Guide Value") |
 | 104 | u8 | 1..20, unknown | |
 | 105 | date | joined current club; 1900 = unset (see "Dates"). In 27.0.0 it can be later than the date the game shows (see "27.0.0 joined date") | verified 26.3.2 in game: Leroux 2034-01-13 ("Transferred from Rennes") and Bernardi 2035-01-12 ("from Ajax"), both equal to the contract start; 1900-01-01 on loanees and free agents (seen in game) |
 | 109 | date | 1900 | |
@@ -329,8 +329,20 @@ Also in game on 2036-01-01: Enzo Fernández Outspoken and Théo Emmanuelli Level
 
 The gate's exact condition is not decoded. `fm` hides media handling wherever it hides the personality (the server's choice).
 
+### 27.0.0 Guide Value — label verified 27.0.0 (code + in game); range not decoded
+
+The 27.0.0 profile shows a range, not the stored value, labelled "Guide Value: Estimated value based on the player's age and reputation" (text ids `0x84448` and `0x91919` in `english.ltc`; screens of 2026-11-05, KŽ save of 2026-01-23). The tooltip builder (`0x3e4408` in `0x3d9920`, `game_plugin` 27.0.0 arm64 slice) picks the label by a mode passed in with the request: 3 shows "This is the asking price [you] have set" (`0x91917`), 5 "Updated Market Value" with "Valued by the player's agent ([date])" (`0x91918`, `0x9191a`), any other the Guide Value. It writes no amounts; where the range is computed is not found.
+
+| Player | Offset 100 (€) | Guide Value shown | Reputation (current, home, world) |
+|--------|----------------|-------------------|-----------------------------------|
+| Anton Tolordava (29) | €380 120 | €45K–€375K | 5250, 4750, 2500 |
+| Léo Ribeiro (31) | €216 098 | €220K–€400K | 5000, 2500, 2250 |
+
+Offset 100 lies just outside each range. Rounded with bit 2 or 5 steps (currencies.md "Display rounding"), it gives the top of Tolordava's range and the bottom of Ribeiro's; with bit 3, Ribeiro's would be €215K, not an end. Two samples; unknown if this holds. Reputation alone does not set the range: Tolordava has the higher reputation and the lower range.
+
 ## Open questions
 
+- 27.0.0 Guide Value: how the range is computed (inputs beyond age and reputation, and where the code is).
 - 27.0.0 injury items: a list of two items and an item with a match record, to confirm the 29-byte tail and the 26-byte match record.
 - Joined date: which date the game shows when offset 105 is earlier than `+0xec` (27.0.0 and 26.3.2), and in 26.3.2 when it is later (1 445 players).
 - 27.0.0 BASIC part: what the new gap byte (always 1) and the other 9 bytes hold.

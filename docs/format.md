@@ -4,7 +4,7 @@ All multi-byte integers are little-endian. Strings are a u32 LE length followed 
 
 A `.fm` save is a small archive: a header, one zstd frame per inner file, and a zstd-compressed directory at the end. Verified on `data/test_save.fm` (build 26.2.0) unless marked otherwise.
 
-Code addresses refer to the arm64 slice of `game_plugin` (sha256 `01c785dd…beecd`, installed build 26.3.2). That slice has `__TEXT` vmaddr == file offset.
+Code addresses refer to the arm64 slice of `game_plugin` (sha256 `01c785dd…beecd`, installed build 26.3.2). That slice has `__TEXT` vmaddr == file offset. Some 27.0.0 sections cite the 27.0.0 arm64 slice (sha256 `180ec7c1…2dff6c`, also vmaddr == file offset) instead.
 
 The reference is split by structure under `docs/format/`. Read the file for a structure before changing its parser; record new findings there (offsets, evidence, build) and add new sections to the table below. Each file ends with its open questions. Quoted section names in the docs and code comments (e.g. "Person table") are the headings listed here.
 
@@ -28,10 +28,10 @@ Unset dates are saved in 1900. Seen: joined dates of 1900-01-01 on loanees and f
 | [`player-interest.md`](format/player-interest.md) | interest filter, hard gates, just-joined penalty, reputation gap, playing-time value, verdicts | Player interest (game code) |
 | [`player-stats.md`](format/player-stats.md) | season stats: totals, 60 detail fields, goalkeeper split, scopes/slots, rollover, 27.0.0 scope block | rgman/player_stats.dat; 27.0.0 scope block |
 | [`game-db.md`](format/game-db.md) | game_db header, table template, name tables, person table and record tags, trailer flags | game_db.dat; 27.0.0 header; Person name tables; Person table |
-| [`players.md`](format/players.md) | player part offsets, reputation level, current injuries, 27.0.0 injury items, BASIC part, 27.0.0 BASIC gap, 27.0.0 joined date, hidden attributes, relationships/favoured clubs, personality, traits, media handling | Player record (tags 2 and 3); Reputation level; Current injuries; 27.0.0 injury items; BASIC person part; 27.0.0 BASIC part; 27.0.0 joined date; Relationships and favoured clubs; Personality; Player traits; Media handling |
+| [`players.md`](format/players.md) | player part offsets, reputation level, current injuries, 27.0.0 injury items, BASIC part, 27.0.0 BASIC gap, 27.0.0 joined date, hidden attributes, relationships/favoured clubs, personality, traits, media handling, 27.0.0 Guide Value | Player record (tags 2 and 3); Reputation level; Current injuries; 27.0.0 injury items; BASIC person part; 27.0.0 BASIC part; 27.0.0 joined date; Relationships and favoured clubs; Personality; Player traits; Media handling; 27.0.0 Guide Value |
 | [`contracts.md`](format/contracts.md) | ACTUAL_PERSON fields before the marker, contract types, FULL header, clauses, bonuses, playing time, actual playing time, squad numbers, loyalty bonus | Contracts (ACTUAL_PERSON part) |
 | [`clubs.md`](format/clubs.md) | CLUB/COMP/TEAM tables, club budgets, squad lists | Clubs, teams and competitions; 27.0.0 club layout; Club budgets (CLUB_FINANCE); Squad lists |
-| [`currencies.md`](format/currencies.md) | CURRENCY_RECORD rates, display rule, game preferences (currency, wage period) | Currencies (CURRENCY_RECORD); Display preferences (outside the save) |
+| [`currencies.md`](format/currencies.md) | CURRENCY_RECORD rates, display rule, display rounding, game preferences (currency, wage period) | Currencies (CURRENCY_RECORD); Display rounding; Display preferences (outside the save) |
 | [`nations.md`](format/nations.md) | CONTINENT strengths, NATION tail grammar, reputation factors | Continents, nations and national-team containers; 27.0.0 national-team containers |
 | [`fixtures.md`](format/fixtures.md) | fix_man.dat lists, FIXTURE base, 27.0.0 base, FIXTURE_RESULT scores | fix_man.dat; FIXTURE; 27.0.0 FIXTURE base; FIXTURE_RESULT |
 | [`competitions.md`](format/competitions.md) | competition keys (ACTUAL_COMP_ID), stage names, league tables in comp files, 27.0.0 row tail | Competition keys (ACTUAL_COMP_ID); Stage names (STAGE_NAME); League tables (LEAGUE_STAGE rows); 27.0.0 league tables |
