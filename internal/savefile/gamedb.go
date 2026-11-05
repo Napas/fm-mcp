@@ -22,6 +22,14 @@ func dateAt(b []byte, p int) Date {
 
 func (d Date) dayOfYear() uint16 { return d.Raw & 0x1ff }
 
+// UnsetYear is the year of unset dates, e.g. 1900-01-01 joined dates and
+// 1900-01-02 contract ends.
+const UnsetYear = 1900
+
+func (d Date) before(o Date) bool {
+	return d.Year < o.Year || d.Year == o.Year && d.dayOfYear() < o.dayOfYear()
+}
+
 // IsZero reports whether the date is unset (year 0).
 func (d Date) IsZero() bool { return d.Year == 0 }
 

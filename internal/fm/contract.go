@@ -90,7 +90,7 @@ func loyaltyRemaining(c *savefile.Contract, on time.Time) int64 {
 	end := c.End.Time()
 	var days int64
 	switch {
-	case c.End.Year != unsetYear:
+	case c.End.Year != savefile.UnsetYear:
 		days = min(int64(end.Sub(on)/(24*time.Hour)), loyaltyMaxDays)
 	case end.YearDay() == 1:
 		days = loyaltyNoEndDays

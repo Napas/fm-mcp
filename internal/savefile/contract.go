@@ -125,7 +125,7 @@ type ContractEvent struct {
 }
 
 // Open reports whether the event is still open (Closed is 1900-01-01).
-func (e ContractEvent) Open() bool { return e.Closed.Year == 1900 && e.Closed.dayOfYear() == 1 }
+func (e ContractEvent) Open() bool { return e.Closed.Year == UnsetYear && e.Closed.dayOfYear() == 1 }
 
 // PlayingTime is a contract's squad status, FM's "Playing Time". Names come
 // from the game's table (26.3.2, 0x39279bc via 0x5265ab0). 0 is never stored.

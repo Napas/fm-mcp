@@ -563,9 +563,49 @@ func TestParsePlayerWithoutContract(t *testing.T) {
 	}
 }
 
-func TestParsePlayerPersonFields(t *testing.T) {
+// team652Slots encodes a main contract with team 652 and four empty slots.
+func team652Slots() [][]byte {
 	main := testContract{person: 77, team: 652, wage: 21605, start: Date{Raw: 228, Year: 2035}, end: Date{Raw: 181, Year: 2039}, signed: Date{Raw: 228, Year: 2035}, playingTime: [3]byte{3, 0, 3}}
-	slots := [][]byte{fullSlot(main), emptySlot(), emptySlot(), emptySlot(), emptySlot()}
+	return [][]byte{fullSlot(main), emptySlot(), emptySlot(), emptySlot(), emptySlot()}
+}
+
+func TestParsePlayerJoinedClubOfVersion(t *testing.T) {
+	slots := team652Slots()
+	unset := Date{Raw: 1, Year: 1900}
+	offset105 := Date{Raw: 180, Year: 2023} // set by playerRecordWith
+	earlier, later := Date{Raw: 170, Year: 2023}, Date{Raw: 190, Year: 2023}
+	yearEarlier := Date{Raw: 300, Year: 2022}
+	yearLater := Date{Raw: 10, Year: 2024}
+	earlierUpperBits := Date{Raw: 13<<9 | 170, Year: 2023}
+	for _, tt := range []struct {
+		name    string
+		version uint16
+		person  Date
+		want    Date
+	}{
+		{"27.0.0 person date earlier", dbVersion27_0, earlier, earlier},
+		{"27.0.0 person date later", dbVersion27_0, later, offset105},
+		{"27.0.0 person date unset", dbVersion27_0, unset, offset105},
+		{"27.0.0 person date the same day", dbVersion27_0, Date{Raw: 13<<9 | 180, Year: 2023}, offset105},
+		{"27.0.0 person date a year earlier, later day", dbVersion27_0, yearEarlier, yearEarlier},
+		{"27.0.0 person date a year later, earlier day", dbVersion27_0, yearLater, offset105},
+		{"27.0.0 person date earlier with upper bits", dbVersion27_0, earlierUpperBits, earlierUpperBits},
+		{"26.3.2 person date earlier", dbVersion26_3, earlier, offset105},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			block := personFields{previousClub: -1, date1: unset, joined: tt.person, u8: 10}.block(slots...)
+
+			p := parseWithBlockAt(t, block, tt.version)
+
+			if p.JoinedClub != tt.want {
+				t.Errorf("JoinedClub = %+v, want %+v", p.JoinedClub, tt.want)
+			}
+		})
+	}
+}
+
+func TestParsePlayerPersonFields(t *testing.T) {
+	slots := team652Slots()
 	unset := Date{Raw: 1, Year: 1900}
 	// Real bytes (uid 2002114050, 2036-01-16) from 40 bytes before a false
 	// n = 1 list to the marker: the list is empty and the previous club is
