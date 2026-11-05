@@ -487,14 +487,11 @@ type query struct {
 }
 
 func (g *Game) compile(f Filter) (query, error) {
-	q := query{Filter: f, money: g.Info.Money, pos: -1, minAttrs: make(map[int]int, len(f.MinAttributes)), nation: nationKey(f.Nation)}
-	if f.Position != "" {
-		pos, err := positionNamed(f.Position)
-		if err != nil {
-			return query{}, fmt.Errorf("%w: %w", ErrInvalidFilter, err)
-		}
-		q.pos = pos
+	pos, err := positionFilter(f.Position)
+	if err != nil {
+		return query{}, err
 	}
+	q := query{Filter: f, money: g.Info.Money, pos: pos, minAttrs: make(map[int]int, len(f.MinAttributes)), nation: nationKey(f.Nation)}
 	for name, v := range f.MinAttributes {
 		i, ok := attributeOf(name)
 		if !ok {
@@ -518,7 +515,6 @@ func (g *Game) compile(f Filter) (query, error) {
 	default:
 		return query{}, fmt.Errorf("%w: interest %q; valid values: %s, %s, %s", ErrInvalidFilter, f.Interest, InterestTransfer, InterestLoan, InterestTransferOrLoan)
 	}
-	var err error
 	if q.women, err = genderFilter(f.Gender); err != nil {
 		return query{}, err
 	}
@@ -679,6 +675,19 @@ func positionNamed(code string) (int, error) {
 	i := slices.Index(savefile.PositionNames[:], strings.ToUpper(code))
 	if i < 0 {
 		return 0, fmt.Errorf("position %q; valid codes: %s", code, strings.Join(savefile.PositionNames[:], " "))
+	}
+	return i, nil
+}
+
+// positionFilter returns the index of an optional position filter's code, or
+// -1 when it is empty. An unknown code is an ErrInvalidFilter.
+func positionFilter(code string) (int, error) {
+	if code == "" {
+		return -1, nil
+	}
+	i, err := positionNamed(code)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %w", ErrInvalidFilter, err)
 	}
 	return i, nil
 }

@@ -342,6 +342,7 @@ func roleThreshold(role, roles80 uint64) int {
 // rolePhase is one phase's roles: in or out of possession.
 type rolePhase struct {
 	name    string // "in-possession" or "out-of-possession"
+	key     string // PhaseInPossession or PhaseOutOfPossession
 	offered [len(savefile.PositionNames)]uint64
 	attrs   map[uint64]roleAttributes
 	nameOf  func(uint64) (string, bool)
@@ -350,11 +351,11 @@ type rolePhase struct {
 
 var (
 	inPossession = rolePhase{
-		name: "in-possession", offered: positionRoles, attrs: roleAttributesByRole,
+		name: "in-possession", key: PhaseInPossession, offered: positionRoles, attrs: roleAttributesByRole,
 		nameOf: savefile.InPossessionRoleName, ability: (*roleInputs).ability,
 	}
 	outOfPossession = rolePhase{
-		name: "out-of-possession", offered: oopPositionRoles, attrs: oopRoleAttributesByRole,
+		name: "out-of-possession", key: PhaseOutOfPossession, offered: oopPositionRoles, attrs: oopRoleAttributesByRole,
 		nameOf: savefile.OutOfPossessionRoleName, ability: (*roleInputs).oopAbility,
 	}
 )
@@ -438,14 +439,31 @@ type RoleFit struct {
 
 const bestRolesShown = 3
 
+// roleFit is a role ability at position index pos without a slot side.
+type roleFit struct {
+	pos     int
+	role    uint64
+	ability int
+}
+
+// fits returns the phase's role abilities at positions rated minRating or
+// more, in position then role bit order.
+func (in *roleInputs) fits(ph rolePhase, minRating uint8, rules roleRules) []roleFit {
+	var out []roleFit
+	for at, role := range in.offeredRoles(ph.offered, minRating) {
+		out = append(out, roleFit{pos: at.index, role: role, ability: in.unsidedAbility(ph, role, at.index, rules)})
+	}
+	return out
+}
+
 // bestRoles returns the phase's highest role abilities, one per role, over
 // the roles offered at positions rated 15 or more. Ties keep position, then
 // role bit, order.
 func (in *roleInputs) bestRoles(ph rolePhase, rules roleRules) []RoleFit {
 	var fits []RoleFit
-	for at, role := range in.offeredRoles(ph.offered, naturalRating) {
-		name, _ := ph.nameOf(role)
-		fits = append(fits, RoleFit{Role: name, Position: savefile.PositionNames[at.index], RoleAbility: in.unsidedAbility(ph, role, at.index, rules)})
+	for _, f := range in.fits(ph, naturalRating, rules) {
+		name, _ := ph.nameOf(f.role)
+		fits = append(fits, RoleFit{Role: name, Position: savefile.PositionNames[f.pos], RoleAbility: f.ability})
 	}
 	slices.SortStableFunc(fits, func(a, b RoleFit) int { return cmp.Compare(b.RoleAbility, a.RoleAbility) })
 	var out []RoleFit
