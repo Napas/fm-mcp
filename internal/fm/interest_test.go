@@ -438,6 +438,14 @@ func TestInterestGates(t *testing.T) {
 			t.Errorf("text = %q", text)
 		}
 	})
+	t.Run("arranged text without a date", func(t *testing.T) {
+		p, in := interestPlayer()
+		in.arranged = &arrangedMove{team: 21}
+		g := interestGame(p, in)
+		if text := g.interestOf(p).TransferReason.Text; text != "Has agreed a move to Stade Brestois" {
+			t.Errorf("text = %q", text)
+		}
+	})
 	t.Run("left long ago", func(t *testing.T) {
 		p, in := interestPlayer()
 		in.previousClub, in.joined = 1, gameDaysAgo(interestToday, 151)

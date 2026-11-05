@@ -7,9 +7,8 @@ import (
 )
 
 const (
-	transferHeaderSize = 5    // u8 1, u32 count
-	transferVersion    = 0x13 // u16 after the class byte
-	transferMinSize    = 64   // through the date at offset 60
+	transferHeaderSize = 5  // u8 (1 or 0), u32 (not the record count)
+	transferMinSize    = 64 // through the date at offset 60
 	// transferBytesPerRecord caps the candidates at the body length / 30.
 	// Records are at least 117 bytes (writer 0x3a53bb4).
 	transferBytesPerRecord = 30
@@ -22,6 +21,13 @@ const (
 	transferStatusOff = 29
 	transferDate1Off  = 56
 	transferDateOff   = 60
+)
+
+// TRANSFER record versions (u16 after the class byte). The base part reads
+// the same in both.
+const (
+	transferVersion26 = 0x13 // 26.3.2
+	transferVersion27 = 0x14 // 27.0.0
 )
 
 // TransferArranged is the status of an arranged move: the game's
@@ -51,20 +57,30 @@ func ReadTransfers(a *Archive) ([]Transfer, error) {
 	return ts, nil
 }
 
-// parseTransfers finds the TRANSFER records of class 2 and 3 in the body of
-// transfer_man.dat by their checked start, since the rest of the file is not
-// decoded. A record's id is kept once, from its first match: the table lists
-// ids in ascending order and later copies (status 0 or 3) follow it.
+// parseTransfers finds the class 2 and 3 TRANSFER records in transfer_man.dat
+// by their checked start; the rest of the file is not decoded. Record 0's
+// version is the one scanned for. An id is kept from its first match: the
+// table lists ids ascending, then come copies (status 0 or 3).
 func parseTransfers(body []byte) ([]Transfer, error) {
 	if len(body) < transferHeaderSize {
 		return nil, fmt.Errorf("%w: body of %d bytes", ErrCorrupt, len(body))
+	}
+	if len(body) == transferHeaderSize {
+		return nil, nil
+	}
+	const versionOff = transferHeaderSize + 1 // record 0's version
+	if len(body) < versionOff+2 {
+		return nil, fmt.Errorf("%w: no record 0 in %d bytes", ErrCorrupt, len(body))
+	}
+	version := body[versionOff : versionOff+2]
+	if v := binary.LittleEndian.Uint16(version); v != transferVersion26 && v != transferVersion27 {
+		return nil, fmt.Errorf("%w: TRANSFER record version %#x", ErrUnsupported, v)
 	}
 	limit := len(body) / transferBytesPerRecord
 	var out []Transfer
 	seen := make(map[uint32]struct{})
 	candidates := 0
-	version := []byte{transferVersion, 0}
-	for i := transferHeaderSize + 1; i < len(body); {
+	for i := versionOff; i < len(body); {
 		k := bytes.Index(body[i:], version)
 		if k < 0 {
 			break
