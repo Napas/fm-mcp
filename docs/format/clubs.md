@@ -24,7 +24,7 @@ A first team carries its club's uid (all first teams of both saves). Men's natio
 
 Examples (test save): team 547 → club 416 "Tottenham Hotspur" (uid 728, division Premier League); team 20739 → club "Chelsea", women's flag set; team 1233 → Argentina's national team (container 187).
 
-### 27.0.0 club layout — verified 27.0.0 (bytes)
+### 27.0.0 club layout — verified 27.0.0 (bytes + in game)
 
 Database version 3754 (FM 27.0.0) changes two parts of the CLUB record. The rest of the CLUB, TEAM and COMP tables is unchanged.
 
@@ -39,7 +39,9 @@ Evidence (FM27 KŽ save, 27.0.0, `data/test_save_27.fm`):
 - Record 0 (KS Besa, no lists, base finance) is 170 bytes in 26.3.2 and 173 in 27.0.0. The 3 extra bytes are the high bytes of the three list counts.
 - River Plate (record 26) lists `02 00` + 2 refs, `02 00` + 2 refs, `00 00` in 27.0.0. With u8 counts the refs would be misaligned.
 - Aldershot Town CLUB_FINANCE: offset 66 gives a £33 738 a week wage budget in 26.3.2. In 27.0.0 offset 66 holds 1 and offset 62 holds £23 277, followed by the first sub-item's `01, u32, 02 …` pattern, as in 26.3.2 at offset 70.
-- Values (bytes, not checked in game): Kauno Žalgiris (uid 47040647, the human's club) transfer budget £2 078 958, wage budget £21 687 a week, balance £3 870 421; Arsenal £152 700 000 and £4 940 326 a week. Team links agree with player records: Arsenal → team 462 (Rice, Saka, Saliba), Bayern → 740 (Kane, Olise), Barcelona → 1357 (Raphinha).
+- Values (bytes; 2026-01-23 budgets checked in game below): Kauno Žalgiris (uid 47040647, the human's club) transfer budget £2 078 958, wage budget £21 687 a week, balance £3 870 421; Arsenal £152 700 000 and £4 940 326 a week. Team links agree with player records: Arsenal → team 462 (Rice, Saka, Saliba), Bayern → 740 (Kane, Olise), Barcelona → 1357 (Raphinha).
+
+In game (copy of the real save at 2026-01-23, transfer budget £1 496 914, balance £3 858 179): Finances shows Overall Balance €4.49M, transfer Available Budget €1.74M and wage Available Budget €280K a year with Spending Wage €1.03M a year. The wage budget's £21 687 a week (£1.13M a year ≈ €1.31M) is their sum. Each is the save's EUR rate (1.1641011, uid 28; see "Currencies") applied: £3 858 179 → €4 491 311, £1 496 914 → €1 742 559, £21 687 × 52 → €1 312 785. The transfer budget fell from £2 078 958 between the 2026-01-22 and 2026-01-23 saves.
 
 3754 is the first version seen with this layout; the game's real gate may be lower (any version from 3734 up).
 
@@ -104,4 +106,4 @@ The captain ref after the list fits the captain on the samples checked (test sav
 ## Open questions
 
 - Squad lists: which loanees out a club team lists; what tag-7 persons in squads are.
-- Club finances: which field FM's Original Budget shows (offset 0, €6 519 694 for Metz, or the €6 500 000 field; compare on a club or date where they differ by more than €0.1M); the amount spent this season and the scouting budget; the current wage bill the game subtracts from the wage budget (whether it includes staff); CLUB_FINANCE offsets 12–65 and after 66; which i32 27.0.0 dropped from the block before the wage budget; the 27.0.0 budgets in game; where `+0x840` (next season's wage budget) is saved; how the game abbreviates amounts in millions.
+- Club finances: which field FM's Original Budget shows (offset 0, €6 519 694 for Metz, or the €6 500 000 field; compare on a club or date where they differ by more than €0.1M); the amount spent this season and the scouting budget; the current wage bill the game subtracts from the wage budget (whether it includes staff); CLUB_FINANCE offsets 12–65 and after 66; which i32 27.0.0 dropped from the block before the wage budget; where `+0x840` (next season's wage budget) is saved; how the game abbreviates amounts in millions.

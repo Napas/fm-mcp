@@ -11,7 +11,7 @@ const (
 // verifiedDatabaseVersions are the database versions whose whole save layout
 // was checked against real saves. A build joins only when every structure
 // fm reads is verified for it.
-var verifiedDatabaseVersions = map[uint16]bool{dbVersion26_2: true, dbVersion26_3: true}
+var verifiedDatabaseVersions = map[uint16]bool{dbVersion26_2: true, dbVersion26_3: true, dbVersion27_0: true}
 
 // VerifiedDatabaseVersion reports whether saves with this database version
 // were checked. Other versions may still parse but can decode wrong values.

@@ -93,7 +93,7 @@ func TestParseGameDBHeaderRejectsTruncatedBody(t *testing.T) {
 }
 
 func TestVerifiedDatabaseVersion(t *testing.T) {
-	for v, want := range map[uint16]bool{3727: true, 3733: true, 3740: false, 3754: false, 0: false} {
+	for v, want := range map[uint16]bool{3727: true, 3733: true, 3740: false, 3754: true, 0: false} {
 		if got := VerifiedDatabaseVersion(v); got != want {
 			t.Errorf("VerifiedDatabaseVersion(%d) = %v, want %v", v, got, want)
 		}

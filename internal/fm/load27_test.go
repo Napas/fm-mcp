@@ -10,6 +10,9 @@ const (
 	testSave27Path  = "../../data/test_save_27.fm"
 	testSave27bPath = "../../data/test_save_27b.fm" // after Kauno Žalgiris's first match
 	kzTeam27        = 16521                         // Kauno Žalgiris's team index
+	enzoUID27       = 14229525                      // Enzo Fernández
+	salahUID27      = 98028755                      // Mohamed Salah
+	mikelionisUID27 = 47055959                      // Deividas Mikelionis, KŽ's goalkeeper
 )
 
 func TestLoadTestSave27Info(t *testing.T) {
@@ -18,6 +21,11 @@ func TestLoadTestSave27Info(t *testing.T) {
 	want := time.Date(2026, 1, 19, 0, 0, 0, 0, time.UTC)
 	if !g.Info.Date.Equal(want) || g.Info.Build != "27.0.0+2493426" || g.Info.ManagerClub != "FK Kauno Žalgiris" {
 		t.Errorf("date %s, build %q, club %q; want date %s", g.Info.Date.Format(time.DateOnly), g.Info.Build, g.Info.ManagerClub, want.Format(time.DateOnly))
+	}
+	for _, w := range g.Info.Warnings {
+		if strings.Contains(w, "3754") { // unverified-build warnings name the version
+			t.Errorf("warning %q", w)
+		}
 	}
 }
 
@@ -151,10 +159,7 @@ func TestLoadTestSave27JoinedClub(t *testing.T) {
 				break
 			}
 		}
-		for _, uid := range []uint32{
-			14229525, // Enzo Fernández
-			98028755, // Mohamed Salah
-		} {
+		for _, uid := range []uint32{enzoUID27, salahUID27} {
 			p := g.byUID[uid]
 			if p == nil {
 				t.Fatalf("%s: no player with uid %d", path, uid)
@@ -163,5 +168,35 @@ func TestLoadTestSave27JoinedClub(t *testing.T) {
 				t.Errorf("%s: %s joined %v, want 2026-01-19", path, p.Name, p.JoinedClub)
 			}
 		}
+	}
+}
+
+// Values the game showed in the 2026-01-23 save; 27b holds the same ones.
+func TestLoadTestSave27bMatchesGame(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27bPath, LoadOptions{})
+
+	for _, tt := range []struct {
+		uid  uint32
+		wage int64
+		end  string
+	}{
+		{enzoUID27, 250000, "2031-06-30"},  // €10.2M–17.24M a year shown
+		{salahUID27, 351046, "2028-06-30"}, // €20.4M–26.03M a year shown
+	} {
+		p := g.byUID[tt.uid]
+		if p == nil || p.Contract == nil {
+			t.Fatalf("uid %d: no contract", tt.uid)
+		}
+		if end := p.Contract.End.Format(time.DateOnly); p.Contract.WeeklyWage != tt.wage || end != tt.end {
+			t.Errorf("%s: wage %d, end %s; want %d, %s", p.Name, p.Contract.WeeklyWage, end, tt.wage, tt.end)
+		}
+	}
+	p := g.byUID[mikelionisUID27] // the friendly against FK Banga
+	if p == nil {
+		t.Fatal("no Mikelionis")
+	}
+	f := g.auxOf(p).season.Friendlies
+	if f == nil || f.Starts != 1 || f.GoalsConceded != 2 || f.RatingSum != 64 || f.Rated != 1 || f.Detail.Passes != 7 || f.Detail.PassesCompleted != 4 {
+		t.Errorf("Mikelionis friendlies %+v, want 1 start, 2 conceded, 6.4, 4 of 7 passes", f)
 	}
 }

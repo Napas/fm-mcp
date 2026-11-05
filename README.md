@@ -20,7 +20,7 @@ Claude Desktop: add this to `claude_desktop_config.json`:
 { "mcpServers": { "fm": { "command": "/absolute/path/to/bin/fm-mcp" } } }
 ```
 
-On first use the server loads `FM_SAVE`, or else the newest save in the FM27 and FM26 save folders (`~/Library/Application Support/Sports Interactive/Football Manager 27/cloud/games` and `.../games`, then the same under `Football Manager 26`). Load times and memory: see [Loading and memory](#loading-and-memory). Load times and warnings are logged to stderr. Database versions other than 3727 (26.2.0) and 3733 (26.3.2) load with a warning, since their layouts are unchecked.
+On first use the server loads `FM_SAVE`, or else the newest save in the FM27 and FM26 save folders (`~/Library/Application Support/Sports Interactive/Football Manager 27/cloud/games` and `.../games`, then the same under `Football Manager 26`). Load times and memory: see [Loading and memory](#loading-and-memory). Load times and warnings are logged to stderr. Database versions other than 3727 (26.2.0), 3733 (26.3.2) and 3754 (27.0.0) load with a warning, since their layouts are unchecked.
 
 | Variable | Effect |
 |----------|--------|
@@ -100,6 +100,6 @@ go test ./internal/savefile -run '^$' -fuzz FuzzNewArchive -fuzztime 30s   # als
 golangci-lint run ./...
 ```
 
-Integration tests use `data/test_save.fm` (FM 26.2.0, gitignored). The real-save tests check ground truth from the KŽ career saves of 2035-12-02 (`FM_REAL_SAVE`), 2035-12-09 (`FM_REAL_SAVE_9DEC`), 2035-12-14 (`FM_REAL_SAVE_14DEC`) and 2036-01-01 (`FM_REAL_SAVE_1JAN`); they skip when the variable is unset and fail when the save has another game date. Point them only at copies, never at the game's save folder.
+Integration tests use the gitignored saves `data/test_save.fm` (FM 26.2.0), `data/test_save_27.fm` and `data/test_save_27b.fm` (27.0.0). The real-save tests check ground truth from the KŽ career saves of 2035-12-02 (`FM_REAL_SAVE`), 2035-12-09 (`FM_REAL_SAVE_9DEC`), 2035-12-14 (`FM_REAL_SAVE_14DEC`) and 2036-01-01 (`FM_REAL_SAVE_1JAN`); they skip when the variable is unset and fail when the save has another game date. Point them only at copies, never at the game's save folder.
 
 Layers: `internal/savefile` parses bytes, `internal/fm` is the domain model and queries, `internal/mcpserver` maps tools onto the domain, `cmd/fm-mcp` is the stdio entry point.

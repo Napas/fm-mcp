@@ -44,6 +44,19 @@ func TestTestSave27Clubs(t *testing.T) {
 	checkClubBudgets(t, db, 602, Budgets{Transfer: 152700000, WeeklyWage: 4940326})
 }
 
+// FM27 rates differ from FM26's (see "Currencies").
+func TestTestSave27Currencies(t *testing.T) {
+	for _, path := range []string{testSave27Path, testSave27bPath} {
+		t.Run(path, func(t *testing.T) {
+			db, err := ReadGameDB(openTestSaveAt(t, path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			checkCurrencyTable(t, db, 1.164101, 1.347619)
+		})
+	}
+}
+
 func TestTestSave27GameDBHeader(t *testing.T) {
 	a := openTestSaveAt(t, testSave27Path)
 	f, err := a.ReadFile("game_db.dat")
