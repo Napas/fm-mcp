@@ -316,7 +316,7 @@ func TestDatabaseVersionPicksTheRoleRules(t *testing.T) {
 	p.UID = 1
 	for version, want := range map[uint16]int{3733: 137, 3754: 143} {
 		g := NewGame(Info{Date: gameDate, DatabaseVersion: version}, []savefile.Player{p}, testWorld, PlayerExtras{})
-		if got := g.roleAbility(g.byUID[1], mustRole(t, "Winger"), positionAt(t, "AML")); got != want {
+		if got := g.roleAbility(inPossession, g.byUID[1], mustRole(t, "Winger"), positionAt(t, "AML")); got != want {
 			t.Errorf("database version %d: %d, want %d", version, got, want)
 		}
 	}
@@ -509,7 +509,7 @@ func TestRealSave14DecRoleAbility(t *testing.T) {
 			continue
 		}
 		for _, f := range w.roles {
-			if got := g.roleAbility(p, mustRole(t, f.role), positionAt(t, w.position)); got != f.ability {
+			if got := g.roleAbility(inPossession, p, mustRole(t, f.role), positionAt(t, w.position)); got != f.ability {
 				t.Errorf("%s: %s at %s %d, want %d", w.name, f.role, w.position, got, f.ability)
 			}
 		}

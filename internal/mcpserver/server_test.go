@@ -2547,8 +2547,8 @@ func TestBestXI(t *testing.T) {
 	h := tacticHarness(t)
 
 	var got fm.BestXI
-	args := map[string]any{"slots": []map[string]string{
-		{"position": "gk", "role": "ball-playing goalkeeper"},
+	args := map[string]any{"slots": []map[string]any{
+		{"position": "gk", "role": "ball-playing goalkeeper", "out_of_possession": map[string]string{"position": "GK", "role": "sweeper keeper"}},
 		{"position": "ST", "role": "Channel Forward"},
 	}}
 	if res := h.call("best_xi", args, &got); res.IsError {
@@ -2563,6 +2563,12 @@ func TestBestXI(t *testing.T) {
 			t.Errorf("slot %d = %+v", i, s)
 		}
 	}
+	if s := got.Slots[0]; s.OutOfPossession == nil || *s.OutOfPossession != (fm.SlotRole{Position: "GK", Role: "Sweeper Keeper"}) || s.Player.OutOfPossessionRoleAbility == nil {
+		t.Errorf("slot 0 out of possession = %+v, %+v", s.OutOfPossession, s.Player)
+	}
+	if got.Slots[1].OutOfPossession != nil || got.Slots[1].Player.OutOfPossessionRoleAbility != nil {
+		t.Errorf("slot 1 has out-of-possession parts: %+v", got.Slots[1])
+	}
 	if got.Slots[0].Player.UID == got.Slots[1].Player.UID {
 		t.Errorf("one player in both slots: %+v", got.Slots)
 	}
@@ -2576,6 +2582,7 @@ func TestBestXIErrors(t *testing.T) {
 	}{
 		{nil, "slot 1 has no named in-possession role; pass slots"},
 		{map[string]any{"slots": []map[string]string{{"position": "ST", "role": "Goalkeeper"}}}, `slot 0: in-possession role "Goalkeeper" is not offered at ST`},
+		{map[string]any{"slots": []map[string]any{{"position": "GK", "role": "Goalkeeper", "out_of_possession": map[string]string{"position": "ST", "role": "Goalkeeper"}}}}, `slot 0 out of possession: out-of-possession role "Goalkeeper" is not offered at ST`},
 		{map[string]any{"team_index": 1, "slots": []map[string]string{{"position": "GK", "role": "Goalkeeper"}}}, "no team with team_index 1"},
 	} {
 		if res := h.call("best_xi", tt.args, nil); !res.IsError || !strings.Contains(allText(res), tt.want) {
@@ -2595,7 +2602,7 @@ func TestBestXIIsExplained(t *testing.T) {
 	if i < 0 {
 		t.Fatal("no best_xi tool")
 	}
-	for _, want := range []string{"highest total role_ability", "starts_at_slot", "from_tactic", "left_out_injured", "hidden_by_fog", "out-of-possession roles", "duties"} {
+	for _, want := range []string{"highest total of role_ability and out_of_possession_role_ability", "out_of_possession", "starts_at_slot", "from_tactic", "left_out_injured", "hidden_by_fog", "duties"} {
 		if !strings.Contains(tools.Tools[i].Description, want) {
 			t.Errorf("best_xi description lacks %q", want)
 		}

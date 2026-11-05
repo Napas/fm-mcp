@@ -411,10 +411,10 @@ func (ph rolePhase) names(roles uint64) string {
 	return strings.Join(names, ", ")
 }
 
-// roleAbility is p's ability in an in-possession role at a position; role
+// roleAbility is p's ability in the phase's role at a position; the role
 // must have attributes.
-func (g *Game) roleAbility(p *Player, role uint64, at place) int {
-	v, _ := g.auxOf(p).roles.ability(role, at, g.roleRules)
+func (g *Game) roleAbility(ph rolePhase, p *Player, role uint64, at place) int {
+	v, _ := ph.ability(&g.auxOf(p).roles, role, at, g.roleRules)
 	return v
 }
 

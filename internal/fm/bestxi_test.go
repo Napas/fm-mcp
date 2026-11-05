@@ -32,8 +32,18 @@ func bestXIGame() *Game {
 	return NewGame(Info{Date: gameDate, ManagerTeamIndex: 547}, players, testWorld, PlayerExtras{})
 }
 
-var bestXITestSlots = []SlotRole{
-	{"GK", "", "Goalkeeper"}, {"DC", "left", "Centre-Back"}, {"DC", "right", "Centre-Back"}, {"DR", "", "Full-Back"},
+var bestXITestSlots = ipSlots(
+	SlotRole{"GK", "", "Goalkeeper"}, SlotRole{"DC", "left", "Centre-Back"},
+	SlotRole{"DC", "right", "Centre-Back"}, SlotRole{"DR", "", "Full-Back"},
+)
+
+// ipSlots are slots with in-possession roles only.
+func ipSlots(roles ...SlotRole) []XISlot {
+	out := make([]XISlot, len(roles))
+	for i, r := range roles {
+		out[i] = XISlot{SlotRole: r}
+	}
+	return out
 }
 
 func pickedUIDs(xi BestXI) []uint32 {
@@ -63,7 +73,7 @@ func TestBestXIFillsTheSlotsForTheHighestTotal(t *testing.T) {
 		t.Errorf("left out injured %+v, want %+v", xi.LeftOutInjured, want)
 	}
 	for i, s := range xi.Slots {
-		if s.Slot != i || s.SlotRole != bestXITestSlots[i] {
+		if s.Slot != i || s.SlotRole != bestXITestSlots[i].SlotRole || s.OutOfPossession != nil || s.Player.OutOfPossessionRoleAbility != nil {
 			t.Errorf("slot %d: %d %+v", i, s.Slot, s.SlotRole)
 		}
 		at, _ := placeOf(savefile.SlotRole{Position: mustSidedPosition(t, s.Position, s.Side)})
@@ -71,7 +81,7 @@ func TestBestXIFillsTheSlotsForTheHighestTotal(t *testing.T) {
 		if s.Player.StartsAtSlot != nil {
 			t.Errorf("slot %d: picked player starts at %d", i, *s.Player.StartsAtSlot)
 		}
-		if want := g.roleAbility(g.byUID[s.Player.UID], role, at); s.Player.RoleAbility != want {
+		if want := g.roleAbility(inPossession, g.byUID[s.Player.UID], role, at); s.Player.RoleAbility != want {
 			t.Errorf("slot %d: role ability %d, want %d", i, s.Player.RoleAbility, want)
 		}
 		checkAlternatives(t, i, s, pickedUIDs(xi))
@@ -125,7 +135,7 @@ func TestBestXICanIncludeInjuredPlayers(t *testing.T) {
 }
 
 func TestBestXILeavesSlotsEmptyWithoutPlayers(t *testing.T) {
-	slots := slices.Repeat([]SlotRole{{"ST", "", "Poacher"}}, 5)
+	slots := slices.Repeat(ipSlots(SlotRole{"ST", "", "Poacher"}), 5)
 	xi, err := bestXIGame().View(false).BestXI(XIRequest{TeamIndex: 547, Slots: slots})
 	if err != nil {
 		t.Fatal(err)
@@ -148,17 +158,124 @@ func TestBestXIDefaultsToTheCurrentTactic(t *testing.T) {
 	if got := pickedUIDs(xi); !xi.FromTactic || !slices.Equal(got, []uint32{1, 4}) {
 		t.Errorf("from tactic %v, picked %v; want true, [1 4]", xi.FromTactic, got)
 	}
+	// Slot 0's out-of-possession role is unnamed: in possession only.
+	if s := xi.Slots[0]; s.OutOfPossession != nil || s.Player.OutOfPossessionRoleAbility != nil {
+		t.Errorf("slot 0: %+v, %+v", s.OutOfPossession, s.Player)
+	}
+	if s := xi.Slots[1]; s.OutOfPossession == nil || *s.OutOfPossession != (SlotRole{"DR", "", "Full-Back"}) || s.Player.OutOfPossessionRoleAbility == nil {
+		t.Errorf("slot 1: %+v, %+v; want Full-Back at DR with its ability", s.OutOfPossession, s.Player)
+	}
 }
 
 func TestBestXIHidesPlayersFogOfWarHides(t *testing.T) {
 	// At Leeds (900), 3 and 5 are fully known; 4, 6 and 7 are not.
-	xi, err := fogGame().View(true).BestXI(XIRequest{TeamIndex: 900, Slots: []SlotRole{{"AMC", "", "Attacking Midfielder"}}})
+	xi, err := fogGame().View(true).BestXI(XIRequest{TeamIndex: 900, Slots: ipSlots(SlotRole{"AMC", "", "Attacking Midfielder"})})
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := xi.Slots[0]
 	if s.Player == nil || s.Player.UID != 5 || len(s.Alternatives) != 1 || s.Alternatives[0].UID != 3 || xi.HiddenByFog != 3 {
 		t.Errorf("picked %+v, alternatives %+v, hidden %d; want 5, [3], 3", s.Player, s.Alternatives, xi.HiddenByFog)
+	}
+}
+
+// oopRequest asks for one goalkeeper slot with this out-of-possession part.
+func oopRequest(oop SlotRole) XIRequest {
+	return XIRequest{TeamIndex: 547, Slots: []XISlot{{SlotRole: SlotRole{"GK", "", "Goalkeeper"}, OutOfPossession: &oop}}}
+}
+
+// TestBestXIScoresBothPhases: every attribute 50, a Winger at AMR who drops
+// to Wide Midfielder at MR. 1 (AMR 20, MR 1) plays his best role in
+// possession, 100, but rates 24 at MR, pulled up by (100 − 24) / (6 + 2) = 9
+// to 33: 33/100 × 100 = 33, total 133. 2 (AMR 20, MR 20) gets 90 + 90 = 180.
+func TestBestXIScoresBothPhases(t *testing.T) {
+	g := NewGame(Info{Date: gameDate, ManagerTeamIndex: 547}, []savefile.Player{
+		uniformSquadPlayer(1, 100, map[string]uint8{"AMR": 20}),
+		uniformSquadPlayer(2, 90, map[string]uint8{"AMR": 20, "MR": 20}),
+	}, testWorld, PlayerExtras{})
+	oop := SlotRole{"MR", "", "wide midfielder"}
+	xi, err := g.View(false).BestXI(XIRequest{TeamIndex: 547, Slots: []XISlot{{SlotRole: SlotRole{"AMR", "", "Winger"}, OutOfPossession: &oop}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := xi.Slots[0]
+	if s.OutOfPossession == nil || *s.OutOfPossession != (SlotRole{"MR", "", "Wide Midfielder"}) {
+		t.Errorf("out of possession %+v, want Wide Midfielder at MR", s.OutOfPossession)
+	}
+	abilities := func(p XIPlayer) [3]int {
+		oop := -1
+		if p.OutOfPossessionRoleAbility != nil {
+			oop = *p.OutOfPossessionRoleAbility
+		}
+		return [3]int{int(p.UID), p.RoleAbility, oop}
+	}
+	if s.Player == nil || abilities(*s.Player) != [3]int{2, 90, 90} || len(s.Alternatives) != 1 || abilities(s.Alternatives[0]) != [3]int{1, 100, 33} {
+		t.Errorf("picked %+v, alternatives %+v; want 2 (90, 90), then 1 (100, 33)", s.Player, s.Alternatives)
+	}
+}
+
+// TestBestXIWeighsSlotsAlike: an in-possession-only slot counts its role
+// ability twice, like a slot with both phases. Every attribute 50; 1 (CA
+// 100, GK 20, ST 20) gets 100 everywhere; 2 (CA 80, GK 15, ST 20) gets 76 in
+// goal (rating 95 of 100, no FM26 pull-up at 15) and 80 + 80 up front. 1 in
+// goal totals 2 × 100 + 160 = 360 against 2 × 76 + 200 = 352; counting the
+// goalkeeper once would put 2 in goal (276 against 260).
+func TestBestXIWeighsSlotsAlike(t *testing.T) {
+	g := NewGame(Info{Date: gameDate, ManagerTeamIndex: 547}, []savefile.Player{
+		uniformSquadPlayer(1, 100, map[string]uint8{"GK": 20, "ST": 20}),
+		uniformSquadPlayer(2, 80, map[string]uint8{"GK": 15, "ST": 20}),
+	}, testWorld, PlayerExtras{})
+	cf := SlotRole{"ST", "", "Centre-Forward"}
+	xi, err := g.View(false).BestXI(XIRequest{TeamIndex: 547, Slots: []XISlot{
+		{SlotRole: SlotRole{"GK", "", "Goalkeeper"}}, {SlotRole: SlotRole{"ST", "", "Poacher"}, OutOfPossession: &cf},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pickedUIDs(xi); !slices.Equal(got, []uint32{1, 2}) {
+		t.Errorf("picked %v, want [1 2]", got)
+	}
+	if a := xi.Slots[0].Alternatives; len(a) != 1 || a[0].RoleAbility != 76 {
+		t.Errorf("goalkeeper alternatives %+v, want 2 at 76", a)
+	}
+}
+
+// TestBestXIUsesTheSlotsSide: every attribute 50, DM 15 and WBL 20. As a
+// Wide Covering Defensive Midfielder at DM left he blends with WBL to 17:
+// rating 97, pulled up to 98 of his best 100. At DM right (WBR 1) or without
+// a side he rates 95, pulled up to 97; search_players takes the better side.
+func TestBestXIUsesTheSlotsSide(t *testing.T) {
+	g := NewGame(Info{Date: gameDate, ManagerTeamIndex: 547}, []savefile.Player{
+		uniformSquadPlayer(1, 100, map[string]uint8{"DM": 15, "WBL": 20}),
+	}, testWorld, PlayerExtras{})
+	v := g.View(false)
+	for side, want := range map[string]int{"left": 98, "right": 97, "": 97} {
+		oop := SlotRole{"DM", side, "Wide Covering Defensive Midfielder"}
+		xi, err := v.BestXI(XIRequest{TeamIndex: 547, Slots: []XISlot{{SlotRole: SlotRole{"DM", side, "Defensive Midfielder"}, OutOfPossession: &oop}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if a := xi.Slots[0].Player.OutOfPossessionRoleAbility; a == nil || *a != want {
+			t.Errorf("side %q: %v, want %d", side, a, want)
+		}
+	}
+	// In possession, DC 15, DL 20: Wide Centre-Back on the left blends to 17,
+	// rating 97 of 100 (no FM26 pull-up at 15); on the right (DR 1) 95.
+	wcb := NewGame(Info{Date: gameDate, ManagerTeamIndex: 547}, []savefile.Player{
+		uniformSquadPlayer(1, 100, map[string]uint8{"DC": 15, "DL": 20}),
+	}, testWorld, PlayerExtras{}).View(false)
+	for side, want := range map[string]int{"left": 97, "right": 95} {
+		xi, err := wcb.BestXI(XIRequest{TeamIndex: 547, Slots: ipSlots(SlotRole{"DC", side, "Wide Centre-Back"})})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := xi.Slots[0].Player.RoleAbility; got != want {
+			t.Errorf("Wide Centre-Back at DC %s: %d, want %d", side, got, want)
+		}
+	}
+	res, _ := v.Search(Filter{Position: "DM", OutOfPossessionRole: "Wide Covering Defensive Midfielder"})
+	if got := oopRoleAbilities(res.Players); !slices.Equal(got, []int{98}) {
+		t.Errorf("search_players: %v, want [98]", got)
 	}
 }
 
@@ -179,11 +296,15 @@ func TestBestXIRejectsBadRequests(t *testing.T) {
 		{"unnamed role", unnamed, XIRequest{TeamIndex: 547}, "slot 0 has no named in-possession role"},
 		{"unknown team", g, XIRequest{TeamIndex: 1, Slots: bestXITestSlots}, "no team with team_index 1"},
 		{"too many slots", g, XIRequest{TeamIndex: 547, Slots: slices.Repeat(bestXITestSlots, 3)}, "at most 11 slots"},
-		{"position", g, XIRequest{TeamIndex: 547, Slots: []SlotRole{{"XX", "", "Goalkeeper"}}}, `slot 0: position "XX"`},
-		{"side", g, XIRequest{TeamIndex: 547, Slots: []SlotRole{{"DC", "middle", "Centre-Back"}}}, `slot 0: side "middle"`},
-		{"side of a single position", g, XIRequest{TeamIndex: 547, Slots: []SlotRole{{"GK", "left", "Goalkeeper"}}}, `slot 0: side "left"; only DC, DM, MC, AMC and ST take left or right`},
-		{"no role", g, XIRequest{TeamIndex: 547, Slots: []SlotRole{{Position: "GK"}}}, "slot 0 has no role; pass an in-possession role offered at GK"},
-		{"role", g, XIRequest{TeamIndex: 547, Slots: []SlotRole{{"GK", "", "Goalkeeper"}, {"ST", "", "Goalkeeper"}}}, `slot 1: in-possession role "Goalkeeper" is not offered at ST`},
+		{"position", g, XIRequest{TeamIndex: 547, Slots: ipSlots(SlotRole{"XX", "", "Goalkeeper"})}, `slot 0: position "XX"`},
+		{"side", g, XIRequest{TeamIndex: 547, Slots: ipSlots(SlotRole{"DC", "middle", "Centre-Back"})}, `slot 0: side "middle"`},
+		{"side of a single position", g, XIRequest{TeamIndex: 547, Slots: ipSlots(SlotRole{"GK", "left", "Goalkeeper"})}, `slot 0: side "left"; only DC, DM, MC, AMC and ST take left or right`},
+		{"no role", g, XIRequest{TeamIndex: 547, Slots: ipSlots(SlotRole{Position: "GK"})}, "slot 0 has no in-possession role; pass one offered at GK"},
+		{"role", g, XIRequest{TeamIndex: 547, Slots: ipSlots(SlotRole{"GK", "", "Goalkeeper"}, SlotRole{"ST", "", "Goalkeeper"})}, `slot 1: in-possession role "Goalkeeper" is not offered at ST`},
+		{"out-of-possession position", g, oopRequest(SlotRole{"XX", "", "Goalkeeper"}), `slot 0 out of possession: position "XX"`},
+		{"out-of-possession side", g, oopRequest(SlotRole{"GK", "left", "Goalkeeper"}), `slot 0 out of possession: side "left"`},
+		{"no out-of-possession role", g, oopRequest(SlotRole{Position: "GK"}), "slot 0 has no out-of-possession role; pass one offered at GK"},
+		{"out-of-possession role", g, oopRequest(SlotRole{"ST", "", "Goalkeeper"}), `slot 0 out of possession: out-of-possession role "Goalkeeper" is not offered at ST`},
 	} {
 		_, err := tt.g.View(false).BestXI(tt.r)
 		if !errors.Is(err, ErrInvalidFilter) || !strings.Contains(err.Error(), tt.want) {
@@ -193,8 +314,8 @@ func TestBestXIRejectsBadRequests(t *testing.T) {
 }
 
 // TestLoadTestSave27bBestXI checks the KŽ tactic's best XI: 11 distinct
-// squad players, with a total role ability no lower than that of the last
-// match's XI in the same slots.
+// squad players, with a total role ability in and out of possession no
+// lower than that of the last match's XI in the same slots.
 func TestLoadTestSave27bBestXI(t *testing.T) {
 	g := loadTestSaveAt(t, testSave27bPath, LoadOptions{})
 	v := g.View(false)
@@ -207,18 +328,45 @@ func TestLoadTestSave27bBestXI(t *testing.T) {
 		t.Fatalf("from tactic %v, %d slots", xi.FromTactic, len(xi.Slots))
 	}
 	seen := map[uint32]bool{}
-	total, lastTotal := 0, 0
+	total, lastTotal := 0, 0 // in and out of possession
 	for i, s := range xi.Slots {
 		if s.Player == nil || seen[s.Player.UID] || !g.byUID[s.Player.UID].plays(kzTeam27) {
 			t.Fatalf("slot %d: %+v", i, s.Player)
 		}
 		seen[s.Player.UID] = true
-		total += s.Player.RoleAbility
-		if a := tac.Slots[i].RoleAbility; a != nil && g.byUID[tac.Slots[i].Player.UID].plays(kzTeam27) {
-			lastTotal += *a
+		if s.OutOfPossession == nil || s.Player.OutOfPossessionRoleAbility == nil {
+			t.Fatalf("slot %d: no out-of-possession role ability: %+v", i, s)
+		}
+		if s.SlotRole != tac.Slots[i].InPossession || *s.OutOfPossession != tac.Slots[i].OutOfPossession {
+			t.Errorf("slot %d: %+v → %+v, tactic %+v → %+v", i, s.SlotRole, *s.OutOfPossession, tac.Slots[i].InPossession, tac.Slots[i].OutOfPossession)
+		}
+		total += s.Player.RoleAbility + *s.Player.OutOfPossessionRoleAbility
+		last := tac.Slots[i]
+		if a, oop := last.RoleAbility, last.OutOfPossessionRoleAbility; a != nil && oop != nil && g.byUID[last.Player.UID].plays(kzTeam27) {
+			lastTotal += *a + *oop
 		}
 	}
 	if total < lastTotal {
 		t.Errorf("total role ability %d, below the last match's %d", total, lastTotal)
+	}
+	// A player best_xi lists in his last-match slot gets get_tactic's values.
+	matched := 0
+	for i, s := range xi.Slots {
+		last := tac.Slots[i]
+		if last.Player == nil || last.RoleAbility == nil || last.OutOfPossessionRoleAbility == nil {
+			continue
+		}
+		for _, p := range append([]XIPlayer{*s.Player}, s.Alternatives...) {
+			if p.UID != last.Player.UID {
+				continue
+			}
+			matched++
+			if p.RoleAbility != *last.RoleAbility || *p.OutOfPossessionRoleAbility != *last.OutOfPossessionRoleAbility {
+				t.Errorf("slot %d, %s: %d and %d, get_tactic %d and %d", i, p.Name, p.RoleAbility, *p.OutOfPossessionRoleAbility, *last.RoleAbility, *last.OutOfPossessionRoleAbility)
+			}
+		}
+	}
+	if matched == 0 {
+		t.Error("no last-match player among the picks and alternatives")
 	}
 }
