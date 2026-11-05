@@ -1907,13 +1907,13 @@ func TestGetTacticIsExplained(t *testing.T) {
 	if i < 0 {
 		t.Fatal("no get_tactic tool")
 	}
-	for _, want := range []string{"lineup_source", "search_players", "squad_depth", "guesses", lastMatchCaveat, `"none"`, "may belong to another of his teams", "roles FM26 renamed", "unnamed_player"} {
+	for _, want := range []string{"lineup_source", "search_players", "squad_depth", "guesses", lastMatchCaveat, tacticPairing, `"none"`, "may belong to another of his teams", "roles FM26 renamed", "unnamed_player"} {
 		if !strings.Contains(tools.Tools[i].Description, want) {
 			t.Errorf("get_tactic description lacks %q", want)
 		}
 	}
 	text := h.session.InitializeResult().Instructions
-	for _, want := range []string{"get_tactic", `"last_match"`, "in_possession", "out_of_possession", lastMatchCaveat, `"none"`, "may belong to another of his teams"} {
+	for _, want := range []string{"get_tactic", `"last_match"`, "in_possession", "out_of_possession", lastMatchCaveat, tacticPairing, `"none"`, "may belong to another of his teams"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("instructions lack %q", want)
 		}
@@ -1934,6 +1934,14 @@ func TestGetTacticIsExplained(t *testing.T) {
 // lastMatchCaveat is the get_tactic description's and instructions' caveat on
 // last-match slots.
 const lastMatchCaveat = "placing the last match's players in this tactic's slots assumes that match used this tactic"
+
+// get_tactic pairs out-of-possession positions as the Tactics screen does,
+// get_last_lineup as the match report; they differ for slots 6 to 8 on
+// data/test_save_27b.fm.
+const (
+	tacticPairing     = "for where the last match's players played out of possession, use get_last_lineup"
+	lastLineupPairing = "as the game's match report shows (checked in game for one FM27 match); get_tactic shows the current tactic's pairing"
+)
 
 // lastLineupHarness serves Spurs' last match against Chelsea with
 // spursLineup in a 4-4-2, shirt numbers Sami 88, Ly 1 and Forster 30, and
@@ -2018,13 +2026,13 @@ func TestGetLastLineupIsExplained(t *testing.T) {
 		t.Fatal("no get_last_lineup tool")
 	}
 	for _, want := range []string{"lineup, formation and roles", "most recent match", "who it played", "no duty", "date is not known", "Fog of war does not hide it",
-		"shirt_number", "unnamed_player", "Names of roles FM26 renamed are guesses", "stored order"} {
+		"shirt_number", "unnamed_player", "Names of roles FM26 renamed are guesses", lastLineupPairing} {
 		if !strings.Contains(tools.Tools[i].Description, want) {
 			t.Errorf("get_last_lineup description lacks %q", want)
 		}
 	}
 	text := h.session.InitializeResult().Instructions
-	for _, want := range []string{"get_last_lineup", "opponent_team_index", "in_possession_shape", "no duty", "date is not known", "shirt_number", "unnamed_player", "stored order"} {
+	for _, want := range []string{"get_last_lineup", "opponent_team_index", "in_possession_shape", "no duty", "date is not known", "shirt_number", "unnamed_player", lastLineupPairing} {
 		if !strings.Contains(text, want) {
 			t.Errorf("instructions lack %q", want)
 		}

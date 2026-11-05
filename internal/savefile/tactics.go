@@ -174,9 +174,8 @@ type LastLineup struct {
 }
 
 // Formation is a last-match formation. Slots[i] is Players[i]'s in-possession
-// slot. Out-of-possession positions are in stored order, so after 27.0.0
-// tactic edits Slots[i] may hold another player's; the game's pairing is not
-// checked. Roles have no duty bit.
+// slot, out-of-possession position included: the record has no slot numbers,
+// so positions pair in stored order. Roles have no duty bit.
 type Formation struct {
 	// Mentality is the game's Mentality enum.
 	Mentality uint8
