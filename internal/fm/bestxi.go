@@ -11,10 +11,16 @@ import (
 // XIRequest asks for a team's best XI.
 type XIRequest struct {
 	TeamIndex int64
-	// Slots are the positions and in-possession roles to fill, at most 11;
-	// none means the current tactic's.
-	Slots          []SlotRole
+	// Slots: at most 11; none means the current tactic's.
+	Slots          []XISlot
 	IncludeInjured bool
+}
+
+// XISlot is a slot's in-possession position and role, and optionally its
+// out-of-possession ones.
+type XISlot struct {
+	SlotRole
+	OutOfPossession *SlotRole `json:"out_of_possession,omitempty"`
 }
 
 // BestXI places a team's players in slots for the highest total role ability.
@@ -34,7 +40,7 @@ type BestXI struct {
 // next best candidates.
 type XIPick struct {
 	Slot int `json:"slot"`
-	SlotRole
+	XISlot
 	Player       *XIPlayer  `json:"player,omitempty"`
 	Alternatives []XIPlayer `json:"alternatives,omitempty"`
 }
@@ -46,12 +52,14 @@ type PlayerRef struct {
 
 func refOf(p *Player) PlayerRef { return PlayerRef{UID: p.UID, Name: p.Name} }
 
-// XIPlayer is a player with his role ability in a slot. StartsAtSlot is set
-// on an alternative the XI starts elsewhere.
+// XIPlayer is a player with his role abilities in a slot. The
+// out-of-possession one is nil without an out-of-possession role.
+// StartsAtSlot is set on an alternative the XI starts elsewhere.
 type XIPlayer struct {
 	PlayerRef
-	RoleAbility  int  `json:"role_ability"`
-	StartsAtSlot *int `json:"starts_at_slot,omitempty"`
+	RoleAbility                int  `json:"role_ability"`
+	OutOfPossessionRoleAbility *int `json:"out_of_possession_role_ability,omitempty"`
+	StartsAtSlot               *int `json:"starts_at_slot,omitempty"`
 }
 
 const xiAlternatives = 3
@@ -59,7 +67,13 @@ const xiAlternatives = 3
 // xiTarget is a slot to fill.
 type xiTarget struct {
 	slot int
-	show SlotRole
+	show XISlot
+	ip   phaseTarget
+	oop  *phaseTarget // nil: in possession only
+}
+
+// phaseTarget is a slot's role and place in one phase.
+type phaseTarget struct {
 	role uint64
 	at   place
 }
@@ -88,11 +102,21 @@ func (v View) BestXI(r XIRequest) (BestXI, error) {
 			squad = append(squad, x.p)
 		}
 	}
-	score := make([][]int, len(targets))
+	// cands[i][j] is squad[j] in targets[i]; score[i][j] is his total.
+	cands, score := make([][]XIPlayer, len(targets)), make([][]int, len(targets))
 	for i, t := range targets {
-		score[i] = make([]int, len(squad))
+		cands[i], score[i] = make([]XIPlayer, len(squad)), make([]int, len(squad))
 		for j, p := range squad {
-			score[i][j] = v.g.roleAbility(p, t.role, t.at)
+			c := XIPlayer{PlayerRef: refOf(p), RoleAbility: v.g.roleAbility(inPossession, p, t.ip.role, t.ip.at)}
+			// A slot without an out-of-possession role counts its role
+			// ability twice, on the same scale as one with both.
+			score[i][j] = 2 * c.RoleAbility
+			if t.oop != nil {
+				a := v.g.roleAbility(outOfPossession, p, t.oop.role, t.oop.at)
+				c.OutOfPossessionRoleAbility = &a
+				score[i][j] = c.RoleAbility + a
+			}
+			cands[i][j] = c
 		}
 	}
 	picks := assign(score)
@@ -102,18 +126,15 @@ func (v View) BestXI(r XIRequest) (BestXI, error) {
 			startsAt[j] = targets[i].slot
 		}
 	}
-	player := func(i, j int) XIPlayer {
-		return XIPlayer{PlayerRef: refOf(squad[j]), RoleAbility: score[i][j]}
-	}
 	out.Slots = make([]XIPick, len(targets))
 	for i, t := range targets {
-		pick := XIPick{Slot: t.slot, SlotRole: t.show}
+		pick := XIPick{Slot: t.slot, XISlot: t.show}
 		if j := picks[i]; j >= 0 {
-			p := player(i, j)
+			p := cands[i][j]
 			pick.Player = &p
 		}
 		for _, j := range bestOthers(score[i], picks[i], xiAlternatives) {
-			a := player(i, j)
+			a := cands[i][j]
 			if s, ok := startsAt[j]; ok {
 				a.StartsAtSlot = &s
 			}
@@ -165,7 +186,11 @@ func (g *Game) xiTargets(r XIRequest) ([]xiTarget, bool, error) {
 		if s.InPossession.Role == "" {
 			return nil, false, fmt.Errorf("%w: slot %d has no named in-possession role; pass slots", ErrInvalidFilter, s.Slot)
 		}
-		t, err := xiTargetOf(s.Slot, s.InPossession)
+		slot := XISlot{SlotRole: s.InPossession}
+		if s.OutOfPossession.Role != "" {
+			slot.OutOfPossession = &s.OutOfPossession
+		}
+		t, err := xiTargetOf(s.Slot, slot)
 		if err != nil {
 			return nil, false, fmt.Errorf("%w; pass slots", err)
 		}
@@ -174,10 +199,31 @@ func (g *Game) xiTargets(r XIRequest) ([]xiTarget, bool, error) {
 	return out, true, nil
 }
 
-// xiTargetOf checks slot n's position, side and role.
-func xiTargetOf(n int, s SlotRole) (xiTarget, error) {
-	invalid := func(err error) (xiTarget, error) {
-		return xiTarget{}, fmt.Errorf("%w: slot %d: %w", ErrInvalidFilter, n, err)
+// xiTargetOf checks slot n's positions, sides and roles.
+func xiTargetOf(n int, s XISlot) (xiTarget, error) {
+	t := xiTarget{slot: n}
+	var err error
+	if t.ip, t.show.SlotRole, err = phaseTargetOf(inPossession, n, s.SlotRole); err != nil {
+		return xiTarget{}, err
+	}
+	if s.OutOfPossession != nil {
+		oop, show, err := phaseTargetOf(outOfPossession, n, *s.OutOfPossession)
+		if err != nil {
+			return xiTarget{}, err
+		}
+		t.oop, t.show.OutOfPossession = &oop, &show
+	}
+	return t, nil
+}
+
+// phaseTargetOf checks slot n's position, side and role in one phase.
+func phaseTargetOf(ph rolePhase, n int, s SlotRole) (phaseTarget, SlotRole, error) {
+	where := ""
+	if ph.name == outOfPossession.name {
+		where = " out of possession"
+	}
+	invalid := func(err error) (phaseTarget, SlotRole, error) {
+		return phaseTarget{}, SlotRole{}, fmt.Errorf("%w: slot %d%s: %w", ErrInvalidFilter, n, where, err)
 	}
 	pos, err := positionNamed(s.Position)
 	if err != nil {
@@ -185,17 +231,17 @@ func xiTargetOf(n int, s SlotRole) (xiTarget, error) {
 	}
 	code := savefile.PositionNames[pos]
 	if s.Role == "" {
-		return xiTarget{}, fmt.Errorf("%w: slot %d has no role; pass an in-possession role offered at %s", ErrInvalidFilter, n, code)
+		return phaseTarget{}, SlotRole{}, fmt.Errorf("%w: slot %d has no %s role; pass one offered at %s", ErrInvalidFilter, n, ph.name, code)
 	}
 	mask, ok := savefile.SidedPosition(code, s.Side)
 	if !ok {
 		return invalid(fmt.Errorf("side %q; only DC, DM, MC, AMC and ST take left or right, others none", s.Side))
 	}
-	role, err := offeredRole(inPossession, s.Role, pos)
+	role, err := offeredRole(ph, s.Role, pos)
 	if err != nil {
 		return invalid(err)
 	}
-	name, _ := savefile.InPossessionRoleName(role)
+	name, _ := ph.nameOf(role)
 	show := SlotRole{Position: code, Side: savefile.SlotRole{Position: mask}.Side(), Role: name}
-	return xiTarget{slot: n, show: show, role: role, at: place{index: pos, mask: mask}}, nil
+	return phaseTarget{role: role, at: place{index: pos, mask: mask}}, show, nil
 }
