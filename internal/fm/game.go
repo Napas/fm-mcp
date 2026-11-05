@@ -31,6 +31,7 @@ type Info struct {
 	ManagerClub      string    `json:"manager_club,omitempty"`
 	Warnings         []string  `json:"warnings,omitempty"` // data that could not be decoded
 	Money            Money     `json:"-"`                  // the user's currency and wage period
+	DatabaseVersion  uint16    `json:"-"`                  // game_db.dat's; identifies the build
 }
 
 // Game holds the players of one save and answers queries over them.
@@ -47,7 +48,8 @@ type Game struct {
 	lastLineups map[int32]savefile.LastLineup
 	// lineupPlayers: players of the selection and last lineups by person index.
 	lineupPlayers map[uint32]*Player
-	aux           []playerAux     // by Player.auxIdx
+	aux           []playerAux // by Player.auxIdx
+	roleRules     roleRules
 	hasSeason     bool            // false when the save's season stats could not be read
 	hasFixtures   bool            // false when fix_man.dat could not be read
 	hasTables     bool            // false when the comp files could not be read
@@ -93,6 +95,7 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 		world: w, teamNames: make(map[int64][]string, len(w.Teams)), calledUp: make(map[int64]bool),
 		aux: make([]playerAux, 0, len(raw)), hasSeason: extras.Season != nil,
 		hasFixtures: extras.Fixtures != nil, hasTables: extras.Tables != nil,
+		roleRules: roleRulesFor(info.DatabaseVersion),
 	}
 	for i, t := range w.Teams {
 		g.teamNames[i] = nameWords(t.Name, t.ShortName)
@@ -122,7 +125,7 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 		}
 	}
 	maps.DeleteFunc(inLineup, func(_ uint32, p *Player) bool { return p == nil })
-	g.tactic = newTactic(extras.Tactics, w, inLineup, g.aux)
+	g.tactic = newTactic(extras.Tactics, w, inLineup, g.aux, g.roleRules)
 	g.lineupPlayers = inLineup
 	if extras.Tactics != nil {
 		g.lastLineups = extras.Tactics.LastLineups

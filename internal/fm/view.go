@@ -159,7 +159,7 @@ func (v View) Profile(uid uint32) (Profile, bool) {
 	out := v.profile(x)
 	out.Interest = v.g.interestOf(p)
 	if x.s.full() {
-		out.BestRoles = v.g.auxOf(p).roles.bestRoles()
+		out.BestRoles = v.g.auxOf(p).roles.bestRoles(v.g.roleRules)
 	}
 	return out, true
 }

@@ -24,7 +24,7 @@ Unset dates are saved in 1900. Seen: joined dates of 1900-01-01 on loanees and f
 | [`injuries.md`](format/injuries.md) | injury_manager.dat queues, INJURY table (player injury items are in players.md) | injury_manager.dat; Injury types (INJURY) |
 | [`transfers.md`](format/transfers.md) | TRANSFER records, arranged moves, 27.0.0 records | transfer_man.dat; 27.0.0 records |
 | [`tactics.md`](format/tactics.md) | tactics grammar, roles/positions enums, last lineups, formations, shirt numbers, 27.0.0 changes | tactics_man.dat; Last lineup; 27.0.0 tactics |
-| [`role-ability.md`](format/role-ability.md) | role attribute lists, role rating, best role, role ability, stars, out-of-possession table | Role ability (game code) |
+| [`role-ability.md`](format/role-ability.md) | role attribute lists, role rating, best role, role ability, stars, out-of-possession table, 27.0.0 rule changes | Role ability (game code); 27.0.0 role ability |
 | [`player-interest.md`](format/player-interest.md) | interest filter, hard gates, just-joined penalty, reputation gap, playing-time value, verdicts | Player interest (game code) |
 | [`player-stats.md`](format/player-stats.md) | season stats: totals, 60 detail fields, goalkeeper split, scopes/slots, rollover, 27.0.0 scope block | rgman/player_stats.dat; 27.0.0 scope block |
 | [`game-db.md`](format/game-db.md) | game_db header, table template, name tables, person table and record tags, trailer flags | game_db.dat; 27.0.0 header; Person name tables; Person table |
