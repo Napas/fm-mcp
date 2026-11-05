@@ -68,8 +68,8 @@ func TestLoadTestSave27bTactic(t *testing.T) {
 	if p := tac.Slots[0].Player; p == nil || p.Name != "Deividas Mikelionis" {
 		t.Errorf("goalkeeper %+v, want Deividas Mikelionis", p)
 	}
-	// As in game (2026-01-23): Slivka and Kalik drop to the two CMs, Fiolić
-	// to wide midfield.
+	// As on the Tactics screen (2026-01-23, by role): the CM and AM drop to
+	// the two CMs, the winger to wide midfield.
 	for i, want := range map[int]struct{ ip, oop SlotRole }{
 		6: {SlotRole{"MC", "right", "Central Midfielder"}, SlotRole{"MC", "right", "Central Midfielder"}},
 		7: {SlotRole{"MC", "left", "Attacking Midfielder"}, SlotRole{"MC", "left", "Central Midfielder"}},
@@ -83,8 +83,23 @@ func TestLoadTestSave27bTactic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if l.Opponent != "FK Banga" || l.InPossessionShape != "4-1-2-2-1" || l.Slots[0].Player == nil || l.Slots[0].Player.ShirtNumber != 1 {
-		t.Errorf("last lineup against %q, shape %q, goalkeeper %+v", l.Opponent, l.InPossessionShape, l.Slots[0].Player)
+	if l.Opponent != "FK Banga" || l.InPossessionShape != "4-1-2-2-1" || l.OutOfPossessionShape != "4-1-4-1" || l.Slots[0].Player == nil || l.Slots[0].Player.ShirtNumber != 1 {
+		t.Errorf("last lineup against %q, shapes %q / %q, goalkeeper %+v", l.Opponent, l.InPossessionShape, l.OutOfPossessionShape, l.Slots[0].Player)
+	}
+	// As the match report's OOP view shows (2026-01-23): the last match pairs
+	// slots 6 to 8 as stored, unlike the tactic.
+	for i, want := range map[int]struct {
+		name string
+		oop  SlotRole
+	}{
+		6: {"Vykintas Slivka", SlotRole{"MR", "", "Wide Midfielder"}},
+		7: {"Anthony Kalik", SlotRole{"MC", "right", "Central Midfielder"}},
+		8: {"Ivan Fiolić", SlotRole{"MC", "left", "Central Midfielder"}},
+		9: {"Leon Kreković", SlotRole{"ML", "", "Wide Midfielder"}},
+	} {
+		if s := l.Slots[i]; s.Player == nil || s.Player.Name != want.name || s.OutOfPossession != want.oop {
+			t.Errorf("last lineup slot %d: %+v → %+v, want %s → %+v", i, s.Player, s.OutOfPossession, want.name, want.oop)
+		}
 	}
 }
 

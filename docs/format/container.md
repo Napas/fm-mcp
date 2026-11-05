@@ -90,12 +90,12 @@ Checks:
   - Club budgets: "27.0.0 club layout" in clubs.md.
   - Season stats (Deividas Mikelionis's friendly against FK Banga): "27.0.0 scope block" in player-stats.md.
   - Joined date: "27.0.0 joined date" in players.md.
-  - Tactic and KŽ's last-match XI: "27.0.0 tactics" in tactics.md.
+  - Tactic and KŽ's last-match XI, out-of-possession pairing included: "27.0.0 tactics" in tactics.md.
   - KŽ squad (screens of 2026-11-05, same save): the squad numbers of all 25 first-team players (none for Tanghe and Konatar); Anton Tolordava's 36 visible attributes, birth date, height, personality, wage, contract dates, playing time, bonuses (appearance €123, clean sheet €115, unused substitute €30, loyalty €1 397), the 25 % relegation wage drop and his injury name; Léo Ribeiro's personality, injury name, wage, contract dates and playing time.
   - Reputation level and B team (screens of 2026-11-05): Davis Akusobi plays for Kauno Žalgiris B, Haris Kadrić is on loan at FK Novi Pazar, as in `fm`; both are National ("27.0.0 national-team containers" in nations.md). The game's senior squad list is `get_squad`'s 25 players plus Kadrić, in red as out on loan; `get_squad` lists him under its loanees ("Squad lists" open question in clubs.md).
   - Display rounding: Davis Akusobi's wage and Anton Tolordava's bonuses ("Display rounding" in currencies.md).
   - Fixtures: KŽ's 0–3 friendly against FK Banga on 2026-01-20 and its next 11 fixtures (dates, opponents, venues, competitions).
-- Not checked in game in 27.0.0: everything not listed above, including hidden attributes and the rest of the BASIC part, nations and reputations beyond the two players above, fog of war, media handling, relationships, traits, the out-of-possession pairing of last-match formations, other teams' fixtures, league tables, competition and stage names, injury dates, player values (the profile shows a Guide Value range instead; "27.0.0 Guide Value" in players.md), transfer records beyond the arranged status, and the season stats not on the screen above. Role ratings and interest follow 26.3.2 game code.
+- Not checked in game in 27.0.0: everything not listed above, including hidden attributes and the rest of the BASIC part, nations and reputations beyond the two players above, fog of war, media handling, relationships, traits, out-of-possession pairing in other teams' and later last-match formations, other teams' fixtures, league tables, competition and stage names, injury dates, player values (the profile shows a Guide Value range instead; "27.0.0 Guide Value" in players.md), transfer records beyond the arranged status, and the season stats not on the screen above. Role ratings and interest follow 26.3.2 game code.
 
 ## Open questions
 
