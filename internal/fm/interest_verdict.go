@@ -220,7 +220,8 @@ func (g *Game) gateFactor(c interestCase) *InterestFactor {
 	case FactorTransferArranged:
 		a := c.in.arranged
 		text := "Has agreed a move to " + g.world.teamName(int64(a.team))
-		if !a.date.IsZero() {
+		// The game shows its own later date for a past one, so omit it.
+		if !a.date.IsZero() && !a.date.Before(g.Info.Date) {
 			text += " on " + a.date.Format(interestDateLayout)
 		}
 		return &InterestFactor{c.gate, text}
