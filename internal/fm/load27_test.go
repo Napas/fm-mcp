@@ -79,6 +79,13 @@ func TestLoadTestSave27bTactic(t *testing.T) {
 			t.Errorf("slot %d: %+v → %+v, want %+v → %+v", i, s.InPossession, s.OutOfPossession, want.ip, want.oop)
 		}
 	}
+	// By hand (0x4918654): Baldassarra 115 → 119 of 124, Kalik 111 → 117 of
+	// 124, both ability 110. The 26.3.2 rules give 102 and 98.
+	for i, want := range map[int]int{5: 105, 7: 103} {
+		if a := tac.Slots[i].RoleAbility; a == nil || *a != want {
+			t.Errorf("slot %d: role ability %v, want %d", i, a, want)
+		}
+	}
 	l, err := v.LastLineup(kzTeam27)
 	if err != nil {
 		t.Fatal(err)

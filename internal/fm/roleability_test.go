@@ -268,20 +268,57 @@ func TestBestRoleRating(t *testing.T) {
 func TestRoleAbility(t *testing.T) {
 	in := newRoleInputs(roleTestPlayer(50, "Inside Forward", 70, map[string]uint8{"AML": 20, "AMR": 14}))
 	for _, tt := range []struct {
+		rules     roleRules
 		role, pos string
 		want      int
 	}{
-		{"Inside Forward", "AML", 150}, // the best role: current ability
-		{"Inside Forward", "AMR", 135}, // AMR 14: raised towards the best before scaling
-		{"Winger", "AML", 137},
-		{"Goalkeeper", "AML", 118},
+		{roleRules26, "Inside Forward", "AML", 150}, // the best role: current ability
+		{roleRules26, "Inside Forward", "AMR", 135}, // AMR 14: raised towards the best before scaling
+		{roleRules26, "Winger", "AML", 137},
+		{roleRules26, "Goalkeeper", "AML", 118},
+		{roleRules27, "Inside Forward", "AML", 150},
+		{roleRules27, "Inside Forward", "AMR", 135},
+		{roleRules27, "Winger", "AML", 143},     // r 121 → 126 of 132: 126/132 × 150
+		{roleRules27, "Goalkeeper", "AML", 128}, // r 104 → 113 of 132
 	} {
-		if got, ok := in.ability(mustRole(t, tt.role), positionAt(t, tt.pos)); !ok || got != tt.want {
-			t.Errorf("%s at %s: %d, %v; want %d", tt.role, tt.pos, got, ok, tt.want)
+		if got, ok := in.ability(mustRole(t, tt.role), positionAt(t, tt.pos), tt.rules); !ok || got != tt.want {
+			t.Errorf("rules %d, %s at %s: %d, %v; want %d", tt.rules, tt.role, tt.pos, got, ok, tt.want)
 		}
 	}
-	if got, ok := in.ability(1<<63, positionAt(t, "AML")); ok {
+	if got, ok := in.ability(1<<63, positionAt(t, "AML"), roleRules26); ok {
 		t.Errorf("unknown role: %d", got)
+	}
+}
+
+// TestRoleRulesScale: float64 under roleRules26, float32 under roleRules27
+// (0x491871c); they differ when the product is a whole number.
+func TestRoleRulesScale(t *testing.T) {
+	for _, tt := range []struct {
+		r, b, ca int
+		rules    roleRules
+		want     int
+	}{
+		{105, 150, 90, roleRules26, 62},
+		{105, 150, 90, roleRules27, 63},
+		{7, 12, 108, roleRules26, 63},
+		{7, 12, 108, roleRules27, 62},
+		{121, 132, 150, roleRules27, 137},
+		{140, 132, 150, roleRules27, 150}, // r above b: the share is capped at 1
+	} {
+		if got := tt.rules.scale(tt.r, tt.b, tt.ca); got != tt.want {
+			t.Errorf("%d/%d × %d under %d: %d, want %d", tt.r, tt.b, tt.ca, tt.rules, got, tt.want)
+		}
+	}
+}
+
+func TestDatabaseVersionPicksTheRoleRules(t *testing.T) {
+	p := roleTestPlayer(50, "Inside Forward", 70, map[string]uint8{"AML": 20})
+	p.UID = 1
+	for version, want := range map[uint16]int{3733: 137, 3754: 143} {
+		g := NewGame(Info{Date: gameDate, DatabaseVersion: version}, []savefile.Player{p}, testWorld, PlayerExtras{})
+		if got := g.roleAbility(g.byUID[1], mustRole(t, "Winger"), positionAt(t, "AML")); got != want {
+			t.Errorf("database version %d: %d, want %d", version, got, want)
+		}
 	}
 }
 
@@ -291,7 +328,7 @@ func TestRoleAbilityHalvesUnderTheRoleThreshold(t *testing.T) {
 		p := roleTestPlayer(50, "", 0, map[string]uint8{"DC": 20})
 		p.CurrentAbility = ca
 		in := newRoleInputs(p)
-		if got, _ := in.ability(acb, positionAt(t, "DC")); got != want {
+		if got, _ := in.ability(acb, positionAt(t, "DC"), roleRules26); got != want {
 			t.Errorf("current ability %d: %d, want %d", ca, got, want)
 		}
 	}
@@ -299,7 +336,7 @@ func TestRoleAbilityHalvesUnderTheRoleThreshold(t *testing.T) {
 
 func TestRoleAbilityWithoutABestRoleIsTheRating(t *testing.T) {
 	in := newRoleInputs(roleTestPlayer(50, "", 0, map[string]uint8{"GK": 9}))
-	if got, _ := in.ability(mustRole(t, "Goalkeeper"), positionAt(t, "GK")); got != 56 {
+	if got, _ := in.ability(mustRole(t, "Goalkeeper"), positionAt(t, "GK"), roleRules26); got != 56 {
 		t.Errorf("%d, want 56", got)
 	}
 }
@@ -346,7 +383,7 @@ func TestRoleAbilityMatchesTheModel(t *testing.T) {
 			}
 			role, at := uint64(num(f[2])), positionAt(t, f[3]) //nolint:gosec // a role bit
 			at.mask |= side
-			ability, _ := in.ability(role, at)
+			ability, _ := in.ability(role, at, roleRules26)
 			if got, want := [3]int{in.rating(role, at), in.best, ability}, [3]int{num(f[5]), num(f[6]), num(f[7])}; got != want {
 				t.Errorf("%s: rating, best, ability = %v, want %v", strings.TrimSpace(line), got, want)
 			}
