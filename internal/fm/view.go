@@ -484,10 +484,11 @@ type query struct {
 func (g *Game) compile(f Filter) (query, error) {
 	q := query{Filter: f, money: g.Info.Money, pos: -1, minAttrs: make(map[int]int, len(f.MinAttributes)), nation: nationKey(f.Nation)}
 	if f.Position != "" {
-		q.pos = slices.Index(savefile.PositionNames[:], strings.ToUpper(f.Position))
-		if q.pos < 0 {
-			return query{}, fmt.Errorf("%w: position %q; valid codes: %s", ErrInvalidFilter, f.Position, strings.Join(savefile.PositionNames[:], " "))
+		pos, err := positionNamed(f.Position)
+		if err != nil {
+			return query{}, fmt.Errorf("%w: %w", ErrInvalidFilter, err)
 		}
+		q.pos = pos
 	}
 	for name, v := range f.MinAttributes {
 		i, ok := attributeOf(name)
@@ -640,22 +641,43 @@ func (g *Game) compilePer90(q *query) error {
 // in-possession role at position index pos, which must be set (≥ 0) and
 // offer the role. Fog of war hides it with the current ability.
 func (g *Game) roleAbilityKey(name string, pos int) (sortKeyFunc, error) {
-	role, ok := inPossessionRoleNamed(name)
-	if !ok {
-		return nil, fmt.Errorf("%w: role %q; valid in-possession roles: %s", ErrInvalidFilter, name, inPossessionRoleNames(offeredAnywhere))
-	}
-	if pos < 0 {
-		return nil, fmt.Errorf("%w: role %q needs a position, e.g. DC", ErrInvalidFilter, name)
-	}
-	code, offered := savefile.PositionNames[pos], positionRoles[pos]
-	if offered == 0 {
-		return nil, fmt.Errorf("%w: no role is offered at %s", ErrInvalidFilter, code)
-	}
-	if offered&role == 0 {
-		return nil, fmt.Errorf("%w: role %q is not offered at %s; roles at %s: %s", ErrInvalidFilter, name, code, code, inPossessionRoleNames(offered))
+	role, err := offeredRole(name, pos)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidFilter, err)
 	}
 	at := placeAt(pos)
 	return func(p *Player, s sight) (int, bool) { return g.roleAbility(p, role, at), s.full() }, nil
+}
+
+// positionNamed returns the index in savefile.PositionNames of a position
+// code, ignoring case. Callers wrap the error in ErrInvalidFilter.
+func positionNamed(code string) (int, error) {
+	i := slices.Index(savefile.PositionNames[:], strings.ToUpper(code))
+	if i < 0 {
+		return 0, fmt.Errorf("position %q; valid codes: %s", code, strings.Join(savefile.PositionNames[:], " "))
+	}
+	return i, nil
+}
+
+// offeredRole returns the bit of the named in-possession role, which
+// position index pos must be set (≥ 0) and offer. Callers wrap the error
+// in ErrInvalidFilter.
+func offeredRole(name string, pos int) (uint64, error) {
+	role, ok := inPossessionRoleNamed(name)
+	if !ok {
+		return 0, fmt.Errorf("role %q; valid in-possession roles: %s", name, inPossessionRoleNames(offeredAnywhere))
+	}
+	if pos < 0 {
+		return 0, fmt.Errorf("role %q needs a position, e.g. DC", name)
+	}
+	code, offered := savefile.PositionNames[pos], positionRoles[pos]
+	if offered == 0 {
+		return 0, fmt.Errorf("no role is offered at %s", code)
+	}
+	if offered&role == 0 {
+		return 0, fmt.Errorf("role %q is not offered at %s; roles at %s: %s", name, code, code, inPossessionRoleNames(offered))
+	}
+	return role, nil
 }
 
 const sortByRoleAbility = "role_ability"

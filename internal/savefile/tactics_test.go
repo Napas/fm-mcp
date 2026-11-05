@@ -1185,3 +1185,24 @@ func TestReadTacticsRejectsHugeFile(t *testing.T) {
 		t.Errorf("err = %v, want a size error", err)
 	}
 }
+
+func TestSidedPosition(t *testing.T) {
+	for _, tt := range []struct {
+		code, side string
+		want       uint32
+		ok         bool
+	}{
+		{"GK", "", 0x1, true},
+		{"dc", "Right", 0x200010, true},
+		{"MC", "left", 0x100400, true},
+		{"XX", "", 0, false},
+		{"DC", "middle", 0, false},
+		{"ST", " left ", 0x104000, true},
+		{"GK", "left", 0, false}, // the game pairs only DC, DM, MC, AMC and ST
+		{"DL", "right", 0, false},
+	} {
+		if got, ok := SidedPosition(tt.code, tt.side); got != tt.want || ok != tt.ok {
+			t.Errorf("%q %q: %#x, %v; want %#x, %v", tt.code, tt.side, got, ok, tt.want, tt.ok)
+		}
+	}
+}

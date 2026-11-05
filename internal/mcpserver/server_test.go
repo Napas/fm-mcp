@@ -2521,3 +2521,65 @@ func TestGetFixturesRejectsReversedRange(t *testing.T) {
 		t.Errorf("bad date: %s", allText(res))
 	}
 }
+
+func TestBestXI(t *testing.T) {
+	h := tacticHarness(t)
+
+	var got fm.BestXI
+	args := map[string]any{"slots": []map[string]string{
+		{"position": "gk", "role": "ball-playing goalkeeper"},
+		{"position": "ST", "role": "Channel Forward"},
+	}}
+	if res := h.call("best_xi", args, &got); res.IsError {
+		t.Fatalf("best_xi: %s", allText(res))
+	}
+	if got.TeamIndex != 547 || got.Team != "Tottenham Hotspur" || got.FromTactic || len(got.Slots) != 2 {
+		t.Fatalf("best_xi = %+v", got)
+	}
+	want := []fm.SlotRole{{Position: "GK", Role: "Ball-Playing Goalkeeper"}, {Position: "ST", Role: "Channel Forward"}}
+	for i, s := range got.Slots {
+		if s.Slot != i || s.SlotRole != want[i] || s.Player == nil || len(s.Alternatives) != 3 {
+			t.Errorf("slot %d = %+v", i, s)
+		}
+	}
+	if got.Slots[0].Player.UID == got.Slots[1].Player.UID {
+		t.Errorf("one player in both slots: %+v", got.Slots)
+	}
+}
+
+func TestBestXIErrors(t *testing.T) {
+	h := tacticHarness(t) // slots 1 to 9 of its tactic are empty
+	for _, tt := range []struct {
+		args map[string]any
+		want string
+	}{
+		{nil, "slot 1 has no named in-possession role; pass slots"},
+		{map[string]any{"slots": []map[string]string{{"position": "ST", "role": "Goalkeeper"}}}, `slot 0: role "Goalkeeper" is not offered at ST`},
+		{map[string]any{"team_index": 1, "slots": []map[string]string{{"position": "GK", "role": "Goalkeeper"}}}, "no team with team_index 1"},
+	} {
+		if res := h.call("best_xi", tt.args, nil); !res.IsError || !strings.Contains(allText(res), tt.want) {
+			t.Errorf("best_xi %v = %s, want an error mentioning %q", tt.args, allText(res), tt.want)
+		}
+	}
+}
+
+func TestBestXIIsExplained(t *testing.T) {
+	h := newHarness(t)
+
+	tools, err := h.session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(tools.Tools, func(tool *mcp.Tool) bool { return tool.Name == "best_xi" })
+	if i < 0 {
+		t.Fatal("no best_xi tool")
+	}
+	for _, want := range []string{"highest total role_ability", "starts_at_slot", "from_tactic", "left_out_injured", "hidden_by_fog", "out-of-possession roles", "duties"} {
+		if !strings.Contains(tools.Tools[i].Description, want) {
+			t.Errorf("best_xi description lacks %q", want)
+		}
+	}
+	if text := h.session.InitializeResult().Instructions; !strings.Contains(text, "best_xi") {
+		t.Error("instructions do not mention best_xi")
+	}
+}
