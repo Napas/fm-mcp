@@ -12,7 +12,8 @@ import (
 
 // Role ability follows game_plugin 26.3.2: the role rating 0x48c0a50, the
 // best role rating 0x48ba160 and the ability on the current-ability scale
-// 0x2fbcb20. Only in-possession roles are covered.
+// 0x2fbcb20. 27.0.0 has the same tables and two rule changes (roleRules27).
+// Only in-possession roles are covered.
 
 // place is a position in a tactic: its index in savefile.PositionNames and
 // its position mask, with a side bit for one of a pair.
@@ -97,6 +98,38 @@ type roleInputs struct {
 	positions      [len(savefile.PositionNames)]uint8  // 1..20
 	currentAbility int
 	best           int // bestRating
+}
+
+// roleRules are the rules that differ between game builds.
+type roleRules uint8
+
+const (
+	roleRules26 roleRules = iota // 26.3.2
+	// roleRules27 (0x4918654): pull-up at every position rating; float32
+	// scale step.
+	roleRules27
+)
+
+func roleRulesFor(databaseVersion uint16) roleRules {
+	if databaseVersion >= savefile.DatabaseVersion27 {
+		return roleRules27
+	}
+	return roleRules26
+}
+
+// pullsUp reports whether a role rating below the best moves towards it at
+// this position rating (26.3.2: 14 or less).
+func (rules roleRules) pullsUp(positionRating uint8) bool {
+	return rules == roleRules27 || positionRating <= 14
+}
+
+// scale is trunc(min(r/b, 1) × ca): float32 in 27.0.0; the 26.3.2 samples
+// fit float64.
+func (rules roleRules) scale(r, b, ca int) int {
+	if rules == roleRules27 {
+		return int(min(float32(r)/float32(b), 1) * float32(ca))
+	}
+	return int(min(float64(r)/float64(b), 1) * float64(ca))
 }
 
 func newRoleInputs(p savefile.Player) roleInputs {
@@ -219,9 +252,9 @@ func (in *roleInputs) bestRating() int {
 
 // ability is the role ability at a position on the current-ability scale:
 // the best role gives the current ability, others their rating's share of
-// the best rating. At a position rated 14 or less the rating first moves
-// part of the way to the best. False for a role without attributes.
-func (in *roleInputs) ability(role uint64, at place) (int, bool) {
+// the best rating. Where rules.pullsUp, the rating first moves part of the
+// way to the best. False for a role without attributes.
+func (in *roleInputs) ability(role uint64, at place, rules roleRules) (int, bool) {
 	if _, ok := roleAttributesByRole[role]; !ok {
 		return 0, false
 	}
@@ -232,13 +265,13 @@ func (in *roleInputs) ability(role uint64, at place) (int, bool) {
 	case b == 0:
 		return r, true
 	}
-	if in.positions[at.index] <= 14 && b > r {
+	if b > r && rules.pullsUp(in.positions[at.index]) {
 		d := max(float64(float32(1-float64(r)/float64(b))), 0)
 		r += (b - r) / (int(float64(float32(d*800))/100) + 2)
 	}
 	v := in.currentAbility
 	if r != b {
-		v = int(min(float64(r)/float64(b), 1) * float64(in.currentAbility))
+		v = rules.scale(r, b, in.currentAbility)
 	}
 	if v < abilityThreshold(role) {
 		v /= 2
@@ -303,7 +336,7 @@ func inPossessionRoleNames(roles uint64) string {
 
 // roleAbility is p's ability in role at a position; role must have attributes.
 func (g *Game) roleAbility(p *Player, role uint64, at place) int {
-	v, _ := g.auxOf(p).roles.ability(role, at)
+	v, _ := g.auxOf(p).roles.ability(role, at, g.roleRules)
 	return v
 }
 
@@ -319,10 +352,10 @@ const bestRolesShown = 3
 // bestRoles returns the highest role abilities, one per role, over the roles
 // offered at positions rated 15 or more. Ties keep position, then role bit,
 // order.
-func (in *roleInputs) bestRoles() []RoleFit {
+func (in *roleInputs) bestRoles(rules roleRules) []RoleFit {
 	var fits []RoleFit
 	for at, role := range in.offeredRoles(naturalRating) {
-		v, _ := in.ability(role, at)
+		v, _ := in.ability(role, at, rules)
 		name, _ := savefile.InPossessionRoleName(role)
 		fits = append(fits, RoleFit{Role: name, Position: savefile.PositionNames[at.index], RoleAbility: v})
 	}

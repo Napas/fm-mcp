@@ -8,6 +8,10 @@ const (
 	dbVersion27_0 = 3754 // 27.0.0
 )
 
+// DatabaseVersion27 is FM 27.0.0's database version, exported for fm's
+// build-dependent rules.
+const DatabaseVersion27 = dbVersion27_0
+
 // verifiedDatabaseVersions are the database versions whose whole save layout
 // was checked against real saves. A build joins only when every structure
 // fm reads is verified for it.

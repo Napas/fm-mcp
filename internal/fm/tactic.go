@@ -141,7 +141,7 @@ func lineupPersons(t *savefile.Tactics) map[uint32]*Player {
 
 // newTactic builds the current tactic from the lineup's players by person
 // index and the players' per-player data. Nil when the save has no tactic.
-func newTactic(t *savefile.Tactics, w World, players map[uint32]*Player, aux []playerAux) *Tactic {
+func newTactic(t *savefile.Tactics, w World, players map[uint32]*Player, aux []playerAux, rules roleRules) *Tactic {
 	tac := current(t)
 	if tac == nil {
 		return nil
@@ -159,7 +159,7 @@ func newTactic(t *savefile.Tactics, w World, players map[uint32]*Player, aux []p
 		if p == nil || !ok {
 			continue
 		}
-		if v, ok := aux[p.auxIdx].roles.ability(s.InPossession.RoleBit(), at); ok {
+		if v, ok := aux[p.auxIdx].roles.ability(s.InPossession.RoleBit(), at, rules); ok {
 			out.Slots[i].RoleAbility = &v
 		}
 	}

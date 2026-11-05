@@ -97,6 +97,45 @@ Out-of-possession roles (selector `0x48c34a8`, 26.3.2 build stamp; not used by `
 | Central Outlet Centre-Forward | `0x100000000000` | `0x48c4834` | OffTheBall, Anticipation, Decisions, Teamwork, Balance, Concentration | Marking, FirstTouch, Strength, Composure | WorkRate, Stamina |
 | Splitting Outlet Centre-Forward | `0x200000000000` | `0x48c4918` | OffTheBall, Anticipation, Decisions, Teamwork, Pace, Concentration | Marking, FirstTouch, Acceleration, Composure | WorkRate, Stamina |
 
+## 27.0.0 role ability — verified 27.0.0 (code)
+
+Code: `game_plugin` 27.0.0 arm64 slice. The role tables are unchanged. A small arm64 emulator over the `objdump` text ran both selectors for all 64 role bits and each classifier over every attribute: the same 50 in-possession and 39 out-of-possession roles, the same key, preferable and negative lists as above, no new role bits. Wing-Back (`0x4922940`: key mask `0x6430000221`, preferable `0x20440000d600c2`) was also checked by hand. The in-possession roles offered per position match `positionRoles`. The game builds the per-position tables at runtime: `0x491d5dc` fills them in possession, `0x491d7c4` out of possession, cached at `0x573ca58` and `0x573cad0`.
+
+| Function | 27.0.0 | 26.3.2 |
+|----------|--------|--------|
+| In-possession role rating | `0x491e624` | `0x48c0a50` |
+| Out-of-possession role rating (with position blending) | `0x491ab5c` | `0x48bc174`, `0x48bec90` |
+| In- / out-of-possession selector | `0x49220b8` / `0x4920d34` | `0x48c4a94` / `0x48c34a8` |
+| In- / out-of-possession best role | `0x49187ac` / `0x491af40` | `0x48ba160` |
+| In- / out-of-possession role ability | `0x4918654` / `0x491aa68` | `0x2fbcb20` / `0x2fbccac` |
+
+Unchanged from 26.3.2: the rating formula, the in-possession position blending and both in-possession thresholds (best role, and halving under the role threshold).
+
+Change 1, the pull-up: `0x4918654` moves r towards b whenever b > r (`0x49186c8`–`0x4918714`), with no position-rating check. 26.3.2 limited it to p ≤ 14 (26.3.2 disassembly, section above). From database version 3754, `fm` pulls up at every rating (`roleRules27`). KŽ's tactic on `data/test_save_27b.fm`, worked by hand:
+- Franco Baldassarra (DM 18, Defensive Midfielder): r 115 → 119 of 124, current ability 110, so 105 (102 under the 26.3.2 rule).
+- Anthony Kalik (MC 18, Attacking Midfielder): r 111 → 117 of 124, so 103 (98 under the 26.3.2 rule).
+
+Change 2, the scale step: `0x491871c`–`0x4918738` computes trunc(min(r/b, 1) × CA) in float32 (`ucvtf`, `fdiv s`, `fmul s`, `fcvtzs`). Float32 and float64 can truncate one apart: r 105, b 150, CA 90 gives 63 in float32, 62 in float64. On `data/test_save_27b.fm`, 2 615 of 3.47M role abilities (every player and offered role) differ before halving (code review probe). From database version 3754 `fm` uses float32. Whether 26.3.2 did is unknown; its samples fit float64.
+
+Out of possession (not used by `fm`):
+- **Thresholds:** none. The role ability `0x491aa68` never halves, and the best role `0x491af40` takes the highest rating with no threshold.
+- **Pull-up:** the role ability applies it as in possession.
+- **Position blending:** the rating blends from p ≥ 12 as `(p + other) / 2` when the other position is higher; the first matching row wins:
+
+| Roles | Blended with |
+|-------|--------------|
+| Wide, Stopping Wide and Covering Wide Centre-Back (`0x1c0`) | DL or DR by side, else the higher of the two |
+| Pressing Full-Back, Wide Covering Defensive Midfielder, Tracking Wide Midfielder | WBL or WBR by side; no side, no blend |
+| Pressing Wing-Back, Wide Covering Central Midfielder, Tracking Winger | ML or MR by side |
+| Dropping Defensive Midfielder | DC |
+| Pressing Defensive Midfielder, Tracking Attacking Midfielder | MC |
+| Pressing Central Midfielder, Inside Outlet Winger, Tracking Centre-Forward | AMC |
+| Splitting Outlet Attacking Midfielder, Splitting Outlet Centre-Forward | AML or AMR by side |
+
+- **Roles offered per position** (`0x491d7c4` with no side context): GK `0x7`, DL and DR `0xe00`, DC `0x1f8`, WBL and WBR `0x7000`, DM `0xf8000`, MC `0x38100000`, ML and MR `0x3800000000`, AMC `0x3c0000000`, AML and AMR `0x3c000000000`, ST `0x3c0000000000`, SW none. With a nonzero second argument, some roles also need a side bit: the wide centre-back roles at DC (in possession, Wide and Overlapping Centre-Back also need a third argument ≥ 3); Box To Box Midfielder, Box To Box Playmaker and Wide Covering Defensive Midfielder at DM; Wide Central Midfielder and Wide Covering Central Midfielder at MC; and the two Splitting Outlet roles at AMC and ST. Inference: the Tactics screen's context; the third argument counts centre-backs.
+
 ## Open questions
 
-- Role ability: the mapping to the stars the game shows (a per-player anchor, not in the save as far as decoded); out-of-possession position handling (`0x48bec90`) and best-role set.
+- Role ability: the mapping to the stars the game shows (a per-player anchor, not in the save as far as decoded).
+- 26.3.2 out-of-possession position handling (`0x48bec90`) and best-role set: not decoded (27.0.0's are in "27.0.0 role ability").
+- 27.0.0: the callers that pass a side context to `0x491d5dc` / `0x491d7c4`, and the variants `0x491d730` and `0x491d8f8`.

@@ -34,7 +34,7 @@ func Load(path string, opts LoadOptions) (*Game, error) {
 	if err != nil {
 		return nil, err
 	}
-	info := Info{SaveName: a.Directory().Name, Date: db.Header.GameDate.Time(), ManagerTeamIndex: noTeam}
+	info := Info{SaveName: a.Directory().Name, Date: db.Header.GameDate.Time(), ManagerTeamIndex: noTeam, DatabaseVersion: db.Header.DatabaseVersion}
 	info.Money, info.Warnings = readMoney(db, opts.PrefsDir)
 	if w := buildWarning(db.Header.DatabaseVersion); w != "" {
 		info.Warnings = append(info.Warnings, w)
