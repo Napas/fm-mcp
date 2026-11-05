@@ -67,7 +67,7 @@ func TestBestXIFillsTheSlotsForTheHighestTotal(t *testing.T) {
 			t.Errorf("slot %d: %d %+v", i, s.Slot, s.SlotRole)
 		}
 		at, _ := placeOf(savefile.SlotRole{Position: mustSidedPosition(t, s.Position, s.Side)})
-		role, _ := inPossessionRoleNamed(s.Role)
+		role, _ := inPossession.named(s.Role)
 		if s.Player.StartsAtSlot != nil {
 			t.Errorf("slot %d: picked player starts at %d", i, *s.Player.StartsAtSlot)
 		}
@@ -183,7 +183,7 @@ func TestBestXIRejectsBadRequests(t *testing.T) {
 		{"side", g, XIRequest{TeamIndex: 547, Slots: []SlotRole{{"DC", "middle", "Centre-Back"}}}, `slot 0: side "middle"`},
 		{"side of a single position", g, XIRequest{TeamIndex: 547, Slots: []SlotRole{{"GK", "left", "Goalkeeper"}}}, `slot 0: side "left"; only DC, DM, MC, AMC and ST take left or right`},
 		{"no role", g, XIRequest{TeamIndex: 547, Slots: []SlotRole{{Position: "GK"}}}, "slot 0 has no role; pass an in-possession role offered at GK"},
-		{"role", g, XIRequest{TeamIndex: 547, Slots: []SlotRole{{"GK", "", "Goalkeeper"}, {"ST", "", "Goalkeeper"}}}, `slot 1: role "Goalkeeper" is not offered at ST`},
+		{"role", g, XIRequest{TeamIndex: 547, Slots: []SlotRole{{"GK", "", "Goalkeeper"}, {"ST", "", "Goalkeeper"}}}, `slot 1: in-possession role "Goalkeeper" is not offered at ST`},
 	} {
 		_, err := tt.g.View(false).BestXI(tt.r)
 		if !errors.Is(err, ErrInvalidFilter) || !strings.Contains(err.Error(), tt.want) {

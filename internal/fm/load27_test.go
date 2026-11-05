@@ -1,6 +1,7 @@
 package fm
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -90,6 +91,12 @@ func TestLoadTestSave27bTactic(t *testing.T) {
 	// 12 rates 105 less 20 % = 84 of his best 104, pulled up to 90; 90/104 × 105.
 	if a := tac.Slots[8].OutOfPossessionRoleAbility; a == nil || *a != 90 {
 		t.Errorf("slot 8: out-of-possession role ability %v, want 90", a)
+	}
+	// His best out-of-possession role gives his current ability, 105; the
+	// other two values are this code's output, not checked in game.
+	want := []RoleFit{{"Winger", "AMR", 105}, {"Inside Outlet Winger", "AMR", 103}, {"Wide Outlet Winger", "AMR", 103}}
+	if prof, _ := v.Profile(tac.Slots[8].Player.UID); !slices.Equal(prof.BestOutOfPossessionRoles, want) {
+		t.Errorf("Fiolić's best out-of-possession roles %+v, want %+v", prof.BestOutOfPossessionRoles, want)
 	}
 	for i, s := range tac.Slots {
 		if s.OutOfPossessionRoleAbility == nil {

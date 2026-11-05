@@ -63,12 +63,17 @@ type Profile struct {
 	// RoleAbility (Search only) is the role ability in the search's role and
 	// position; nil when the current ability is hidden.
 	RoleAbility *int `json:"role_ability,omitempty"`
+	// OutOfPossessionRoleAbility (Search only) is the same for the search's
+	// out-of-possession role.
+	OutOfPossessionRoleAbility *int `json:"out_of_possession_role_ability,omitempty"`
 	// Per90 (Search only) holds the club per-90 rates the search sorts or
 	// filters on.
 	Per90 map[string]float64 `json:"per90,omitempty"`
 	// BestRoles (Profile only) are the highest role abilities; nil when the
 	// current ability is hidden.
 	BestRoles []RoleFit `json:"best_roles,omitempty"`
+	// BestOutOfPossessionRoles (Profile only) are the same out of possession.
+	BestOutOfPossessionRoles []RoleFit `json:"best_out_of_possession_roles,omitempty"`
 }
 
 // View answers player queries as the manager sees the save. With fog of war
@@ -159,7 +164,9 @@ func (v View) Profile(uid uint32) (Profile, bool) {
 	out := v.profile(x)
 	out.Interest = v.g.interestOf(p)
 	if x.s.full() {
-		out.BestRoles = v.g.auxOf(p).roles.bestRoles(v.g.roleRules)
+		roles := &v.g.auxOf(p).roles
+		out.BestRoles = roles.bestRoles(inPossession, v.g.roleRules)
+		out.BestOutOfPossessionRoles = roles.bestRoles(outOfPossession, v.g.roleRules)
 	}
 	return out, true
 }
@@ -393,12 +400,9 @@ func (v View) Search(f Filter) (SearchResult, error) {
 			res.Players[i].Interest = v.g.interestOf(x.p)
 		}
 	}
-	if q.roleAbility != nil {
-		for i, x := range page {
-			if a, ok := q.roleAbility(x.p, x.s); ok {
-				res.Players[i].RoleAbility = &a
-			}
-		}
+	for i, x := range page {
+		res.Players[i].RoleAbility = shownKey(q.roleAbility, x)
+		res.Players[i].OutOfPossessionRoleAbility = shownKey(q.oopRoleAbility, x)
 	}
 	for i, x := range page {
 		res.Players[i].Per90 = v.g.per90Row(x.p, q.per90)
@@ -469,12 +473,13 @@ type query struct {
 	national  []*Team        // national teams with call-ups matching the club and gender filters
 	nation    string
 	key       sortKeyFunc
-	// roleAbility is the role ability in the role filter's role; nil
-	// without one.
-	roleAbility sortKeyFunc
-	interest    InterestKind       // "" without the interest option
-	minPer90    func(*Player) bool // nil without MinPer90
-	minMinutes  int                // MinSeasonMinutes, else per90DefaultMinutes in a per-90 search
+	// roleAbility and oopRoleAbility are the role ability in the role and
+	// out-of-possession role filters' roles; nil without one.
+	roleAbility    sortKeyFunc
+	oopRoleAbility sortKeyFunc
+	interest       InterestKind       // "" without the interest option
+	minPer90       func(*Player) bool // nil without MinPer90
+	minMinutes     int                // MinSeasonMinutes, else per90DefaultMinutes in a per-90 search
 	// per90 lists the per-90 stats rows carry: the sort's, then MinPer90's.
 	per90         []string
 	traits        uint64   // Traits as savefile.TraitNames bits
@@ -547,7 +552,12 @@ func (g *Game) compile(f Filter) (query, error) {
 		q.joinedBy = monthsBefore(g.Info.Date, f.MinMonthsAtClub)
 	}
 	if f.Role != "" {
-		if q.roleAbility, err = g.roleAbilityKey(f.Role, q.pos); err != nil {
+		if q.roleAbility, err = g.roleAbilityKey(inPossession, f.Role, q.pos); err != nil {
+			return query{}, err
+		}
+	}
+	if f.OutOfPossessionRole != "" {
+		if q.oopRoleAbility, err = g.roleAbilityKey(outOfPossession, f.OutOfPossessionRole, q.pos); err != nil {
 			return query{}, err
 		}
 	}
@@ -558,7 +568,7 @@ func (g *Game) compile(f Filter) (query, error) {
 		return query{}, err
 	}
 	if q.key == nil {
-		if q.key, err = searchKey(f.SortBy, q.roleAbility); err != nil {
+		if q.key, err = searchKey(f.SortBy, q.roleAbility, q.oopRoleAbility); err != nil {
 			return query{}, err
 		}
 	}
@@ -589,6 +599,8 @@ func compileProfileFilters(q *query) error {
 		return fmt.Errorf("%w: max_height_cm %d is negative", ErrInvalidFilter, q.MaxHeightCM)
 	case q.MinRoleAbility > 0 && q.roleAbility == nil:
 		return fmt.Errorf("%w: min_role_ability needs a role and a position", ErrInvalidFilter)
+	case q.MinOutOfPossessionRoleAbility > 0 && q.oopRoleAbility == nil:
+		return fmt.Errorf("%w: min_out_of_possession_role_ability needs an out_of_possession_role and a position", ErrInvalidFilter)
 	}
 	for _, name := range q.Traits {
 		bit := slices.IndexFunc(savefile.TraitNames[:], func(n string) bool { return n != "" && strings.EqualFold(n, name) })
@@ -637,16 +649,28 @@ func (g *Game) compilePer90(q *query) error {
 	return nil
 }
 
-// roleAbilityKey returns the sort key of role ability in the named
-// in-possession role at position index pos, which must be set (≥ 0) and
-// offer the role. Fog of war hides it with the current ability.
-func (g *Game) roleAbilityKey(name string, pos int) (sortKeyFunc, error) {
-	role, err := offeredRole(name, pos)
+// roleAbilityKey returns the sort key of role ability in the phase's named
+// role at position index pos, which must be set (≥ 0) and offer the role,
+// on the better side. Fog of war hides it with the current ability.
+func (g *Game) roleAbilityKey(ph rolePhase, name string, pos int) (sortKeyFunc, error) {
+	role, err := offeredRole(ph, name, pos)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidFilter, err)
 	}
-	at := placeAt(pos)
-	return func(p *Player, s sight) (int, bool) { return g.roleAbility(p, role, at), s.full() }, nil
+	return func(p *Player, s sight) (int, bool) {
+		return g.auxOf(p).roles.unsidedAbility(ph, role, pos, g.roleRules), s.full()
+	}, nil
+}
+
+// shownKey is key's value for x; nil without a key or when it is hidden.
+func shownKey(key sortKeyFunc, x seen) *int {
+	if key == nil {
+		return nil
+	}
+	if v, shown := key(x.p, x.s); shown {
+		return &v
+	}
+	return nil
 }
 
 // positionNamed returns the index in savefile.PositionNames of a position
@@ -659,39 +683,63 @@ func positionNamed(code string) (int, error) {
 	return i, nil
 }
 
-// offeredRole returns the bit of the named in-possession role, which
-// position index pos must be set (≥ 0) and offer. Callers wrap the error
-// in ErrInvalidFilter.
-func offeredRole(name string, pos int) (uint64, error) {
-	role, ok := inPossessionRoleNamed(name)
+// offeredRole returns the bit of the phase's named role, which position
+// index pos must be set (≥ 0) and offer. Callers wrap the error in
+// ErrInvalidFilter.
+func offeredRole(ph rolePhase, name string, pos int) (uint64, error) {
+	role, ok := ph.named(name)
 	if !ok {
-		return 0, fmt.Errorf("role %q; valid in-possession roles: %s", name, inPossessionRoleNames(offeredAnywhere))
+		other, hint := ph.other(), ""
+		if _, found := other.named(name); found {
+			hint = " is an " + other.name + " role"
+		}
+		return 0, fmt.Errorf("%s role %q%s; valid roles: %s", ph.name, name, hint, ph.names(ph.offeredAnywhere()))
 	}
 	if pos < 0 {
-		return 0, fmt.Errorf("role %q needs a position, e.g. DC", name)
+		return 0, fmt.Errorf("%s role %q needs a position, e.g. DC", ph.name, name)
 	}
-	code, offered := savefile.PositionNames[pos], positionRoles[pos]
+	code, offered := savefile.PositionNames[pos], ph.offered[pos]
 	if offered == 0 {
-		return 0, fmt.Errorf("no role is offered at %s", code)
+		return 0, fmt.Errorf("no %s role is offered at %s", ph.name, code)
 	}
 	if offered&role == 0 {
-		return 0, fmt.Errorf("role %q is not offered at %s; roles at %s: %s", name, code, code, inPossessionRoleNames(offered))
+		return 0, fmt.Errorf("%s role %q is not offered at %s; roles at %s: %s", ph.name, name, code, code, ph.names(offered))
 	}
 	return role, nil
 }
 
-const sortByRoleAbility = "role_ability"
+const (
+	sortByRoleAbility    = "role_ability"
+	sortByOOPRoleAbility = "out_of_possession_role_ability"
+)
 
-// searchKey returns the sort key named name: roleAbility (nil without a role
-// filter) for sortByRoleAbility, and by default when it is set; else sortKey.
-func searchKey(name string, roleAbility sortKeyFunc) (sortKeyFunc, error) {
-	switch n := strings.ToLower(name); {
-	case n == sortByRoleAbility && roleAbility == nil:
-		return nil, fmt.Errorf("%w: sort key %q needs a role", ErrInvalidFilter, name)
-	case n == sortByRoleAbility, n == "" && roleAbility != nil:
-		return roleAbility, nil
+// searchKey returns the sort key named name: roleAbility or oopRoleAbility
+// (nil without their role filter) by their names, and by default the first
+// one set; else sortKey.
+func searchKey(name string, roleAbility, oopRoleAbility sortKeyFunc) (sortKeyFunc, error) {
+	switch strings.ToLower(name) {
+	case sortByRoleAbility:
+		return roleFilterKey(roleAbility, name, "a role")
+	case sortByOOPRoleAbility:
+		return roleFilterKey(oopRoleAbility, name, "an out_of_possession_role")
+	case "":
+		if roleAbility != nil {
+			return roleAbility, nil
+		}
+		if oopRoleAbility != nil {
+			return oopRoleAbility, nil
+		}
 	}
 	return sortKey(name)
+}
+
+// roleFilterKey is key, the sort key named name; an error saying it needs a
+// role filter when key is nil.
+func roleFilterKey(key sortKeyFunc, name, needs string) (sortKeyFunc, error) {
+	if key == nil {
+		return nil, fmt.Errorf("%w: sort key %q needs %s", ErrInvalidFilter, name, needs)
+	}
+	return key, nil
 }
 
 // verdict is how a player fares against a query.
@@ -760,6 +808,10 @@ func (q query) judge(x seen) verdict {
 	if q.MinRoleAbility > 0 {
 		a, visible := q.roleAbility(p, s)
 		j.check(visible, a >= q.MinRoleAbility)
+	}
+	if q.MinOutOfPossessionRoleAbility > 0 {
+		a, visible := q.oopRoleAbility(p, s)
+		j.check(visible, a >= q.MinOutOfPossessionRoleAbility)
 	}
 	return j.verdict()
 }

@@ -339,51 +339,97 @@ func roleThreshold(role, roles80 uint64) int {
 	return 0
 }
 
-// inPossessionRoleNamed returns the in-possession role bit with this name,
-// ignoring case.
-func inPossessionRoleNamed(name string) (uint64, bool) {
-	return roleNamed(name, roleAttributesByRole, savefile.InPossessionRoleName)
+// rolePhase is one phase's roles: in or out of possession.
+type rolePhase struct {
+	name    string // "in-possession" or "out-of-possession"
+	offered [len(savefile.PositionNames)]uint64
+	attrs   map[uint64]roleAttributes
+	nameOf  func(uint64) (string, bool)
+	ability func(in *roleInputs, role uint64, at place, rules roleRules) (int, bool)
 }
 
-// roleNamed returns the bit of the role in roles that nameOf gives this name,
-// ignoring case.
-func roleNamed(name string, roles map[uint64]roleAttributes, nameOf func(uint64) (string, bool)) (uint64, bool) {
+var (
+	inPossession = rolePhase{
+		name: "in-possession", offered: positionRoles, attrs: roleAttributesByRole,
+		nameOf: savefile.InPossessionRoleName, ability: (*roleInputs).ability,
+	}
+	outOfPossession = rolePhase{
+		name: "out-of-possession", offered: oopPositionRoles, attrs: oopRoleAttributesByRole,
+		nameOf: savefile.OutOfPossessionRoleName, ability: (*roleInputs).oopAbility,
+	}
+)
+
+// unsidedPlaces are each position's places without a slot side: the
+// position, then its left and right where it takes a side.
+var unsidedPlaces = func() (out [len(savefile.PositionNames)][]place) {
+	for i, code := range savefile.PositionNames {
+		for _, side := range [...]string{"", "left", "right"} {
+			if mask, ok := savefile.SidedPosition(code, side); ok {
+				out[i] = append(out[i], place{index: i, mask: mask})
+			}
+		}
+	}
+	return out
+}()
+
+// other is the other phase.
+func (ph rolePhase) other() rolePhase {
+	if ph.name == inPossession.name {
+		return outOfPossession
+	}
+	return inPossession
+}
+
+// named returns the bit of the role with this name, ignoring case.
+func (ph rolePhase) named(name string) (uint64, bool) {
 	name = strings.TrimSpace(name)
-	for role := range roles {
-		if n, _ := nameOf(role); strings.EqualFold(n, name) {
+	for role := range ph.attrs {
+		if n, _ := ph.nameOf(role); strings.EqualFold(n, name) {
 			return role, true
 		}
 	}
 	return 0, false
 }
 
-// offeredAnywhere are the in-possession roles offered at some position.
-var offeredAnywhere = func() uint64 {
+// offeredAnywhere are the roles offered at some position.
+func (ph rolePhase) offeredAnywhere() uint64 {
 	var all uint64
-	for _, roles := range positionRoles {
+	for _, roles := range ph.offered {
 		all |= roles
 	}
 	return all
-}()
+}
 
-// inPossessionRoleNames lists the names of the role bits in roles, sorted.
-func inPossessionRoleNames(roles uint64) string {
+// names lists the names of the role bits in roles, sorted.
+func (ph rolePhase) names(roles uint64) string {
 	var names []string
 	for r := roles; r != 0; r &= r - 1 {
-		n, _ := savefile.InPossessionRoleName(uint64(1) << bits.TrailingZeros64(r))
+		n, _ := ph.nameOf(uint64(1) << bits.TrailingZeros64(r))
 		names = append(names, n)
 	}
 	slices.Sort(names)
 	return strings.Join(names, ", ")
 }
 
-// roleAbility is p's ability in role at a position; role must have attributes.
+// roleAbility is p's ability in an in-possession role at a position; role
+// must have attributes.
 func (g *Game) roleAbility(p *Player, role uint64, at place) int {
 	v, _ := g.auxOf(p).roles.ability(role, at, g.roleRules)
 	return v
 }
 
-// RoleFit is a player's role ability in an in-possession role at a position.
+// unsidedAbility is the role ability at position index pos without a slot
+// side: the best of no side, left and right where the position takes one.
+func (in *roleInputs) unsidedAbility(ph rolePhase, role uint64, pos int, rules roleRules) int {
+	best := 0
+	for _, at := range unsidedPlaces[pos] {
+		v, _ := ph.ability(in, role, at, rules)
+		best = max(best, v)
+	}
+	return best
+}
+
+// RoleFit is a player's role ability in a role at a position.
 type RoleFit struct {
 	Role        string `json:"role"`
 	Position    string `json:"position"`
@@ -392,15 +438,14 @@ type RoleFit struct {
 
 const bestRolesShown = 3
 
-// bestRoles returns the highest role abilities, one per role, over the roles
-// offered at positions rated 15 or more. Ties keep position, then role bit,
-// order.
-func (in *roleInputs) bestRoles(rules roleRules) []RoleFit {
+// bestRoles returns the phase's highest role abilities, one per role, over
+// the roles offered at positions rated 15 or more. Ties keep position, then
+// role bit, order.
+func (in *roleInputs) bestRoles(ph rolePhase, rules roleRules) []RoleFit {
 	var fits []RoleFit
-	for at, role := range in.offeredRoles(positionRoles, naturalRating) {
-		v, _ := in.ability(role, at, rules)
-		name, _ := savefile.InPossessionRoleName(role)
-		fits = append(fits, RoleFit{Role: name, Position: savefile.PositionNames[at.index], RoleAbility: v})
+	for at, role := range in.offeredRoles(ph.offered, naturalRating) {
+		name, _ := ph.nameOf(role)
+		fits = append(fits, RoleFit{Role: name, Position: savefile.PositionNames[at.index], RoleAbility: in.unsidedAbility(ph, role, at.index, rules)})
 	}
 	slices.SortStableFunc(fits, func(a, b RoleFit) int { return cmp.Compare(b.RoleAbility, a.RoleAbility) })
 	var out []RoleFit

@@ -9,7 +9,7 @@ import (
 
 func mustOOPRole(t *testing.T, name string) uint64 {
 	t.Helper()
-	r, ok := roleNamed(name, oopRoleAttributesByRole, savefile.OutOfPossessionRoleName)
+	r, ok := outOfPossession.named(name)
 	if !ok {
 		t.Fatalf("no out-of-possession role %q", name)
 	}

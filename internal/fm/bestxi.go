@@ -191,7 +191,7 @@ func xiTargetOf(n int, s SlotRole) (xiTarget, error) {
 	if !ok {
 		return invalid(fmt.Errorf("side %q; only DC, DM, MC, AMC and ST take left or right, others none", s.Side))
 	}
-	role, err := offeredRole(s.Role, pos)
+	role, err := offeredRole(inPossession, s.Role, pos)
 	if err != nil {
 		return invalid(err)
 	}

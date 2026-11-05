@@ -228,6 +228,9 @@ func TestFindAndGetPlayer(t *testing.T) {
 	if want := []fm.RoleFit{{Role: "Advanced Centre-Back", Position: "DC", RoleAbility: 156}, {Role: "Ball-Playing Centre-Back", Position: "DC", RoleAbility: 156}, {Role: "Overlapping Centre-Back", Position: "DC", RoleAbility: 156}}; !slices.Equal(p.BestRoles, want) {
 		t.Errorf("best_roles = %+v, want %+v", p.BestRoles, want)
 	}
+	if want := []fm.RoleFit{{Role: "Centre-Back", Position: "DC", RoleAbility: 156}, {Role: "Stopping Centre-Back", Position: "DC", RoleAbility: 156}, {Role: "Covering Centre-Back", Position: "DC", RoleAbility: 156}}; !slices.Equal(p.BestOutOfPossessionRoles, want) {
+		t.Errorf("best_out_of_possession_roles = %+v, want %+v", p.BestOutOfPossessionRoles, want)
+	}
 	if res := h.call("get_player", map[string]any{"uid": 99}, nil); !res.IsError {
 		t.Error("get_player(99) did not report an error")
 	}
@@ -293,6 +296,19 @@ func TestSearchByRole(t *testing.T) {
 	if res := h.call("search_players", map[string]any{"position": "ST", "role": "Goalkeeper"}, nil); !res.IsError || !strings.Contains(allText(res), "not offered at ST") {
 		t.Errorf("a role not offered at the position = %s, want an error", allText(res))
 	}
+	var oop struct {
+		Players []PlayerSummary `json:"players"`
+	}
+	if res := h.call("search_players", map[string]any{"position": "DC", "out_of_possession_role": "Centre-Back", "min_out_of_possession_role_ability": 1, "sort_by": "age"}, &oop); res.IsError {
+		t.Fatalf("search_players: %s", allText(res))
+	}
+	// Axel's hidden ability leaves him out under the minimum.
+	if len(oop.Players) != 1 || oop.Players[0].OutOfPossessionRoleAbility == nil || *oop.Players[0].OutOfPossessionRoleAbility != 156 || oop.Players[0].RoleAbility != nil {
+		t.Errorf("out-of-possession rows = %+v", oop.Players)
+	}
+	if res := h.call("search_players", map[string]any{"out_of_possession_role": "Centre-Back"}, nil); !res.IsError || !strings.Contains(allText(res), "needs a position") {
+		t.Errorf("an out-of-possession role without a position = %s, want an error", allText(res))
+	}
 }
 
 func TestRoleAbilityIsExplained(t *testing.T) {
@@ -304,7 +320,8 @@ func TestRoleAbilityIsExplained(t *testing.T) {
 			paragraph = line
 		}
 	}
-	for _, want := range []string{"role_ability", "compare_players", "current-ability scale (0-200)", "best role usually equals his current ability", "halves", "stars", "cannot reproduce", "rank", "3 times in 4", "ties", "better of left and right", "fog of war"} {
+	for _, want := range []string{"role_ability", "compare_players", "current-ability scale (0-200)", "best role usually equals his current ability", "halves", "stars", "cannot reproduce", "rank", "3 times in 4", "ties", "better of left and right", "fog of war",
+		"out_of_possession_role", "best_out_of_possession_roles"} {
 		if !strings.Contains(paragraph, want) {
 			t.Errorf("instructions' role_ability paragraph lacks %q", want)
 		}
@@ -318,9 +335,9 @@ func TestRoleAbilityIsExplained(t *testing.T) {
 	}
 	for name, wants := range map[string][]string{
 		"get_tactic":      {"role_ability"},
-		"get_player":      {"best_roles"},
-		"compare_players": {"best_roles"},
-		"search_players":  {"role", "role_ability", "interest"},
+		"get_player":      {"best_roles", "best_out_of_possession_roles"},
+		"compare_players": {"best_roles", "best_out_of_possession_roles"},
+		"search_players":  {"role", "role_ability", "interest", "out_of_possession_role", "out_of_possession_role_ability"},
 	} {
 		i := slices.IndexFunc(tools.Tools, func(tool *mcp.Tool) bool { return tool.Name == name })
 		if i < 0 {
@@ -333,7 +350,7 @@ func TestRoleAbilityIsExplained(t *testing.T) {
 		}
 	}
 	i := slices.IndexFunc(tools.Tools, func(tool *mcp.Tool) bool { return tool.Name == "search_players" })
-	if b, _ := json.Marshal(tools.Tools[i].InputSchema); !strings.Contains(string(b), "in-possession role offered at that position") || !strings.Contains(string(b), "role_ability") {
+	if b, _ := json.Marshal(tools.Tools[i].InputSchema); !strings.Contains(string(b), "in-possession role offered at that position") || !strings.Contains(string(b), "out-of-possession role offered at that position") || !strings.Contains(string(b), "role_ability") {
 		t.Errorf("search_players schema does not explain role: %s", b)
 	}
 }
@@ -2558,7 +2575,7 @@ func TestBestXIErrors(t *testing.T) {
 		want string
 	}{
 		{nil, "slot 1 has no named in-possession role; pass slots"},
-		{map[string]any{"slots": []map[string]string{{"position": "ST", "role": "Goalkeeper"}}}, `slot 0: role "Goalkeeper" is not offered at ST`},
+		{map[string]any{"slots": []map[string]string{{"position": "ST", "role": "Goalkeeper"}}}, `slot 0: in-possession role "Goalkeeper" is not offered at ST`},
 		{map[string]any{"team_index": 1, "slots": []map[string]string{{"position": "GK", "role": "Goalkeeper"}}}, "no team with team_index 1"},
 	} {
 		if res := h.call("best_xi", tt.args, nil); !res.IsError || !strings.Contains(allText(res), tt.want) {
