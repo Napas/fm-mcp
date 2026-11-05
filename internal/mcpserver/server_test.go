@@ -851,6 +851,18 @@ func TestInstructionsCoverFogOfWarAndColours(t *testing.T) {
 	}
 }
 
+// FM27 shows a Guide Value range, not the save's value.
+func TestInstructionsSeparateValueFromGuideValue(t *testing.T) {
+	h := newHarness(t)
+
+	text := h.session.InitializeResult().Instructions
+	for _, want := range []string{"Guide Value", "age and reputation", "never present value as the figure the game shows", "info.build starts with 27"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("instructions lack %q", want)
+		}
+	}
+}
+
 func TestScoutPromptCoversFogOfWar(t *testing.T) {
 	h := newHarness(t)
 
@@ -943,7 +955,7 @@ func TestNoToolMentionsWeeklyWage(t *testing.T) {
 		t.Errorf("tools still use weekly_wage or lack max_wage")
 	}
 	text := h.session.InitializeResult().Instructions
-	for _, want := range []string{"currency", "wage_period", "€922K"} {
+	for _, want := range []string{"currency", "wage_period", "€922K", "Amounts are exact; FM rounds what it shows"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("instructions lack %q", want)
 		}
