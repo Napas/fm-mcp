@@ -20,6 +20,35 @@ type Contract struct {
 	// SquadNumber is the number registered with the contract's team; 0 when
 	// none.
 	SquadNumber int
+	// transferFlags are the transferStatuses bits of savefile.Contract.CoreFlags.
+	transferFlags uint8
+}
+
+const transferStatusBits = savefile.CoreFlagTransferListed | savefile.CoreFlagLoanListed | savefile.CoreFlagUnavailableForLoan
+
+type transferStatus struct {
+	name string
+	bit  uint8
+}
+
+// transferStatuses lists the status bits in output order.
+var transferStatuses = []transferStatus{
+	{"transfer_listed", savefile.CoreFlagTransferListed},
+	{"loan_listed", savefile.CoreFlagLoanListed},
+	{"unavailable_for_loan", savefile.CoreFlagUnavailableForLoan},
+}
+
+// TransferStatus names the contract's transfer statuses; nil when none.
+func (c *Contract) TransferStatus() []string { return transferStatusNames(c.transferFlags) }
+
+func transferStatusNames(flags uint8) []string {
+	var out []string
+	for _, s := range transferStatuses {
+		if flags&s.bit != 0 {
+			out = append(out, s.name)
+		}
+	}
+	return out
 }
 
 // ContractInfo is a Contract in the user's currency and wage period.
@@ -47,7 +76,7 @@ func newContract(c *savefile.Contract, w World) *Contract {
 	if c == nil {
 		return nil
 	}
-	out := &Contract{TeamIndex: c.TeamIndex, Team: w.teamName(c.TeamIndex), WeeklyWage: int64(c.WeeklyWage), Start: contractStart(c), Joined: knownDate(c.Start), End: knownDate(c.End), SquadNumber: squadNumber(c)}
+	out := &Contract{TeamIndex: c.TeamIndex, Team: w.teamName(c.TeamIndex), WeeklyWage: int64(c.WeeklyWage), Start: contractStart(c), Joined: knownDate(c.Start), End: knownDate(c.End), SquadNumber: squadNumber(c), transferFlags: c.CoreFlags & transferStatusBits}
 	for _, cl := range c.Clauses {
 		out.Clauses = append(out.Clauses, clauseInfo(cl))
 		if v, ok := cl.Amount(); ok && v > 0 && cl.MinimumFeeRelease() && (out.ReleaseFee == 0 || v < out.ReleaseFee) {

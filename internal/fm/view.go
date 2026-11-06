@@ -36,9 +36,12 @@ type Profile struct {
 	// FavouredClubs are in save order; left out with the personality.
 	FavouredClubs []FavouredClub `json:"favoured_clubs,omitempty"`
 	// Traits are left out when attributes are hidden.
-	Traits         []string      `json:"traits,omitempty"`
-	Value          *int64        `json:"value,omitempty"` // in the user's currency
-	NotForSale     bool          `json:"not_for_sale,omitempty"`
+	Traits     []string `json:"traits,omitempty"`
+	Value      *int64   `json:"value,omitempty"` // in the user's currency
+	NotForSale bool     `json:"not_for_sale,omitempty"`
+	// TransferStatus is the main contract's (see Contract.TransferStatus);
+	// fog of war never hides it.
+	TransferStatus []string      `json:"transfer_status,omitempty"`
 	Contract       *ContractInfo `json:"contract,omitempty"`        // nil for free agents
 	Loan           *ContractInfo `json:"loan,omitempty"`            // set while on loan at TeamIndex
 	FutureContract *ContractInfo `json:"future_contract,omitempty"` // pre-agreed move
@@ -204,6 +207,9 @@ func (v View) profile(x seen) Profile {
 		out.Value = ptr(v.Money().Amount(p.Value))
 	}
 	out.Contract, out.Loan, out.FutureContract = v.contract(p.Contract, s), v.contract(p.Loan, s), v.contract(p.FutureContract, s)
+	if p.Contract != nil {
+		out.TransferStatus = p.Contract.TransferStatus()
+	}
 	return out
 }
 
@@ -492,6 +498,7 @@ type query struct {
 	per90         []string
 	traits        uint64   // Traits as savefile.TraitNames bits
 	personalities []string // Personalities as personalityLabels spell them
+	transferFlags uint8    // TransferStatus as transferStatuses bits
 }
 
 func (g *Game) compile(f Filter) (query, error) {
@@ -677,6 +684,13 @@ func compileProfileFilters(q *query) error {
 		}
 		q.personalities = append(q.personalities, personalityLabels[i])
 	}
+	for _, name := range q.TransferStatus {
+		i := slices.IndexFunc(transferStatuses, func(s transferStatus) bool { return strings.EqualFold(s.name, name) })
+		if i < 0 {
+			return fmt.Errorf("%w: transfer_status %q; valid values: %s", ErrInvalidFilter, name, strings.Join(transferStatusNames(transferStatusBits), ", "))
+		}
+		q.transferFlags |= transferStatuses[i].bit
+	}
 	return nil
 }
 
@@ -843,6 +857,7 @@ func (q query) judge(x seen) verdict {
 		q.NationIndex != nil && p.NationIndex != *q.NationIndex,
 		q.teams != nil && !q.teams[p.TeamIndex],
 		q.nation != "" && !strings.Contains(p.nationKey, q.nation),
+		q.transferFlags != 0 && (p.Contract == nil || p.Contract.transferFlags&q.transferFlags == 0),
 		!q.expiresBy.IsZero() && (p.Contract == nil || p.Contract.End.IsZero() || p.Contract.End.After(q.expiresBy)),
 		q.MinHeightCM > 0 && (p.HeightCM == 0 || p.HeightCM < q.MinHeightCM),
 		q.MaxHeightCM > 0 && (p.HeightCM == 0 || p.HeightCM > q.MaxHeightCM),

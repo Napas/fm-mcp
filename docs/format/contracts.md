@@ -58,6 +58,16 @@ FULL contracts start with a header (`0x3490034`): `u8 contract type (guess: 1 fu
 
 Samples: Lotito has an open event (type 12, id 650, status 3); Cissokho has three closed events (types 37, 37, 19); Barthes has none. Kind and flags: Barthes 1 / 0x00, Nešić 0 / 0x00, Garrido 1 / 0x40.
 
+**Transfer status** (core byte 23 bits): verified 27.0.0, in game, 2026-11-06. Two saves of the KŽ career on the same game day (`data/test_save_27_list_before.fm`, `data/test_save_27_list_after.fm`), three statuses set in between. Only `game_db.dat` and small bookkeeping files differ.
+
+| Bit | Status in game | Evidence (before → after) |
+|-----|----------------|---------------------------|
+| 0 | Transfer Listed | Ibrahim Gambo `0x40` → `0x41` |
+| 1 | Listed for Loan | Elijus Trumpa `0x40` → `0x02` (listing clears bit 6) |
+| 6 | Unavailable for loan | Fedor Černych `0x00` → `0x40` |
+
+FM27 offers no "Unavailable for transfer" status. In the after save 286 men are transfer listed (e.g. Tsimikas, Liverpool; Lo Celso, Real Hispalis) and 2 231 are loan listed (e.g. Balde, Barcelona); these AI-set statuses were not checked in game. Bit 7 is set on 163 players in `test_save_27` and none three days later in `test_save_27b`, while bit 1 gains 164; bit 7's meaning is unknown. Bits 2–5 were 0 on every contract in both saves. 26.x saves are read the same way, unchecked in game; 26.3.2's interest code treats bit 0 as an exemption, which fits Transfer Listed (inference).
+
 **Competition bonus** — verified 26.3.2 (bytes), 31 bytes each:
 
 | Offset | Size | Field | Status |
@@ -77,7 +87,7 @@ Samples: Lotito has an open event (type 12, id 650, status 3); Cissokho has thre
 
 Type 10 is the bonus for qualifying for the target competition: Bernardi's item is `01 00 01 00 6c 07 0b 00 00 00 24 ee 00 00 ff ff 01 ff ff ff ff ff ff ff ff 0a 7d 02 00 00 00` = Ligue 1 (index 11), £60 964, type 10, target 637 = UEFA Champions League (uid 1 301 394). The game shows "Qualifying for the UEFA Champions League €71K" (£60 964 × 1.1571305 = €70 543). Leroux, with no such bonus in game, has no item. Asier Castillo (uid 2 002 098 873, Metz) has the same item with £64 150 (not checked in game). Counts (2035-12-09): 2 257 items on 2 180 contracts, at most 3 per contract; type 10 = 109 items with targets Champions League 22, Europa League 55, Conference League 32 (inference from names: same bonus for those competitions). The 2035-12-02 save has 2 249 items and Bernardi's is identical; the 26.2.0 test save has 3 284 items, types 0, 3 and 1. `fm` shows type-10 items as "<target> qualification bonus" and leaves other types out.
 
-**Playing time** (squad status) — verified 26.3.2 (code + in game). Core bytes 20–22 are CONTRACT `+0x54`, `+0x55`, `+0x56`; the writer `0x3269674` writes them after the start date, then `+0x57..+0x59` (bytes 23–25, mostly 0, not decoded). Getters: `0x1dbc8f4` (+0x54), `0x1dbc904` (+0x55), `0x1dbc8fc` (+0x56). After the signed date (core offset 31 + 29n, n = the item count at offset 26) the writer emits `+0x5a…+0x60`:
+**Playing time** (squad status) — verified 26.3.2 (code + in game). Core bytes 20–22 are CONTRACT `+0x54`, `+0x55`, `+0x56`; the writer `0x3269674` writes them after the start date, then `+0x57..+0x59` (byte 23 is the core flags above; bytes 24–25 are mostly 0, not decoded). Getters: `0x1dbc8f4` (+0x54), `0x1dbc904` (+0x55), `0x1dbc8fc` (+0x56). After the signed date (core offset 31 + 29n, n = the item count at offset 26) the writer emits `+0x5a…+0x60`:
 
 | Core offset | Field | Status |
 |-------------|-------|--------|
@@ -200,5 +210,6 @@ Parsing: the cores are found by their tail carrying the record's own person inde
 ## Open questions
 
 - ACTUAL_PERSON fields before the contracts marker: `+0x102`, `+0x104`, `+0x106`, the two u8s, the `+0xe8` date, `+0x10b` and `+0xb0`.
-- Playing time: byte 21 and when it is set or cleared; core bytes 23–25 and `+0x5a`; whether the game shows a loanee's status from his loan contract; the B team named by value 14. Actual playing time: the level-7 match rule (Squad Player or Impact Sub), the other `0x3780194` branches (Breakthrough Prospect ability test, Impact Sub at 33+, Fringe via the competition, B Team Regular over 23 and which clubs hold the `+0x118` entry), the youth rule from 22 to 25 (Lobede fails it at 25), the youth-contract, promise and team clamps, and whether reserve players' −100 scores show as Surplus in game. In-game checks: Sow (24, FC Metz 2; whether a reserve player's −100 score shows as Surplus). "Expected" playing time: the squad-ability ranking `0x2f9e580`.
+- Transfer status: whether scouting knowledge hides other clubs' players' statuses in game (`fm` never hides them); check the AI-set statuses in game.
+- Playing time: byte 21 and when it is set or cleared; core byte 23 bits 3 and 7, bytes 24–25 and `+0x5a`; whether the game shows a loanee's status from his loan contract; the B team named by value 14. Actual playing time: the level-7 match rule (Squad Player or Impact Sub), the other `0x3780194` branches (Breakthrough Prospect ability test, Impact Sub at 33+, Fringe via the competition, B Team Regular over 23 and which clubs hold the `+0x118` entry), the youth rule from 22 to 25 (Lobede fails it at 25), the youth-contract, promise and team clamps, and whether reserve players' −100 scores show as Surplus in game. In-game checks: Sow (24, FC Metz 2; whether a reserve player's −100 score shows as Surplus). "Expected" playing time: the squad-ability ranking `0x2f9e580`.
 - Contracts: does Bernardi's screen show a relegation release clause the save lacks? Competition bonus types 0, 3, 6, 14 (and 1 in 26.2.0) and item offsets 17 and 21 are not decoded; whether Europa League and Conference League type-10 items mean the same as the Champions League one. FULL header offsets 5 and 9 (`+0xac`, `+0xb0`; the second drops in steps between saves on some contracts, hypothesis: another bonus paid in instalments); which date the weekly loyalty amount is counted from.
