@@ -314,6 +314,7 @@ func TestSearchWithFogOfWarMatchesOnlyVisibleValues(t *testing.T) {
 		{"visible attribute", Filter{MinAttributes: map[string]int{"Pace": 5}}, []uint32{5, 1, 3, 2, 4, 8}, 6},
 		{"hidden attribute", Filter{MinAttributes: map[string]int{"Consistency": 5}}, []uint32{5, 1, 3, 2}, 4},
 		{"personality attribute", Filter{MinAttributes: map[string]int{"Professionalism": 5}}, []uint32{5, 1, 3, 2}, 4},
+		{"hidden attribute maximum", Filter{MaxAttributes: map[string]int{"Consistency": 20}}, []uint32{5, 1, 3, 2}, 4},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
