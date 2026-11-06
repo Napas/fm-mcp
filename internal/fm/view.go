@@ -66,6 +66,9 @@ type Profile struct {
 	// OutOfPossessionRoleAbility (Search only) is the same for the search's
 	// out-of-possession role.
 	OutOfPossessionRoleAbility *int `json:"out_of_possession_role_ability,omitempty"`
+	// PositionRatings (Search only) are the ratings at the filtered positions,
+	// in filter order.
+	PositionRatings []PositionRating `json:"position_ratings,omitempty"`
 	// Per90 (Search only) holds the club per-90 rates the search sorts or
 	// filters on.
 	Per90 map[string]float64 `json:"per90,omitempty"`
@@ -401,11 +404,13 @@ func (v View) Search(f Filter) (SearchResult, error) {
 		}
 	}
 	for i, x := range page {
-		res.Players[i].RoleAbility = shownKey(q.roleAbility, x)
-		res.Players[i].OutOfPossessionRoleAbility = shownKey(q.oopRoleAbility, x)
-	}
-	for i, x := range page {
-		res.Players[i].Per90 = v.g.per90Row(x.p, q.per90)
+		row := &res.Players[i]
+		row.RoleAbility = shownKey(q.roleAbility, x)
+		row.OutOfPossessionRoleAbility = shownKey(q.oopRoleAbility, x)
+		for _, pos := range q.positions {
+			row.PositionRatings = append(row.PositionRatings, x.p.Positions[pos])
+		}
+		row.Per90 = v.g.per90Row(x.p, q.per90)
 	}
 	if res.Total == 0 && res.NeedsScouting == 0 {
 		res.Hint = v.g.emptyClubHint(q)
@@ -464,8 +469,11 @@ func exampleTeams(teams []*Team) string {
 type query struct {
 	Filter
 	money     Money
-	pos       int         // position index, -1 for any
+	pos       int   // Position's index, -1 without one
+	positions []int // player needs minRating at any of these; nil for any
+	minRating int
 	minAttrs  map[int]int // attribute index → minimum
+	maxAttrs  map[int]int // attribute index → maximum
 	women     *bool
 	expiresBy time.Time
 	joinedBy  time.Time      // latest joined_club date MinMonthsAtClub allows
@@ -487,20 +495,16 @@ type query struct {
 }
 
 func (g *Game) compile(f Filter) (query, error) {
-	pos, err := positionFilter(f.Position)
-	if err != nil {
+	q := query{Filter: f, money: g.Info.Money, nation: nationKey(f.Nation)}
+	var err error
+	if err = compilePositions(&q); err != nil {
 		return query{}, err
 	}
-	q := query{Filter: f, money: g.Info.Money, pos: pos, minAttrs: make(map[int]int, len(f.MinAttributes)), nation: nationKey(f.Nation)}
-	for name, v := range f.MinAttributes {
-		i, ok := attributeOf(name)
-		if !ok {
-			return query{}, fmt.Errorf("%w: attribute %q; valid names: %s", ErrInvalidFilter, name, strings.Join(attributeNames[:], ", "))
-		}
-		if v < 1 || v > 20 {
-			return query{}, fmt.Errorf("%w: %s minimum %d is outside 1-20", ErrInvalidFilter, attributeNames[i], v)
-		}
-		q.minAttrs[i] = v
+	if q.minAttrs, err = attributeBounds("minimum", f.MinAttributes); err != nil {
+		return query{}, err
+	}
+	if q.maxAttrs, err = attributeBounds("maximum", f.MaxAttributes); err != nil {
+		return query{}, err
 	}
 	if err := g.checkRefs(f); err != nil {
 		return query{}, err
@@ -574,6 +578,63 @@ func (g *Game) compile(f Filter) (query, error) {
 	return q, nil
 }
 
+// compilePositions sets the position filters; each position needs
+// MinPositionRating, default naturalRating.
+func compilePositions(q *query) error {
+	switch {
+	case q.Position != "" && len(q.Positions) > 0:
+		return fmt.Errorf("%w: use position or positions, not both", ErrInvalidFilter)
+	case len(q.Positions) > 0 && (q.Role != "" || q.OutOfPossessionRole != ""):
+		return fmt.Errorf("%w: role and out_of_possession_role need position, not positions", ErrInvalidFilter)
+	case q.MinPositionRating != 0 && q.Position == "" && len(q.Positions) == 0:
+		return fmt.Errorf("%w: min_position_rating needs a position or positions", ErrInvalidFilter)
+	case q.MinPositionRating < 0 || q.MinPositionRating > 20:
+		return fmt.Errorf("%w: min_position_rating %d is outside 1-20", ErrInvalidFilter, q.MinPositionRating)
+	}
+	q.minRating = cmp.Or(q.MinPositionRating, naturalRating)
+	var err error
+	if q.pos, err = positionFilter(q.Position); err != nil {
+		return err
+	}
+	if q.pos >= 0 {
+		q.positions = []int{q.pos}
+	}
+	for _, code := range q.Positions {
+		i, err := positionNamed(code)
+		if err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidFilter, err)
+		}
+		if !slices.Contains(q.positions, i) {
+			q.positions = append(q.positions, i)
+		}
+	}
+	return nil
+}
+
+// attributeBounds maps attribute names to indexes and checks values are 1-20;
+// bound ("minimum" or "maximum") labels the error.
+func attributeBounds(bound string, byName map[string]int) (map[int]int, error) {
+	out := make(map[int]int, len(byName))
+	for name, v := range byName {
+		i, ok := attributeOf(name)
+		if !ok {
+			return nil, fmt.Errorf("%w: attribute %q; valid names: %s", ErrInvalidFilter, name, strings.Join(attributeNames[:], ", "))
+		}
+		if v < 1 || v > 20 {
+			return nil, fmt.Errorf("%w: %s %s %d is outside 1-20", ErrInvalidFilter, attributeNames[i], bound, v)
+		}
+		out[i] = v
+	}
+	return out, nil
+}
+
+// ratedAt reports whether p has minRating at any filtered position.
+func (q query) ratedAt(p *Player) bool {
+	return q.positions == nil || slices.ContainsFunc(q.positions, func(i int) bool { return p.Positions[i].Rating >= q.minRating })
+}
+
+const maxReputation = 10000
+
 // maxMonthsAtClub caps MinMonthsAtClub at 100 years.
 const maxMonthsAtClub = 1200
 
@@ -585,14 +646,18 @@ func monthsBefore(t time.Time, n int) time.Time {
 	return first.AddDate(0, 0, min(t.Day(), last)-1)
 }
 
-// compileProfileFilters validates the height, trait, personality and role
-// ability filters.
+// compileProfileFilters validates the height, reputation, trait, personality
+// and role ability filters.
 func compileProfileFilters(q *query) error {
 	switch {
 	case q.MinHeightCM < 0:
 		return fmt.Errorf("%w: min_height_cm %d is negative", ErrInvalidFilter, q.MinHeightCM)
 	case q.MaxHeightCM < 0:
 		return fmt.Errorf("%w: max_height_cm %d is negative", ErrInvalidFilter, q.MaxHeightCM)
+	case q.MinReputation < 0 || q.MinReputation > maxReputation:
+		return fmt.Errorf("%w: min_reputation %d is outside 0-%d", ErrInvalidFilter, q.MinReputation, maxReputation)
+	case q.MaxReputation < 0 || q.MaxReputation > maxReputation:
+		return fmt.Errorf("%w: max_reputation %d is outside 0-%d", ErrInvalidFilter, q.MaxReputation, maxReputation)
 	case q.MinRoleAbility > 0 && q.roleAbility == nil:
 		return fmt.Errorf("%w: min_role_ability needs a role and a position", ErrInvalidFilter)
 	case q.MinOutOfPossessionRoleAbility > 0 && q.oopRoleAbility == nil:
@@ -767,7 +832,9 @@ func (q query) judge(x seen) verdict {
 	p, s := x.p, x.s
 	switch {
 	case q.women != nil && p.Female != *q.women,
-		q.pos >= 0 && p.Positions[q.pos].Rating < naturalRating,
+		!q.ratedAt(p),
+		q.MinReputation > 0 && p.Reputation.Current < q.MinReputation,
+		q.MaxReputation > 0 && p.Reputation.Current > q.MaxReputation,
 		q.MinAge > 0 && p.Age < q.MinAge,
 		q.MaxAge > 0 && p.Age > q.MaxAge,
 		q.TeamIndex != nil && !p.plays(*q.TeamIndex),
@@ -807,6 +874,9 @@ func (q query) judge(x seen) verdict {
 	}
 	for i, minimum := range q.minAttrs {
 		j.check(s.attribute(i), int(p.Attributes[i]) >= minimum)
+	}
+	for i, maximum := range q.maxAttrs {
+		j.check(s.attribute(i), int(p.Attributes[i]) <= maximum)
 	}
 	if q.traits != 0 {
 		j.check(s.partial(), p.traits&q.traits == q.traits)

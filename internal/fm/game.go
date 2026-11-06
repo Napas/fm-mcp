@@ -237,6 +237,17 @@ type Filter struct {
 	// ranks by its role ability when neither Role nor SortBy is set.
 	OutOfPossessionRole           string
 	MinOutOfPossessionRoleAbility int // needs OutOfPossessionRole
+
+	// Positions matches players rated at any of them; Position and Positions
+	// are exclusive, and roles need Position.
+	Positions []string
+	// MinPositionRating (1-20, default 15) is the rating Position or Positions
+	// need.
+	MinPositionRating int
+	MaxAttributes     map[string]int // attribute name → maximum, as MinAttributes
+	// MinReputation and MaxReputation bound current reputation, 0-10000.
+	MinReputation int
+	MaxReputation int
 }
 
 // checkRefs rejects team and nation references that match nothing, so an

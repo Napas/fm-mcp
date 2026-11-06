@@ -11,7 +11,7 @@ import (
 	"github.com/Napas/fm-mcp/internal/savefile"
 )
 
-func TestSearchHeightTraitPersonalityAndReleaseClauseFilters(t *testing.T) {
+func TestSearchProfileFilters(t *testing.T) {
 	g := testGame()
 	for uid, h := range map[uint32]int{1: 195, 2: 185, 3: 180, 4: 187} { // 5 has no height
 		g.byUID[uid].HeightCM = h
@@ -23,6 +23,7 @@ func TestSearchHeightTraitPersonalityAndReleaseClauseFilters(t *testing.T) {
 	g.byUID[1].Contract = &Contract{ReleaseFee: 20_000_000}
 	g.byUID[2].Contract = &Contract{ReleaseFee: 60_000_000}
 	g.byUID[4].Contract = &Contract{}
+	g.byUID[4].Positions[2].Rating, g.byUID[4].Positions[3].Rating = 16, 12 // Bergvall: DL 16, DC 12
 
 	tests := []struct {
 		name string
@@ -36,6 +37,17 @@ func TestSearchHeightTraitPersonalityAndReleaseClauseFilters(t *testing.T) {
 		{"personality", Filter{Gender: "men", Personalities: []string{"model professional"}}, []uint32{1}},
 		{"any personality", Filter{Club: "tottenham", Personalities: []string{"Model Professional", "Balanced"}}, []uint32{2, 1, 4, 5}},
 		{"release clause", Filter{Club: "tottenham", MaxReleaseClause: 50_000_000}, []uint32{1}},
+		{"any of positions", Filter{Gender: "men", Positions: []string{"dl", "GK"}}, []uint32{1, 4}},
+		{"min position rating", Filter{Gender: "men", Position: "DC", MinPositionRating: 19}, []uint32{2}},
+		{"retraining candidates", Filter{Gender: "men", Position: "DC", MinPositionRating: 10}, []uint32{2, 4, 3}},
+		{"positions with a min rating", Filter{Gender: "men", Positions: []string{"DL", "DC"}, MinPositionRating: 17}, []uint32{2, 3}},
+		{"natural only", Filter{Gender: "men", Position: "DC", MinPositionRating: 20}, []uint32{2}},
+		{"max attribute", Filter{Club: "tottenham", MaxAttributes: map[string]int{"aggression": 15}}, []uint32{1, 4, 5}},
+		{"top reputation", Filter{Club: "tottenham", MinReputation: 7800, MaxReputation: 10000}, []uint32{2}},
+		{"reputation at the top of the scale", Filter{Club: "tottenham", MinReputation: 10000}, []uint32{}},
+		{"min reputation", Filter{Club: "tottenham", MinReputation: 7000}, []uint32{2, 1}},
+		{"max reputation", Filter{Club: "tottenham", MaxReputation: 7000}, []uint32{4, 5}},
+		{"reputation range", Filter{Club: "tottenham", MinReputation: 6000, MaxReputation: 7600}, []uint32{1, 4}},
 	}
 	for _, tt := range tests {
 		res, err := g.View(false).Search(tt.f)
@@ -126,6 +138,18 @@ func TestSearchRejectsBadProfileFilters(t *testing.T) {
 		{Filter{MinHeightCM: -1}, "min_height_cm"},
 		{Filter{MinMonthsAtClub: 1201}, "min_months_at_club"},
 		{Filter{MinSeasonMinutes: -1}, "min_season_minutes"},
+		{Filter{Positions: []string{"DC", "XX"}}, `position "XX"`},
+		{Filter{Position: "DC", Positions: []string{"DL"}}, "use position or positions, not both"},
+		{Filter{Positions: []string{"DC", "DL"}, Role: "Centre-Back"}, "role and out_of_possession_role need position, not positions"},
+		{Filter{Positions: []string{"DC"}, OutOfPossessionRole: "Centre-Back"}, "role and out_of_possession_role need position, not positions"},
+		{Filter{MinPositionRating: 10}, "min_position_rating needs a position or positions"},
+		{Filter{Position: "DC", MinPositionRating: 21}, "min_position_rating 21 is outside 1-20"},
+		{Filter{Position: "DC", MinPositionRating: -1}, "min_position_rating -1 is outside 1-20"},
+		{Filter{MaxAttributes: map[string]int{"Speed": 10}}, `attribute "Speed"`},
+		{Filter{MaxAttributes: map[string]int{"Pace": 0}}, "Pace maximum 0 is outside 1-20"},
+		{Filter{MinReputation: -1}, "min_reputation -1 is outside 0-10000"},
+		{Filter{MaxReputation: 10001}, "max_reputation 10001 is outside 0-10000"},
+		{Filter{MaxReputation: -1}, "max_reputation -1 is outside 0-10000"},
 	} {
 		if _, err := v.Search(tt.f); !errors.Is(err, ErrInvalidFilter) || !strings.Contains(err.Error(), tt.want) {
 			t.Errorf("%+v: %v; want an invalid filter mentioning %q", tt.f, err, tt.want)
@@ -169,5 +193,51 @@ func TestContractReleaseFeeIsTheLowestMinimumFeeReleaseClause(t *testing.T) {
 	}
 	if c := newContract(&savefile.Contract{Clauses: []savefile.Clause{{Type: 1, Value: 1_000_000}}}, testWorld); c.ReleaseFee != 0 {
 		t.Errorf("release fee without a minimum fee clause = %d, want 0", c.ReleaseFee)
+	}
+}
+
+// TestSearchRoleAbilityBelowAccomplished: a role at a position rated 12
+// scores as in squad_roles.
+func TestSearchRoleAbilityBelowAccomplished(t *testing.T) {
+	v := squadRolesGame().View(false)
+	res, err := v.Search(Filter{Gender: "any", Position: "DC", MinPositionRating: 10, Role: "Ball-Playing Centre-Back"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grid, err := v.SquadRoles(SquadRolesRequest{TeamIndex: 547, Position: "DC", Phase: PhaseInPossession})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := roleRow(t, grid, "DC", PhaseInPossession, "Ball-Playing Centre-Back").Players[0].RoleAbility
+	if got := uids(res.Players); !slices.Equal(got, []uint32{1}) || res.Players[0].RoleAbility == nil || *res.Players[0].RoleAbility != want {
+		t.Errorf("players %v, role abilities %v; want [1] at %d", got, roleAbilities(res.Players), want)
+	}
+}
+
+func TestSearchRowsCarryFilteredPositionRatings(t *testing.T) {
+	g := testGame()
+	g.byUID[4].Positions[2].Rating, g.byUID[4].Positions[3].Rating = 16, 12 // Bergvall: DL 16, DC 12
+	res, err := g.View(false).Search(Filter{Gender: "men", Positions: []string{"DC", "dc", "DL"}, MinPositionRating: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[uint32][]PositionRating{
+		2: {{"DC", 20}, {"DL", 1}},
+		4: {{"DC", 12}, {"DL", 16}},
+		3: {{"DC", 18}, {"DL", 1}},
+	}
+	if got := uids(res.Players); !slices.Equal(got, []uint32{2, 4, 3}) {
+		t.Fatalf("players %v", got)
+	}
+	for _, p := range res.Players {
+		if !slices.Equal(p.PositionRatings, want[p.UID]) {
+			t.Errorf("%d: position ratings %+v, want %+v", p.UID, p.PositionRatings, want[p.UID])
+		}
+	}
+	if res, err = g.View(false).Search(Filter{Gender: "men"}); err != nil {
+		t.Fatal(err)
+	}
+	if res.Players[0].PositionRatings != nil {
+		t.Errorf("rows without a position filter carry %+v", res.Players[0].PositionRatings)
 	}
 }

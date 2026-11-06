@@ -2285,14 +2285,14 @@ func TestSummaryInterestKeepsVerdictsAndReasons(t *testing.T) {
 	}
 }
 
-func TestSearchByHeightTraitsPersonalityReleaseClauseAndRoleAbility(t *testing.T) {
+func TestSearchByProfileFilters(t *testing.T) {
 	tall := raw(5, "Chris", "Ashby", 547, 135, 3)
 	tall.Height = 194
 	tall.Traits = 1 << 17 // Argues With Officials
 	tall.Contract = &savefile.Contract{TeamIndex: 547, Clauses: []savefile.Clause{{Type: 0, Value: 20_000_000, Extra: 0xffff}}}
 	h := harnessWith(t, tall)
 	h.call("set_fog_of_war", map[string]any{"enabled": false}, nil)
-	var rows struct {
+	type searchRows struct {
 		Players []PlayerSummary `json:"players"`
 	}
 	for _, args := range []map[string]any{
@@ -2300,15 +2300,41 @@ func TestSearchByHeightTraitsPersonalityReleaseClauseAndRoleAbility(t *testing.T
 		{"traits": []string{"Argues With Officials"}, "max_release_clause": 30_000_000},
 		{"personalities": []string{"Balanced"}, "min_height_cm": 190},
 		{"position": "DC", "role": "Overlapping Centre-Back", "min_role_ability": 1, "min_height_cm": 190},
+		{"positions": []string{"DL", "DC"}, "min_position_rating": 20, "min_height_cm": 190},
+		{"max_attributes": map[string]int{"Pace": 12}, "min_height_cm": 190},
+		{"min_reputation": 1350, "max_reputation": 1350, "min_height_cm": 190},
+		{"max_reputation": 10000, "min_height_cm": 190},
 	} {
 		args["team_index"] = 547
-		h.call("search_players", args, &rows)
-		if len(rows.Players) != 1 || rows.Players[0].UID != 5 {
-			t.Errorf("search_players %v = %+v, want only Ashby", args, rows.Players)
+		var rows searchRows
+		if res := h.call("search_players", args, &rows); res.IsError {
+			t.Errorf("search_players %v: %s", args, allText(res))
+			continue
 		}
+		if len(rows.Players) != 1 || rows.Players[0].UID != 5 || rows.Players[0].CurrentReputation != 1350 {
+			t.Errorf("search_players %v = %+v, want only Ashby, current reputation 1350", args, rows.Players)
+		}
+	}
+	// Ratings under 15 are included.
+	var rated searchRows
+	if res := h.call("search_players", map[string]any{"team_index": 547, "positions": []string{"DC", "GK"}, "min_position_rating": 1, "min_height_cm": 190}, &rated); res.IsError {
+		t.Fatalf("search_players: %s", allText(res))
+	}
+	if len(rated.Players) != 1 || !slices.Equal(rated.Players[0].PositionRatings, []fm.PositionRating{{Position: "DC", Rating: 20}, {Position: "GK", Rating: 0}}) {
+		t.Errorf("position ratings = %+v", rated.Players)
 	}
 	if res := h.call("search_players", map[string]any{"traits": []string{"Shoots A Lot"}}, nil); !res.IsError {
 		t.Error("search_players accepted an unknown trait")
+	}
+	tools, err := h.session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(tools.Tools, func(tool *mcp.Tool) bool { return tool.Name == "search_players" })
+	for _, want := range []string{"positions", "min_position_rating", "max_attributes", "min_reputation", "max_reputation", "position_ratings"} {
+		if !strings.Contains(tools.Tools[i].Description, want) {
+			t.Errorf("search_players description lacks %q", want)
+		}
 	}
 }
 

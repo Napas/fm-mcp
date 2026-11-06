@@ -82,7 +82,7 @@ func New(opts Options) *mcp.Server {
 	addTool(srv, &mcp.Tool{Name: "get_last_lineup", Description: "A team's lineup, formation and roles in its most recent match, and who it played: opponent, mentality (checked in game for the manager's team only), the shape in and out of possession (e.g. 4-2-3-1), the 11 slots with in- and out-of-possession position and role and the player in each with his shirt_number, and the bench. Use it to scout an opponent; get_fixtures gives the next one. Roles have no duty and the match date is not known (get_fixtures has it). Out-of-possession positions are paired as the game's match report shows (checked in game for one FM27 match); get_tactic shows the current tactic's pairing, which may differ. A player marked unnamed_player is a person the save does not decode as a player, so it has no name: 58% of filled XI places on the 12-09 save, mostly in women's teams and clubs outside Europe; big European men's clubs are complete. Fog of war does not hide it. Defaults to the human manager's first team. Names of roles FM26 renamed are guesses; the server instructions list them."}, withGame(s, getLastLineup))
 	addTool(srv, &mcp.Tool{Name: "get_fixtures", Description: fixturesDescription}, withGame(s, getFixtures))
 	addTool(srv, &mcp.Tool{Name: "get_table", Description: tableDescription}, withGame(s, getTable))
-	addTool(srv, &mcp.Tool{Name: "search_players", Description: "Scout players with filters: position, age, current/potential ability, team or club, contracted team, nation, gender, value, wage, release clause, expiring contract, months at the current club, injuries, height, traits, personality and minimum attribute values (preferred foot: e.g. {\"LeftFoot\": 15}). Returns the total number of matches. Sorted by current ability unless sort_by is set; sort_by also takes this season's club stats (season_goals, season_average_rating…) and club stats per 90 minutes (per90_progressive_passes…), with min_season_minutes to leave out players with few minutes; min_per90 filters on them, and rows carry the values in per90. With role (an in-possession role offered at the position, with position), rows carry role_ability and are ranked by it unless sort_by is set; min_role_ability sets a floor. out_of_possession_role does the same for an out-of-possession role (out_of_possession_role_ability, min_out_of_possession_role_ability); with both roles, rows rank by role_ability. Without a team or club filter, gender defaults to that of the manager's team. With fog of war on, filters match only values your scouts know, and players whose sort value is hidden or missing come last; needs_scouting counts players who pass every filter you can see but whose value for another filter is hidden; they may match once scouted. With interest (transfer, loan or transfer_or_loan), players who certainly won't join the manager's club are left out and counted in interest_dropped; kept rows carry interest."}, withGame(s, searchPlayers))
+	addTool(srv, &mcp.Tool{Name: "search_players", Description: "Scout players with filters: position (or several in positions; min_position_rating replaces the default 15; with position or positions, rows carry position_ratings at them), age, current/potential ability, reputation (min_reputation, max_reputation), team or club, contracted team, nation, gender, value, wage, release clause, expiring contract, months at the current club, injuries, height, traits, personality, minimum attribute values (preferred foot: e.g. {\"LeftFoot\": 15}) and max_attributes. Returns the total number of matches. Sorted by current ability unless sort_by is set; sort_by also takes this season's club stats (season_goals, season_average_rating…) and club stats per 90 minutes (per90_progressive_passes…), with min_season_minutes to leave out players with few minutes; min_per90 filters on them, and rows carry the values in per90. With role (an in-possession role offered at the position, with position), rows carry role_ability and are ranked by it unless sort_by is set; min_role_ability sets a floor. out_of_possession_role does the same for an out-of-possession role (out_of_possession_role_ability, min_out_of_possession_role_ability); with both roles, rows rank by role_ability. Without a team or club filter, gender defaults to that of the manager's team. With fog of war on, filters match only values your scouts know, and players whose sort value is hidden or missing come last; needs_scouting counts players who pass every filter you can see but whose value for another filter is hidden; they may match once scouted. With interest (transfer, loan or transfer_or_loan), players who certainly won't join the manager's club are left out and counted in interest_dropped; kept rows carry interest."}, withGame(s, searchPlayers))
 	return srv
 }
 
@@ -434,6 +434,7 @@ type PlayerSummary struct {
 	NationIndex       int64              `json:"nation_index"`
 	Nation            string             `json:"nation,omitempty"`
 	BestPositions     []string           `json:"best_positions"`
+	CurrentReputation int                `json:"current_reputation"`  // 0-10000
 	Knowledge         *int               `json:"knowledge,omitempty"` // with fog of war on
 	Scouting          fm.Scouting        `json:"scouting,omitempty"`  // with fog of war on
 	CurrentAbility    *int               `json:"current_ability,omitempty"`
@@ -451,6 +452,8 @@ type PlayerSummary struct {
 
 	// OutOfPossessionRoleAbility is the same for a search's out-of-possession role.
 	OutOfPossessionRoleAbility *int `json:"out_of_possession_role_ability,omitempty"`
+	// PositionRatings are the ratings at the searched positions.
+	PositionRatings []fm.PositionRating `json:"position_ratings,omitempty"`
 
 	Season *fm.SeasonStats `json:"season,omitempty"` // nil without a match this season
 
@@ -464,9 +467,9 @@ func summarize(ps []fm.Profile) []PlayerSummary {
 			UID: p.UID, Name: p.Name, Age: p.Age,
 			TeamIndex: p.TeamIndex, Club: p.Club, NationalTeamIndex: p.NationalTeamIndex, NationalTeam: p.NationalTeam,
 			NationIndex: p.NationIndex, Nation: p.Nation,
-			BestPositions: p.BestPositions(), Knowledge: p.Knowledge, Scouting: p.Scouting,
+			BestPositions: p.BestPositions(), CurrentReputation: p.Reputation.Current, Knowledge: p.Knowledge, Scouting: p.Scouting,
 			CurrentAbility: p.CurrentAbility, PotentialAbility: p.PotentialAbility,
-			Value: p.Value, NotForSale: p.NotForSale, Season: p.Season, RoleAbility: p.RoleAbility, OutOfPossessionRoleAbility: p.OutOfPossessionRoleAbility, Per90: p.Per90, Interest: p.Interest,
+			Value: p.Value, NotForSale: p.NotForSale, Season: p.Season, RoleAbility: p.RoleAbility, OutOfPossessionRoleAbility: p.OutOfPossessionRoleAbility, PositionRatings: p.PositionRatings, Per90: p.Per90, Interest: p.Interest,
 		}
 		if c := p.Contract; c != nil {
 			out[i].Wage = c.Wage
@@ -677,7 +680,7 @@ func squad(v fm.View, in squadIn) (squadOut, error) {
 // searchIn is search_players' input.
 type searchIn struct {
 	Gender              string             `json:"gender,omitempty" jsonschema:"men, women or any; without a team or club filter it defaults to the gender of the manager's team"`
-	Position            string             `json:"position,omitempty" jsonschema:"position code the player must be rated at least 15 in: GK SW DL DC DR DM ML MC MR AML AMC AMR ST WBL WBR"`
+	Position            string             `json:"position,omitempty" jsonschema:"position code rated at least 15 (or min_position_rating): GK SW DL DC DR DM ML MC MR AML AMC AMR ST WBL WBR"`
 	Role                string             `json:"role,omitempty" jsonschema:"an in-possession role offered at that position, as get_tactic names it, e.g. 'Inside Forward'; needs position. Rows get role_ability, FM's role ability (0-200) at that position, and are ranked by it unless sort_by is set"`
 	MinRoleAbility      int                `json:"min_role_ability,omitempty" jsonschema:"minimum role_ability (0-200) in role; needs role"`
 	MinAge              int                `json:"min_age,omitempty"`
@@ -713,6 +716,12 @@ type searchIn struct {
 	// OutOfPossessionRole and MinOutOfPossessionRoleAbility mirror Role and MinRoleAbility.
 	OutOfPossessionRole           string `json:"out_of_possession_role,omitempty" jsonschema:"an out-of-possession role offered at that position, as get_tactic names it, e.g. 'Pressing Full-Back'; needs position. Rows get out_of_possession_role_ability and are ranked by it unless sort_by or role is set"`
 	MinOutOfPossessionRoleAbility int    `json:"min_out_of_possession_role_ability,omitempty" jsonschema:"minimum out_of_possession_role_ability (0-200); needs out_of_possession_role"`
+
+	Positions         []string       `json:"positions,omitempty" jsonschema:"position codes; rated at least 15 (or min_position_rating) at any one, e.g. [\"DL\", \"WBL\"]; not with position, role or out_of_possession_role"`
+	MinPositionRating int            `json:"min_position_rating,omitempty" jsonschema:"1-20, default 15: rating needed at position or positions, e.g. 10 for players to retrain"`
+	MaxAttributes     map[string]int `json:"max_attributes,omitempty" jsonschema:"maximum 1-20 attribute values, e.g. {\"InjuryProneness\": 8}"`
+	MinReputation     int            `json:"min_reputation,omitempty" jsonschema:"minimum current reputation, 0-10000"`
+	MaxReputation     int            `json:"max_reputation,omitempty" jsonschema:"maximum current reputation, 0-10000"`
 }
 
 func searchPlayers(v fm.View, in searchIn) (searchOut, error) {
