@@ -87,10 +87,10 @@ const (
 	contractKindTenfold  = 2 // multiplies the penalty by 1000 instead of 100
 	penaltyScale         = 100
 	tenfoldPenaltyScale  = 1000
-	// coreFlagsExempt are core byte 23 bits 0 and 3: they exempt him from the
-	// just-joined penalty unless his club's first team has a manager and his
-	// original playing time counts.
-	coreFlagsExempt = 1 | 8
+	// coreFlagsExempt are core byte 23 bits 0 (transfer listed) and 3: they
+	// exempt him from the just-joined penalty unless his club's first team has
+	// a manager and his original playing time counts.
+	coreFlagsExempt = savefile.CoreFlagTransferListed | 8
 
 	// 0x128c898, the club reputation gap.
 	targetBoost       = 1.15 // the target's reputation with a boost clause, under targetBoostMaxAge

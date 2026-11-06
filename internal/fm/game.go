@@ -248,6 +248,8 @@ type Filter struct {
 	// MinReputation and MaxReputation bound current reputation, 0-10000.
 	MinReputation int
 	MaxReputation int
+	// TransferStatus matches players with any of these statuses.
+	TransferStatus []string
 }
 
 // checkRefs rejects team and nation references that match nothing, so an

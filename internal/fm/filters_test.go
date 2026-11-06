@@ -20,9 +20,9 @@ func TestSearchProfileFilters(t *testing.T) {
 	g.byUID[4].traits = 1 << 17
 	vicario := g.byUID[1] // Model Professional: professionalism 20, temperament 10, age 28
 	vicario.Attributes[attrProfessionalism], vicario.Attributes[attrTemperament] = 20, 10
-	g.byUID[1].Contract = &Contract{ReleaseFee: 20_000_000}
-	g.byUID[2].Contract = &Contract{ReleaseFee: 60_000_000}
-	g.byUID[4].Contract = &Contract{}
+	g.byUID[1].Contract = &Contract{ReleaseFee: 20_000_000, transferFlags: savefile.CoreFlagTransferListed | savefile.CoreFlagUnavailableForLoan}
+	g.byUID[2].Contract = &Contract{ReleaseFee: 60_000_000, transferFlags: savefile.CoreFlagLoanListed}
+	g.byUID[4].Contract = &Contract{transferFlags: savefile.CoreFlagUnavailableForLoan}
 	g.byUID[4].Positions[2].Rating, g.byUID[4].Positions[3].Rating = 16, 12 // Bergvall: DL 16, DC 12
 
 	tests := []struct {
@@ -48,6 +48,9 @@ func TestSearchProfileFilters(t *testing.T) {
 		{"min reputation", Filter{Club: "tottenham", MinReputation: 7000}, []uint32{2, 1}},
 		{"max reputation", Filter{Club: "tottenham", MaxReputation: 7000}, []uint32{4, 5}},
 		{"reputation range", Filter{Club: "tottenham", MinReputation: 6000, MaxReputation: 7600}, []uint32{1, 4}},
+		{"transfer listed", Filter{Club: "tottenham", TransferStatus: []string{"transfer_listed"}}, []uint32{1}},
+		{"any transfer status", Filter{Club: "tottenham", TransferStatus: []string{"Loan_Listed", "transfer_listed"}}, []uint32{2, 1}},
+		{"unavailable for loan", Filter{Club: "tottenham", TransferStatus: []string{"unavailable_for_loan"}}, []uint32{1, 4}},
 	}
 	for _, tt := range tests {
 		res, err := g.View(false).Search(tt.f)
@@ -150,6 +153,7 @@ func TestSearchRejectsBadProfileFilters(t *testing.T) {
 		{Filter{MinReputation: -1}, "min_reputation -1 is outside 0-10000"},
 		{Filter{MaxReputation: 10001}, "max_reputation 10001 is outside 0-10000"},
 		{Filter{MaxReputation: -1}, "max_reputation -1 is outside 0-10000"},
+		{Filter{TransferStatus: []string{"listed"}}, `transfer_status "listed"; valid values: transfer_listed, loan_listed, unavailable_for_loan`},
 	} {
 		if _, err := v.Search(tt.f); !errors.Is(err, ErrInvalidFilter) || !strings.Contains(err.Error(), tt.want) {
 			t.Errorf("%+v: %v; want an invalid filter mentioning %q", tt.f, err, tt.want)
@@ -239,5 +243,61 @@ func TestSearchRowsCarryFilteredPositionRatings(t *testing.T) {
 	}
 	if res.Players[0].PositionRatings != nil {
 		t.Errorf("rows without a position filter carry %+v", res.Players[0].PositionRatings)
+	}
+}
+
+func TestContractTransferStatus(t *testing.T) {
+	for flags, want := range map[uint8][]string{
+		0:    nil,
+		0x80: nil, // bit 7 is not a status
+		0x41: {"transfer_listed", "unavailable_for_loan"},
+		0x03: {"transfer_listed", "loan_listed"},
+		0x02: {"loan_listed"},
+	} {
+		c := newContract(&savefile.Contract{CoreFlags: flags}, testWorld)
+		if got := c.TransferStatus(); !slices.Equal(got, want) {
+			t.Errorf("flags %#x: %v, want %v", flags, got, want)
+		}
+	}
+}
+
+// Fog of war never hides the transfer status: the game shows it on every
+// player's profile.
+func TestFogOfWarShowsTransferStatus(t *testing.T) {
+	g := fogGame()
+	g.byUID[6].Contract.transferFlags = savefile.CoreFlagTransferListed
+	v := g.View(true)
+	res, err := v.Search(Filter{TransferStatus: []string{"transfer_listed"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := uids(res.Players); !slices.Equal(got, []uint32{6}) || res.NeedsScouting != 0 {
+		t.Fatalf("search = %v, needs scouting %d; want [6], 0", got, res.NeedsScouting)
+	}
+	if got := res.Players[0].TransferStatus; !slices.Equal(got, []string{"transfer_listed"}) {
+		t.Errorf("row transfer status = %v", got)
+	}
+	if p, ok := v.Profile(6); !ok || !slices.Equal(p.TransferStatus, []string{"transfer_listed"}) {
+		t.Errorf("profile 6 found %v, transfer status %v", ok, p.TransferStatus)
+	}
+}
+
+// A loanee's status comes from the main contract, not the loan.
+func TestLoaneeTransferStatusIsTheParentClubs(t *testing.T) {
+	g := fogGame()
+	g.byUID[3].Contract.transferFlags = savefile.CoreFlagTransferListed
+	g.byUID[3].Loan.transferFlags = savefile.CoreFlagLoanListed
+	v := g.View(false)
+	if p, ok := v.Profile(3); !ok || !slices.Equal(p.TransferStatus, []string{"transfer_listed"}) {
+		t.Errorf("profile 3 found %v, transfer status %v; want [transfer_listed]", ok, p.TransferStatus)
+	}
+	for status, want := range map[string][]uint32{"transfer_listed": {3}, "loan_listed": {}} {
+		res, err := v.Search(Filter{TransferStatus: []string{status}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := uids(res.Players); !slices.Equal(got, want) {
+			t.Errorf("%s: %v, want %v", status, got, want)
+		}
 	}
 }
