@@ -31,6 +31,7 @@ const (
 	FactorOnlyOneClub       = "only_one_club"
 	FactorClubReputationGap = "club_reputation_gap"
 	FactorDependsOnRole     = "depends_on_role"
+	FactorAlreadyOnLoan     = "already_on_loan"
 )
 
 const (
@@ -100,6 +101,7 @@ type interestCase struct {
 	to       interestTarget
 	terms    interestTerms // zero when gated or a free agent
 	gate     string        // the code of the first hard gate he meets; "" when none
+	onLoan   bool          // on loan elsewhere: FM's loan filter fails him
 	verdicts Interest
 }
 
@@ -113,8 +115,9 @@ func (g *Game) interestOf(p *Player) *Interest {
 }
 
 // judgeInterest builds verdicts without texts. False for the human's own
-// players, those moving to his club, the other gender than the manager's
-// team, national-team-only players, and everyone when the club is unknown.
+// players (on loan to or from his club too), those moving to his club, the
+// other gender than the manager's team, national-team-only players, and
+// everyone when the club is unknown.
 func (g *Game) judgeInterest(p *Player) (interestCase, bool) {
 	w := g.world
 	mine, ok := w.clubOf(g.Info.ManagerTeamIndex)
@@ -131,7 +134,7 @@ func (g *Game) judgeInterest(p *Player) (interestCase, bool) {
 		club, ok := w.clubOf(team)
 		return ok && club == mine
 	}
-	if isMine(p.TeamIndex) || isMine(contractTeam) || in.arranged != nil && isMine(int64(in.arranged.team)) {
+	if isMine(p.TeamIndex) || isMine(contractTeam) || p.Loan != nil && isMine(p.Loan.TeamIndex) || in.arranged != nil && isMine(int64(in.arranged.team)) {
 		return interestCase{}, false
 	}
 	if _, contracted := w.clubOf(contractTeam); !contracted {
@@ -144,6 +147,13 @@ func (g *Game) judgeInterest(p *Player) (interestCase, bool) {
 	if c.gate = g.gate(in, to); c.gate != "" {
 		c.verdicts = Interest{Transfer: VerdictOut, Loan: VerdictOut}
 		return c, true
+	}
+	// FM's loan filter (game_plugin 27.0.0 0xcffffc) drops a player already
+	// on loan. Its type-18 club-link exemption is not applied: links are not
+	// parsed.
+	if p.Loan != nil {
+		c.onLoan = true
+		c.verdicts.Loan = VerdictOut
 	}
 	if in.main == nil {
 		return c, true
@@ -171,6 +181,8 @@ func (c interestCase) reasonCode(k InterestKind) string {
 		return ""
 	case c.gate != "":
 		return c.gate
+	case k == InterestLoan && c.onLoan:
+		return FactorAlreadyOnLoan
 	case k == InterestLoan:
 		return sumReasonCode(c.terms.penaltyL, c.terms.gapLoan)
 	}
@@ -189,7 +201,10 @@ func (g *Game) describeInterest(c interestCase) *Interest {
 		if out.Transfer == VerdictOut {
 			out.TransferReason = g.sumReason(c, false)
 		}
-		if out.Loan == VerdictOut {
+		switch {
+		case c.onLoan:
+			out.LoanReason = alreadyOnLoanFactor(c.p.Loan)
+		case out.Loan == VerdictOut:
 			out.LoanReason = g.sumReason(c, true)
 		}
 	}
@@ -231,6 +246,14 @@ func (g *Game) gateFactor(c interestCase) *InterestFactor {
 		return &InterestFactor{c.gate, "Will only join one particular club"}
 	}
 	return &InterestFactor{c.gate, fmt.Sprintf("Left %s %d days ago", c.to.name, gameDaysSince(g.Info.Date, c.in.joined))}
+}
+
+func alreadyOnLoanFactor(loan *Contract) *InterestFactor {
+	text := "On loan at " + loan.Team
+	if !loan.End.IsZero() {
+		text += " until " + loan.End.Format(interestDateLayout)
+	}
+	return &InterestFactor{FactorAlreadyOnLoan, text}
 }
 
 // sumReasonCode names the most negative term of an out sum.
