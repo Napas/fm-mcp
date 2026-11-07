@@ -81,6 +81,30 @@ type TacticSlot struct {
 	// OutOfPossessionRoleAbility is RoleAbility for the out-of-possession role:
 	// never halved, FM27's rules for every build.
 	OutOfPossessionRoleAbility *int `json:"out_of_possession_role_ability,omitempty"`
+	// PlayerInstructions are the current tactic's; nil when none are set.
+	PlayerInstructions *PlayerInstructions `json:"player_instructions,omitempty"`
+}
+
+// PlayerInstructions are a slot's FM27 player instructions, in bit order.
+// Defaults are not stored, so they are not listed.
+type PlayerInstructions struct {
+	InPossession    []string `json:"in_possession,omitempty"`
+	OutOfPossession []string `json:"out_of_possession,omitempty"`
+	// Set bits with no known instruction.
+	UnknownInPossessionBits    []int `json:"unknown_in_possession_bits,omitempty"`
+	UnknownOutOfPossessionBits []int `json:"unknown_out_of_possession_bits,omitempty"`
+}
+
+// playerInstructions returns s's player instructions; nil when none are set
+// or decoded. A phase that is not decoded lists none (checkTactics warns).
+func playerInstructions(s savefile.TacticSlot) *PlayerInstructions {
+	var out PlayerInstructions
+	out.InPossession, out.UnknownInPossessionBits, _ = s.InPossession.Instructions.PlayerInstructions()
+	out.OutOfPossession, out.UnknownOutOfPossessionBits, _ = s.OutOfPossession.Instructions.PlayerInstructions()
+	if out.InPossession == nil && out.OutOfPossession == nil && out.UnknownInPossessionBits == nil && out.UnknownOutOfPossessionBits == nil {
+		return nil
+	}
+	return &out
 }
 
 // SlotRole is a slot's position and role in one phase; empty where unnamed.
@@ -126,11 +150,27 @@ func checkTactics(t savefile.Tactics, err error, managerTeam int64) (*savefile.T
 		if _, _, err := tac.TeamInstructions.TeamInstructions(); err != nil {
 			warnings = append(warnings, fmt.Sprintf("team instructions not decoded: %v", err))
 		}
+		if err := playerInstructionsErr(tac); err != nil {
+			warnings = append(warnings, fmt.Sprintf("player instructions not decoded: %v", err))
+		}
 	}
 	if t.BadFormations > 0 {
 		warnings = append(warnings, fmt.Sprintf("%d teams' last-match formations could not be decoded and are missing", t.BadFormations))
 	}
 	return &t, warnings
+}
+
+// playerInstructionsErr returns the first error decoding a slot's player
+// instructions.
+func playerInstructionsErr(tac *savefile.Tactic) error {
+	for _, s := range tac.Slots {
+		for _, p := range [...]savefile.SlotRole{s.InPossession, s.OutOfPossession} {
+			if _, _, err := p.Instructions.PlayerInstructions(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // lineup returns the XI by slot, then the bench, as person indices, and their
@@ -203,6 +243,7 @@ func newTactic(t *savefile.Tactics, w World, players map[uint32]*Player, aux []p
 	out.Mentality, _ = tac.MentalityName()
 	out.TeamInstructions, out.UnknownTeamInstructionBits = teamInstructions(tac.TeamInstructions)
 	for i, s := range tac.Slots {
+		out.Slots[i].PlayerInstructions = playerInstructions(s)
 		p := l.player(i)
 		if p == nil {
 			continue

@@ -1,7 +1,5 @@
 package savefile
 
-import "fmt"
-
 // 27.0.0 team instructions ("27.0.0 team instructions" in
 // docs/format/tactics.md). Bit n is entry n of the option-id table at
 // 0x52f34d8 in game_plugin (ids are TacticTeamInstructionOptions values).
@@ -121,18 +119,5 @@ func (b Bitset) TeamInstructions() (set []TeamInstruction, unknown []int, err er
 	if b.Version == teamInstructionsVersion26 {
 		return nil, nil, nil
 	}
-	if b.Version != teamInstructionsVersion27 || b.Count != teamInstructionWords27 {
-		return nil, nil, fmt.Errorf("%w: team-instruction bitset version %d with %d words", ErrUnsupported, b.Version, b.Count)
-	}
-	for i, o := range teamInstructions27 {
-		if !b.Has(i) {
-			continue
-		}
-		if o == (TeamInstruction{}) {
-			unknown = append(unknown, i)
-			continue
-		}
-		set = append(set, o)
-	}
-	return set, unknown, nil
+	return namedBits(b, teamInstructionsVersion27, teamInstructionWords27, "team-instruction", teamInstructions27[:])
 }

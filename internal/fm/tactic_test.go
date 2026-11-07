@@ -129,12 +129,54 @@ func TestTacticJSON(t *testing.T) {
 }
 
 // instructionBits27 returns a 27.0.0 team-instruction bitset with bits set.
-func instructionBits27(set ...int) savefile.Bitset {
-	b := savefile.Bitset{Version: 7, Count: 3}
+func instructionBits27(set ...int) savefile.Bitset { return bitset(7, 3, set...) }
+
+func playerBits27(set ...int) savefile.Bitset { return bitset(2, 2, set...) }
+
+func bitset(version, count uint8, set ...int) savefile.Bitset {
+	b := savefile.Bitset{Version: version, Count: count}
 	for _, i := range set {
 		b.Words[i/32] |= 1 << (i % 32)
 	}
 	return b
+}
+
+func TestTacticPlayerInstructions(t *testing.T) {
+	tactics := zazTactics()
+	gk := &tactics.Tactics[0].Slots[0]
+	gk.InPossession.Instructions = playerBits27(2, 50)
+	gk.OutOfPossession.Instructions = playerBits27(32, 31)
+	tactics.Tactics[0].Slots[1].OutOfPossession.Instructions = playerBits27(60)
+	tactics.Tactics[0].Slots[2].InPossession.Instructions = playerBits27(19)
+	tactics.Tactics[0].Slots[2].OutOfPossession.Instructions = savefile.Bitset{Version: 3, Count: 2}
+
+	tac, _ := tacticGame(tactics).View(false).Tactic()
+
+	want := &PlayerInstructions{
+		InPossession:            []string{"More Direct Passes"},
+		OutOfPossession:         []string{"Tackle Harder", "Ease Off Tackles"},
+		UnknownInPossessionBits: []int{50},
+	}
+	if got := tac.Slots[0].PlayerInstructions; !reflect.DeepEqual(got, want) {
+		t.Errorf("slot 0 player instructions %+v, want %+v", got, want)
+	}
+	// Only unknown bits; a phase not decoded lists none.
+	if got, want := tac.Slots[1].PlayerInstructions, (&PlayerInstructions{UnknownOutOfPossessionBits: []int{60}}); !reflect.DeepEqual(got, want) {
+		t.Errorf("slot 1 player instructions %+v, want %+v", got, want)
+	}
+	if got, want := tac.Slots[2].PlayerInstructions, (&PlayerInstructions{InPossession: []string{"Shoot Less Often"}}); !reflect.DeepEqual(got, want) {
+		t.Errorf("slot 2 player instructions %+v, want %+v", got, want)
+	}
+	if got := tac.Slots[3].PlayerInstructions; got != nil {
+		t.Errorf("slot 3 player instructions %+v, want none", got)
+	}
+	b, err := json.Marshal(tac.Slots[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `"player_instructions":{"in_possession":["More Direct Passes"],"out_of_possession":["Tackle Harder","Ease Off Tackles"],"unknown_in_possession_bits":[50]}`; !strings.Contains(string(b), want) {
+		t.Errorf("JSON lacks %s: %s", want, b)
+	}
 }
 
 func TestTacticTeamInstructions(t *testing.T) {
@@ -340,6 +382,36 @@ func TestCheckTacticsWarnsOnUnknownTeamInstructions(t *testing.T) {
 			got := slices.ContainsFunc(warnings, func(w string) bool { return strings.Contains(w, "team instructions not decoded") })
 			if got != tt.warn {
 				t.Errorf("warnings %q; want a team-instructions warning: %v", warnings, tt.warn)
+			}
+		})
+	}
+}
+
+func TestCheckTacticsWarnsOnUnknownPlayerInstructions(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		ip   bool
+		bits savefile.Bitset
+		warn bool
+	}{
+		{"27.0.0", false, playerBits27(19), false},
+		{"no role option", false, savefile.Bitset{}, false},
+		{"26.x", false, savefile.Bitset{Version: 1, Count: 2}, false},
+		{"new version out of possession", false, savefile.Bitset{Version: 3, Count: 2}, true},
+		{"new version in possession", true, savefile.Bitset{Version: 3, Count: 2}, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tactics := zazTactics()
+			slot := &tactics.Tactics[0].Slots[10]
+			if tt.ip {
+				slot.InPossession.Instructions = tt.bits
+			} else {
+				slot.OutOfPossession.Instructions = tt.bits
+			}
+			_, warnings := checkTactics(*tactics, nil, 547)
+			got := slices.ContainsFunc(warnings, func(w string) bool { return strings.Contains(w, "player instructions not decoded") })
+			if got != tt.warn {
+				t.Errorf("warnings %q; want a player-instructions warning: %v", warnings, tt.warn)
 			}
 		})
 	}

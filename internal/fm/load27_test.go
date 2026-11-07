@@ -22,10 +22,12 @@ const (
 	// testSave27InstructionsPath is the KŽ save of 2026-11-07 20:40 (game
 	// date 2026-05-04), whose tactic has team instructions set in game.
 	testSave27InstructionsPath = "../../data/test_save_27_instructions.fm"
-	kzTeam27                   = 16521    // Kauno Žalgiris's team index
-	enzoUID27                  = 14229525 // Enzo Fernández
-	salahUID27                 = 98028755 // Mohamed Salah
-	mikelionisUID27            = 47055959 // Deividas Mikelionis, KŽ's goalkeeper
+	// The KŽ save of 2026-11-07 22:25, with player instructions set in game.
+	testSave27PlayerInstructionsPath = "../../data/test_save_27_player_instructions.fm"
+	kzTeam27                         = 16521    // Kauno Žalgiris's team index
+	enzoUID27                        = 14229525 // Enzo Fernández
+	salahUID27                       = 98028755 // Mohamed Salah
+	mikelionisUID27                  = 47055959 // Deividas Mikelionis, KŽ's goalkeeper
 )
 
 func TestLoadTestSave27Info(t *testing.T) {
@@ -96,6 +98,38 @@ func TestLoadTestSave27Instructions(t *testing.T) {
 	}
 	if !reflect.DeepEqual(tac.TeamInstructions, want) || tac.UnknownTeamInstructionBits != nil {
 		t.Errorf("team instructions %+v, unknown bits %v;\nwant %+v", tac.TeamInstructions, tac.UnknownTeamInstructionBits, want)
+	}
+}
+
+// Player instructions set in game (2026-11-07): Švedkauskas (GK) More Direct
+// passing and Ease Off Tackles; Krekovič (AML) Shoot Less Often and Tackle
+// Harder. No other slot has any.
+func TestLoadTestSave27PlayerInstructions(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27PlayerInstructionsPath, LoadOptions{})
+	for _, w := range g.Info.Warnings {
+		if strings.Contains(w, "instructions") {
+			t.Errorf("warning %q", w)
+		}
+	}
+	tac, ok := g.View(false).Tactic()
+	if !ok {
+		t.Fatal("no tactic")
+	}
+	want := map[int]PlayerInstructions{
+		0:  {InPossession: []string{"More Direct Passes"}, OutOfPossession: []string{"Ease Off Tackles"}},
+		10: {InPossession: []string{"Shoot Less Often"}, OutOfPossession: []string{"Tackle Harder"}},
+	}
+	for i, s := range tac.Slots {
+		w, set := want[i]
+		switch {
+		case !set && s.PlayerInstructions != nil:
+			t.Errorf("slot %d: %+v, want none", i, *s.PlayerInstructions)
+		case set && (s.PlayerInstructions == nil || !reflect.DeepEqual(*s.PlayerInstructions, w)):
+			t.Errorf("slot %d (%+v): %+v, want %+v", i, s.Player, s.PlayerInstructions, w)
+		}
+	}
+	if gk, aml := tac.Slots[0].Player, tac.Slots[10].Player; gk == nil || !strings.Contains(gk.Name, "Švedkauskas") || aml == nil || !strings.Contains(aml.Name, "Krekovi") {
+		t.Errorf("slot 0 %+v, slot 10 %+v; want Švedkauskas and Krekovič", gk, aml)
 	}
 }
 

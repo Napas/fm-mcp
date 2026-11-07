@@ -35,13 +35,7 @@ func TestTeamInstructions27KZ(t *testing.T) {
 }
 
 func TestTeamInstructions27(t *testing.T) {
-	bits := func(set ...int) Bitset {
-		b := Bitset{Version: teamInstructionsVersion27, Count: teamInstructionWords27}
-		for _, i := range set {
-			b.Words[i/32] |= 1 << (i % 32)
-		}
-		return b
-	}
+	bits := func(set ...int) Bitset { return bitsetOf(teamInstructionsVersion27, teamInstructionWords27, set...) }
 	for _, tt := range []struct {
 		name        string
 		in          Bitset

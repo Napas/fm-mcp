@@ -159,7 +159,7 @@ const maxBitsetWords = 4
 // Bitset is a stored bitset: u8 version, u8 (2 in every sample),
 // u8 n, n × u32, u8 (255 in every sample).
 type Bitset struct {
-	Version uint8 // team instructions: 6 in 26.x, 7 in 27.0.0
+	Version uint8 // 26.x/27.0.0: team instructions 6/7, player instructions 1/2
 	Count   uint8 // words stored; only the first maxBitsetWords are kept
 	Words   [maxBitsetWords]uint32
 }
@@ -173,6 +173,26 @@ func (b Bitset) Has(i int) bool {
 	return b.Words[w]&(1<<(i%32)) != 0
 }
 
+// namedBits returns the entries of names whose bits are set in b, by bit, and
+// the set bits whose entry is zero. A bitset of another version or word count
+// is ErrUnsupported; what names it in the error.
+func namedBits[T comparable](b Bitset, version, words uint8, what string, names []T) (set []T, unknown []int, err error) {
+	if b.Version != version || b.Count != words {
+		return nil, nil, fmt.Errorf("%w: %s bitset version %d with %d words", ErrUnsupported, what, b.Version, b.Count)
+	}
+	var zero T
+	for i, name := range names {
+		switch {
+		case !b.Has(i):
+		case name == zero:
+			unknown = append(unknown, i)
+		default:
+			set = append(set, name)
+		}
+	}
+	return set, unknown, nil
+}
+
 // TacticSlot is one of a tactic's 11 positions, in and out of possession.
 type TacticSlot struct {
 	InPossession, OutOfPossession SlotRole
@@ -182,6 +202,10 @@ type TacticSlot struct {
 type SlotRole struct {
 	Position uint32 // position mask: one position bit, plus a side bit when doubled
 	Role     uint64 // one role bit plus one duty bit
+	// Instructions are the player instructions of the selected role's option
+	// ("27.0.0 player instructions"); zero when no option matches it, and
+	// always in last-lineup formations.
+	Instructions Bitset
 }
 
 // LastLineup is a team's lineup in its last match.
@@ -602,8 +626,8 @@ func readTacticHeader(r *reader) (uint8, Bitset) {
 	return mentality, bits
 }
 
-// readSlotRole reads a POSITION: the mask, the role options with their player
-// instructions (skipped), and the selected role.
+// readSlotRole reads a POSITION: the mask, the role options, and the selected
+// role, whose option's player instructions it keeps.
 func readSlotRole(r *reader) SlotRole {
 	var p SlotRole
 	v := readObjectVersion(r, "position version")
@@ -611,14 +635,27 @@ func readSlotRole(r *reader) SlotRole {
 	p.Position = r.u32()
 	r.take(tacticObjectVersions[v])
 	n := listCount(r, r.u32(), 16, "role options")
+	options := *r // re-read once the selected role is known
 	for range n {
-		r.u64() // role
-		readBitset(r)
-		r.u32()
+		readRoleOption(r)
 	}
 	r.take(12 * listCount(r, r.u32(), 12, "option pairs")) // u32, u64
 	p.Role = r.u64()
+	for range n {
+		if role, bits := readRoleOption(&options); role == p.RoleBit() {
+			p.Instructions = bits
+			break
+		}
+	}
 	return p
+}
+
+// readRoleOption reads a role option: u64 role bit, INSTR, u32.
+func readRoleOption(r *reader) (uint64, Bitset) {
+	role := r.u64()
+	bits := readBitset(r)
+	r.u32()
+	return role, bits
 }
 
 // readBitset reads u8 version, u8, u8 n, n × u32, u8.

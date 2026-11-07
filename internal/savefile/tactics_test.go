@@ -33,10 +33,13 @@ func (e tacticsEncoding) appendPosition(b []byte, p SlotRole, options int) []byt
 	b = append(b, e.positionGap...)
 	b = binary.LittleEndian.AppendUint32(b, uint32(options)) //nolint:gosec // test sizes
 	for i := range options {
-		b = binary.LittleEndian.AppendUint64(b, p.Role|uint64(i))
-		b = append(b, 1, 1, 2)                          // bitset head, 2 words
-		b = binary.LittleEndian.AppendUint64(b, 0x0f0f) // the two words
-		b = append(b, 0)
+		// The middle option is the selected role's; the others carry other bits.
+		role, bits := uint64(1)<<(50+i), otherRoleBits
+		if i == options/2 {
+			role, bits = p.RoleBit(), p.Instructions
+		}
+		b = binary.LittleEndian.AppendUint64(b, role)
+		b = appendBitset(b, bits)
 		b = binary.LittleEndian.AppendUint32(b, 7)
 	}
 	b = binary.LittleEndian.AppendUint32(b, 1) // one (u32, u64) pair
@@ -194,6 +197,14 @@ func appendSetPieceRoutines(b []byte, n int) []byte {
 	return b
 }
 
+func bitsetOf(version, count uint8, set ...int) Bitset {
+	b := Bitset{Version: version, Count: count}
+	for _, i := range set {
+		b.Words[i/32] |= 1 << (i % 32)
+	}
+	return b
+}
+
 // appendBitset encodes bits; words past the kept ones are 0xabcd.
 func appendBitset(b []byte, bits Bitset) []byte {
 	b = append(b, bits.Version, 2, bits.Count)
@@ -210,6 +221,9 @@ func appendBitset(b []byte, bits Bitset) []byte {
 // kzInstructions27 are the team instructions of KŽ's "Positive 4-2-3-1 DM AM
 // Wide - Custom Control Possession" (27.0.0, 2026-11-07 save).
 var kzInstructions27 = Bitset{Version: 7, Count: 3, Words: [maxBitsetWords]uint32{0x00030088, 0x2208100a, 0x00008064}}
+
+// otherRoleBits are the player instructions of role options not selected.
+var otherRoleBits = Bitset{Version: 2, Count: 2, Words: [maxBitsetWords]uint32{0x0f0f, 1}}
 
 // planBits is a 26.x-shaped bitset for the human tail's headers and plans.
 var planBits = Bitset{Version: 6, Count: 3, Words: [maxBitsetWords]uint32{0x40004, 0x40004, 0x40004}}
@@ -1259,4 +1273,37 @@ func TestSidedPosition(t *testing.T) {
 			t.Errorf("%q %q: %#x, %v; want %#x, %v", tt.code, tt.side, got, ok, tt.want, tt.ok)
 		}
 	}
+}
+
+// A POSITION's player instructions are those of the role option for its
+// selected role (the role without its duty bit).
+func TestReadSlotRoleInstructions(t *testing.T) {
+	aml := SlotRole{Position: 0x1000, Role: 0x400080, Instructions: playerBits27(19)}
+	const otherRole = 0x400400 // no option has role bit 0x400
+	for _, tt := range []struct {
+		name string
+		in   []byte
+		role uint64
+		want Bitset
+	}{
+		{"selected role between two others", enc27.appendPosition(nil, aml, 3), aml.Role, aml.Instructions},
+		{"selected role last of two", enc27.appendPosition(nil, aml, 2), aml.Role, aml.Instructions},
+		{"only option", enc27.appendPosition(nil, aml, 1), aml.Role, aml.Instructions},
+		{"no role options", enc27.appendPosition(nil, aml, 0), aml.Role, Bitset{}},
+		{"no option for the selected role", selectRole(enc27.appendPosition(nil, aml, 3), otherRole), otherRole, Bitset{}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var got SlotRole
+			consumes(t, tt.in, func(r *reader) { got = readSlotRole(r) })
+			if got.Position != aml.Position || got.Role != tt.role || got.Instructions != tt.want {
+				t.Errorf("got %+v, want position %#x, role %#x, instructions %+v", got, aml.Position, tt.role, tt.want)
+			}
+		})
+	}
+}
+
+// selectRole replaces an encoded POSITION's selected role, its last 8 bytes.
+func selectRole(b []byte, role uint64) []byte {
+	binary.LittleEndian.PutUint64(b[len(b)-8:], role)
+	return b
 }
