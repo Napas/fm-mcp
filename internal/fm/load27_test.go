@@ -10,10 +10,14 @@ import (
 const (
 	testSave27Path  = "../../data/test_save_27.fm"
 	testSave27bPath = "../../data/test_save_27b.fm" // after Kauno Žalgiris's first match
-	kzTeam27        = 16521                         // Kauno Žalgiris's team index
-	enzoUID27       = 14229525                      // Enzo Fernández
-	salahUID27      = 98028755                      // Mohamed Salah
-	mikelionisUID27 = 47055959                      // Deividas Mikelionis, KŽ's goalkeeper
+	// Saved before and after setting three KŽ players' transfer statuses in
+	// game, 2026-11-06.
+	testSave27ListBeforePath = "../../data/test_save_27_list_before.fm"
+	testSave27ListAfterPath  = "../../data/test_save_27_list_after.fm"
+	kzTeam27                 = 16521    // Kauno Žalgiris's team index
+	enzoUID27                = 14229525 // Enzo Fernández
+	salahUID27               = 98028755 // Mohamed Salah
+	mikelionisUID27          = 47055959 // Deividas Mikelionis, KŽ's goalkeeper
 )
 
 func TestLoadTestSave27Info(t *testing.T) {
@@ -264,5 +268,29 @@ func TestLoadTestSave27bMatchesGame(t *testing.T) {
 	f := g.auxOf(p).season.Friendlies
 	if f == nil || f.Starts != 1 || f.GoalsConceded != 2 || f.RatingSum != 64 || f.Rated != 1 || f.Detail.Passes != 7 || f.Detail.PassesCompleted != 4 {
 		t.Errorf("Mikelionis friendlies %+v, want 1 start, 2 conceded, 6.4, 4 of 7 passes", f)
+	}
+}
+
+// Statuses set in game between the two saves: Gambo Transfer Listed, Trumpa
+// Listed for Loan, Černych Unavailable for loan.
+func TestLoadTestSave27TransferStatus(t *testing.T) {
+	const gambo, trumpa, cernych = 2000591749, 2000425049, 17012660
+	for _, tt := range []struct {
+		path string
+		want map[uint32][]string
+	}{
+		{testSave27ListBeforePath, map[uint32][]string{gambo: {"unavailable_for_loan"}, trumpa: {"unavailable_for_loan"}, cernych: nil}},
+		{testSave27ListAfterPath, map[uint32][]string{gambo: {"transfer_listed", "unavailable_for_loan"}, trumpa: {"loan_listed"}, cernych: {"unavailable_for_loan"}}},
+	} {
+		v := loadTestSaveAt(t, tt.path, LoadOptions{}).View(false)
+		for uid, want := range tt.want {
+			p, ok := v.Profile(uid)
+			if !ok {
+				t.Fatalf("%s: no player %d", tt.path, uid)
+			}
+			if !slices.Equal(p.TransferStatus, want) {
+				t.Errorf("%s: %s transfer status %v, want %v", tt.path, p.Name, p.TransferStatus, want)
+			}
+		}
 	}
 }

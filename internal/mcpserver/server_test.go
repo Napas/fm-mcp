@@ -2289,7 +2289,7 @@ func TestSearchByProfileFilters(t *testing.T) {
 	tall := raw(5, "Chris", "Ashby", 547, 135, 3)
 	tall.Height = 194
 	tall.Traits = 1 << 17 // Argues With Officials
-	tall.Contract = &savefile.Contract{TeamIndex: 547, Clauses: []savefile.Clause{{Type: 0, Value: 20_000_000, Extra: 0xffff}}}
+	tall.Contract = &savefile.Contract{TeamIndex: 547, CoreFlags: savefile.CoreFlagLoanListed, Clauses: []savefile.Clause{{Type: 0, Value: 20_000_000, Extra: 0xffff}}}
 	h := harnessWith(t, tall)
 	h.call("set_fog_of_war", map[string]any{"enabled": false}, nil)
 	type searchRows struct {
@@ -2304,6 +2304,7 @@ func TestSearchByProfileFilters(t *testing.T) {
 		{"max_attributes": map[string]int{"Pace": 12}, "min_height_cm": 190},
 		{"min_reputation": 1350, "max_reputation": 1350, "min_height_cm": 190},
 		{"max_reputation": 10000, "min_height_cm": 190},
+		{"transfer_status": []string{"loan_listed"}},
 	} {
 		args["team_index"] = 547
 		var rows searchRows
@@ -2311,8 +2312,9 @@ func TestSearchByProfileFilters(t *testing.T) {
 			t.Errorf("search_players %v: %s", args, allText(res))
 			continue
 		}
-		if len(rows.Players) != 1 || rows.Players[0].UID != 5 || rows.Players[0].CurrentReputation != 1350 {
-			t.Errorf("search_players %v = %+v, want only Ashby, current reputation 1350", args, rows.Players)
+		if len(rows.Players) != 1 || rows.Players[0].UID != 5 || rows.Players[0].CurrentReputation != 1350 ||
+			!slices.Equal(rows.Players[0].TransferStatus, []string{"loan_listed"}) {
+			t.Errorf("search_players %v = %+v, want only Ashby, current reputation 1350, loan listed", args, rows.Players)
 		}
 	}
 	// Ratings under 15 are included.
@@ -2331,7 +2333,7 @@ func TestSearchByProfileFilters(t *testing.T) {
 		t.Fatal(err)
 	}
 	i := slices.IndexFunc(tools.Tools, func(tool *mcp.Tool) bool { return tool.Name == "search_players" })
-	for _, want := range []string{"positions", "min_position_rating", "max_attributes", "min_reputation", "max_reputation", "position_ratings"} {
+	for _, want := range []string{"positions", "min_position_rating", "max_attributes", "min_reputation", "max_reputation", "position_ratings", "transfer_status"} {
 		if !strings.Contains(tools.Tools[i].Description, want) {
 			t.Errorf("search_players description lacks %q", want)
 		}

@@ -100,8 +100,8 @@ type Contract struct {
 	PlayingTimeScore       int8
 	RecentPlayingTimeScore int8
 	SquadNumber            uint8 // 255 when none
-	// CoreFlags is core byte 23 (CONTRACT +0x57); bits 0, 3 and 6 are read by
-	// the transfer-interest rules.
+	// CoreFlags is core byte 23 (CONTRACT +0x57), holding the transfer status
+	// bits below. The transfer-interest rules read bits 0, 3 and 6.
 	CoreFlags uint8
 	// Events are the core's ring items (CONTRACT +0x30), up to 10.
 	Events []ContractEvent
@@ -113,6 +113,13 @@ type Contract struct {
 	Clauses       []Clause           // FULL contracts only
 	Bonuses       []CompetitionBonus // FULL contracts only
 }
+
+// Transfer status bits of CoreFlags, verified in game on 27.0.0.
+const (
+	CoreFlagTransferListed     uint8 = 1 << 0
+	CoreFlagLoanListed         uint8 = 1 << 1
+	CoreFlagUnavailableForLoan uint8 = 1 << 6
+)
 
 // ContractEvent is one 29-byte item of a contract's ring (CONTRACT +0x30).
 type ContractEvent struct {
