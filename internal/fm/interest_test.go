@@ -470,7 +470,7 @@ func TestInterestFreeAgent(t *testing.T) {
 	g := interestGame(p, in)
 	g.aux[0].interest.main = nil
 	p.TeamIndex = noTeam
-	if got := g.interestOf(p); got == nil || got.Transfer != VerdictUncertain || got.Loan != VerdictUncertain || got.TransferReason != nil {
+	if got := g.interestOf(p); got == nil || got.Transfer != VerdictUncertain || got.Loan != VerdictOut || got.TransferReason != nil {
 		t.Errorf("free agent = %+v", got)
 	}
 	g.aux[0].interest.retiring = true
@@ -719,7 +719,7 @@ func TestInterestFreeAgentGates(t *testing.T) {
 		if name == "plain" {
 			want = VerdictUncertain
 		}
-		if got == nil || got.Transfer != want || got.Loan != want || (want == VerdictOut) != (got.TransferReason != nil) {
+		if got == nil || got.Transfer != want || got.Loan != VerdictOut || (want == VerdictOut) != (got.TransferReason != nil) {
 			t.Errorf("%s: %+v", name, got)
 		}
 	}

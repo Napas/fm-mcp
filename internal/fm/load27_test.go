@@ -15,10 +15,13 @@ const (
 	// game, 2026-11-06.
 	testSave27ListBeforePath = "../../data/test_save_27_list_before.fm"
 	testSave27ListAfterPath  = "../../data/test_save_27_list_after.fm"
-	kzTeam27                 = 16521    // Kauno Žalgiris's team index
-	enzoUID27                = 14229525 // Enzo Fernández
-	salahUID27               = 98028755 // Mohamed Salah
-	mikelionisUID27          = 47055959 // Deividas Mikelionis, KŽ's goalkeeper
+	// Saved 2026-02-11 in game, just after the agent-chat approaches in
+	// TestLoadTestSave27Interest.
+	testSave27InterestPath = "../../data/test_save_27_interest.fm"
+	kzTeam27               = 16521    // Kauno Žalgiris's team index
+	enzoUID27              = 14229525 // Enzo Fernández
+	salahUID27             = 98028755 // Mohamed Salah
+	mikelionisUID27        = 47055959 // Deividas Mikelionis, KŽ's goalkeeper
 )
 
 func TestLoadTestSave27Info(t *testing.T) {
@@ -292,6 +295,49 @@ func TestLoadTestSave27TransferStatus(t *testing.T) {
 			if !slices.Equal(p.TransferStatus, want) {
 				t.Errorf("%s: %s transfer status %v, want %v", tt.path, p.Name, p.TransferStatus, want)
 			}
+		}
+	}
+}
+
+// Agent-chat approaches from Kauno Žalgiris (reputation 3200) around
+// 2026-02-10, as the user reported them. Free agents who refused left a bigger
+// club; those who talked did not. Dawid Kownacki (joined Lech Poznań days
+// later) is left out.
+func TestLoadTestSave27Interest(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27InterestPath, LoadOptions{})
+	for _, tt := range []struct {
+		uid  uint32
+		name string
+		out  bool
+	}{
+		{2002078681, "Vaidas Kazlauskas", false}, // signed
+		{2000407867, "Chaïn Ghrissi", false},     // talked
+		{2000246075, "Jhon Arcila", false},       // talked
+		{2000204253, "Wesley", false},            // contracted at FC Hegelmann, talked
+		{2000059169, "Tyrell Ashcroft", true},
+		{2000066000, "Marcel Wenig", true},
+		{48036261, "Mehdi Chahiri", true},
+		{67186783, "Carlos Vigaray", true},
+		{91156204, "Marco Meyerhöfer", true},
+		{48048154, "Sofyan Chader", true},
+		{67199101, "Carlos Nieto", true},
+		{2000057465, "Javi Serrano", true},
+		{62164327, "Luka Ilić", true},
+		{13181735, "Ibrahima Niane", true},
+	} {
+		p := g.byUID[tt.uid]
+		if p == nil || p.Name != tt.name {
+			t.Fatalf("uid %d: %+v, want %s", tt.uid, p, tt.name)
+		}
+		in := g.interestOf(p)
+		if in == nil {
+			t.Fatalf("%s: no interest", tt.name)
+		}
+		if got := in.Transfer == VerdictOut; got != tt.out {
+			t.Errorf("%s: transfer %s, want out %v", tt.name, in.Transfer, tt.out)
+		}
+		if tt.out && (in.TransferReason == nil || in.TransferReason.Code != FactorClubReputationGap) {
+			t.Errorf("%s: reason %+v", tt.name, in.TransferReason)
 		}
 	}
 }
