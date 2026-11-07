@@ -23,7 +23,7 @@ Unset dates are saved in 1900. Seen: joined dates of 1900-01-01 on loanees and f
 | [`fog-of-war.md`](format/fog-of-war.md) | scouting knowledge, baseline, decay | fog_of_war.dat |
 | [`injuries.md`](format/injuries.md) | injury_manager.dat queues, INJURY table (player injury items are in players.md) | injury_manager.dat; Injury types (INJURY) |
 | [`transfers.md`](format/transfers.md) | TRANSFER records, arranged moves, 27.0.0 records | transfer_man.dat; 27.0.0 records |
-| [`tactics.md`](format/tactics.md) | tactics grammar, roles/positions enums, last lineups, formations, shirt numbers, 27.0.0 changes | tactics_man.dat; Last lineup; 27.0.0 tactics |
+| [`tactics.md`](format/tactics.md) | tactics grammar, roles/positions enums, last lineups, formations, shirt numbers, 27.0.0 changes, 27.0.0 team instructions | tactics_man.dat; Last lineup; 27.0.0 tactics; 27.0.0 team instructions |
 | [`role-ability.md`](format/role-ability.md) | role attribute lists, role rating, best role, role ability, stars, out-of-possession table, 27.0.0 rule changes | Role ability (game code); 27.0.0 role ability |
 | [`player-interest.md`](format/player-interest.md) | interest filter, hard gates, just-joined penalty, reputation gap, playing-time value, verdicts, 27.0.0 free agents, 27.0.0 loan filter | Player interest (game code); 27.0.0 free agents; 27.0.0 loan filter |
 | [`player-stats.md`](format/player-stats.md) | season stats: totals, 60 detail fields, goalkeeper split, scopes/slots, rollover, 27.0.0 scope block | rgman/player_stats.dat; 27.0.0 scope block |

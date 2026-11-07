@@ -60,7 +60,7 @@ func zazTactics() *savefile.Tactics {
 	sel[11], sel[13] = 102, 100
 	return &savefile.Tactics{
 		Human: 88351, Team: 547, Selection: sel, Active: 0,
-		Tactics:     []savefile.Tactic{{Name: "ZaZ - Autumn 3.39 ST", Mentality: 6, Slots: zazSlots()}},
+		Tactics:     []savefile.Tactic{{Name: "ZaZ - Autumn 3.39 ST", Mentality: 6, TeamInstructions: savefile.Bitset{Version: 6, Count: 3}, Slots: zazSlots()}},
 		LastLineups: map[int32]savefile.LastLineup{547: {Opponent: 670, Players: emptyLineup()}},
 	}
 }
@@ -125,6 +125,69 @@ func TestTacticJSON(t *testing.T) {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("JSON lacks %s: %s", want, b)
 		}
+	}
+}
+
+// instructionBits27 returns a 27.0.0 team-instruction bitset with bits set.
+func instructionBits27(set ...int) savefile.Bitset {
+	b := savefile.Bitset{Version: 7, Count: 3}
+	for _, i := range set {
+		b.Words[i/32] |= 1 << (i % 32)
+	}
+	return b
+}
+
+func TestTacticTeamInstructions(t *testing.T) {
+	tactics := zazTactics()
+	// Counter-press (70), Shorter (3), unnamed 41, Mid Block (62), Goalkeeper
+	// up (60), Time Wasting Standard (79).
+	tactics.Tactics[0].TeamInstructions = instructionBits27(3, 41, 60, 62, 70, 79)
+
+	tac, _ := tacticGame(tactics).View(false).Tactic()
+
+	want := []TeamInstruction{
+		{"in_possession", "Passing Directness", "Shorter"},
+		{"in_possession", "Time Wasting", "Standard"},
+		{"out_of_possession", "Line of Engagement", "Mid Block"},
+		{"out_of_possession", "Defensive Transition", "Counter-Press"},
+		{"set_pieces", "Goalkeeper Up for Attacking Set Pieces", "Yes"},
+	}
+	if !reflect.DeepEqual(tac.TeamInstructions, want) || !reflect.DeepEqual(tac.UnknownTeamInstructionBits, []int{41}) {
+		t.Errorf("team instructions %+v, unknown bits %v; want %+v, [41]", tac.TeamInstructions, tac.UnknownTeamInstructionBits, want)
+	}
+	b, err := json.Marshal(tac)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `"team_instructions":[{"phase":"in_possession","instruction":"Passing Directness","option":"Shorter"}`; !strings.Contains(string(b), want) {
+		t.Errorf("JSON lacks %s: %s", want, b)
+	}
+	if !strings.Contains(string(b), `"unknown_team_instruction_bits":[41]`) {
+		t.Errorf("JSON lacks the unknown bits: %s", b)
+	}
+}
+
+// Every savefile instruction phase has a name.
+func TestPhaseNamesCoverEveryPhase(t *testing.T) {
+	if len(phaseNames) != int(savefile.SetPieceInstructions)+1 {
+		t.Fatalf("%d phase names, want %d", len(phaseNames), savefile.SetPieceInstructions+1)
+	}
+	for p, name := range phaseNames {
+		if name == "" {
+			t.Errorf("phase %d has no name", p)
+		}
+	}
+}
+
+// A 26.x bitset is not decoded: no instructions, no unknown bits.
+func TestTacticTeamInstructions26(t *testing.T) {
+	tactics := zazTactics()
+	tactics.Tactics[0].TeamInstructions = savefile.Bitset{Version: 6, Count: 3, Words: [4]uint32{0x008330a4}}
+
+	tac, _ := tacticGame(tactics).View(false).Tactic()
+
+	if tac.TeamInstructions != nil || tac.UnknownTeamInstructionBits != nil {
+		t.Errorf("team instructions %+v, unknown bits %v; want none", tac.TeamInstructions, tac.UnknownTeamInstructionBits)
 	}
 }
 
@@ -255,6 +318,30 @@ func TestCheckTactics(t *testing.T) {
 	tactics.BadFormations = 3
 	if got, w := checkTactics(tactics, nil, 547); got == nil || !reflect.DeepEqual(w, []string{"3 teams' last-match formations could not be decoded and are missing"}) {
 		t.Errorf("bad formations: %v, %q", got, w)
+	}
+}
+
+// A team-instruction bitset of an unknown version or size is not decoded and
+// is reported; a 26.x one is left undecoded without a warning.
+func TestCheckTacticsWarnsOnUnknownTeamInstructions(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		bits savefile.Bitset
+		warn bool
+	}{
+		{"27.0.0", instructionBits27(3), false},
+		{"26.x", savefile.Bitset{Version: 6, Count: 3}, false},
+		{"new version", savefile.Bitset{Version: 8, Count: 3}, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tactics := zazTactics()
+			tactics.Tactics[0].TeamInstructions = tt.bits
+			_, warnings := checkTactics(*tactics, nil, 547)
+			got := slices.ContainsFunc(warnings, func(w string) bool { return strings.Contains(w, "team instructions not decoded") })
+			if got != tt.warn {
+				t.Errorf("warnings %q; want a team-instructions warning: %v", warnings, tt.warn)
+			}
+		})
 	}
 }
 

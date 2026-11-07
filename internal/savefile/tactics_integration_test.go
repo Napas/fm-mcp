@@ -43,7 +43,12 @@ func checkZaZ(t *testing.T, tac Tactics, body []byte) {
 	if tac.Human != kzHuman || tac.Team != metzTeam || tac.Active != 0 || len(tac.Tactics) != 1 {
 		t.Fatalf("human %d, team %d, active %d, %d tactics; want %d, %d, 0, 1", tac.Human, tac.Team, tac.Active, len(tac.Tactics), kzHuman, metzTeam)
 	}
-	if got, want := tac.Tactics[0], zazTactic(); got != want {
+	got := tac.Tactics[0]
+	if v := got.TeamInstructions.Version; v != teamInstructionsVersion26 {
+		t.Errorf("team-instruction bitset version %d, want %d", v, teamInstructionsVersion26)
+	}
+	got.TeamInstructions = Bitset{} // ZaZ's bits were not recorded
+	if want := zazTactic(); got != want {
 		t.Errorf("tactic = %+v\nwant %+v", got, want)
 	}
 	if tac.WalkErr != nil || tac.TacticErr != nil {
@@ -54,7 +59,7 @@ func checkZaZ(t *testing.T, tac Tactics, body []byte) {
 		if i == 3 {
 			want = 0
 		}
-		if len(e.tactics) != want || want == 1 && e.tactics[0] != zazTactic() {
+		if len(e.tactics) != want || want == 1 && e.tactics[0] != tac.Tactics[0] {
 			t.Errorf("team %d: tactics %+v, want %d copies of ZaZ", e.team, e.tactics, want)
 		}
 		if i > 0 && e.selection != emptySelection() {

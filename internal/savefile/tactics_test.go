@@ -54,11 +54,8 @@ func (e tacticsEncoding) appendTactic(b []byte, t Tactic, extra bool) []byte {
 	for range 3 {
 		b = appendString(b, "")
 	}
-	b = append(b, tacticHeaderTag, 2, t.Mentality, 1, 1, 3)
-	for range 3 {
-		b = binary.LittleEndian.AppendUint32(b, 0xabcd)
-	}
-	b = append(b, 0)
+	b = append(b, tacticHeaderTag, 2, t.Mentality)
+	b = appendBitset(b, t.TeamInstructions)
 	b = appendString(b, "Custom")
 	b = append(b, "LLUN"...)
 	for i, s := range t.Slots {
@@ -197,13 +194,25 @@ func appendSetPieceRoutines(b []byte, n int) []byte {
 	return b
 }
 
-func appendBitset(b []byte) []byte {
-	b = append(b, 6, 2, 3)
-	for range 3 {
-		b = binary.LittleEndian.AppendUint32(b, 0x40004)
+// appendBitset encodes bits; words past the kept ones are 0xabcd.
+func appendBitset(b []byte, bits Bitset) []byte {
+	b = append(b, bits.Version, 2, bits.Count)
+	for i := range int(bits.Count) {
+		w := uint32(0xabcd)
+		if i < maxBitsetWords {
+			w = bits.Words[i]
+		}
+		b = binary.LittleEndian.AppendUint32(b, w)
 	}
-	return append(b, 0)
+	return append(b, 0xff)
 }
+
+// kzInstructions27 are the team instructions of KŽ's "Positive 4-2-3-1 DM AM
+// Wide - Custom Control Possession" (27.0.0, 2026-11-07 save).
+var kzInstructions27 = Bitset{Version: 7, Count: 3, Words: [maxBitsetWords]uint32{0x00030088, 0x2208100a, 0x00008064}}
+
+// planBits is a 26.x-shaped bitset for the human tail's headers and plans.
+var planBits = Bitset{Version: 6, Count: 3, Words: [maxBitsetWords]uint32{0x40004, 0x40004, 0x40004}}
 
 // appendCount appends a u32 list count.
 func appendCount(b []byte, n int) []byte {
@@ -222,7 +231,7 @@ func (e tacticsEncoding) appendHumanTail(b []byte, n int) []byte {
 	for range n {
 		b = binary.LittleEndian.AppendUint16(b, e.object)
 		b = binary.LittleEndian.AppendUint32(b, 0)
-		b = appendBitset(append(b, tacticHeaderTag, 2, 1))
+		b = appendBitset(append(b, tacticHeaderTag, 2, 1), planBits)
 		b = append(appendString(b, "Custom"), "LLUN"...)
 	}
 	b = append(b, 1)
@@ -249,7 +258,7 @@ func (e tacticsEncoding) appendHumanTail(b []byte, n int) []byte {
 		b = binary.LittleEndian.AppendUint32(append(b, 1), 5)
 		b = append(appendString(b, ""), 1, 2, 3)
 		b = binary.LittleEndian.AppendUint16(b, e.object)
-		b = append(appendBitset(b), 0, 0)
+		b = append(appendBitset(b, planBits), 0, 0)
 		b = binary.LittleEndian.AppendUint32(append(b, 1), 0)
 		b = append(appendString(b, ""), 0, 0, 0, 0, 0, 7)
 	}
@@ -538,6 +547,9 @@ func TestParseTacticsDropsUndecodedFormations(t *testing.T) {
 func TestParseTactics(t *testing.T) {
 	preset := zazTactic()
 	preset.Name, preset.Mentality = "4-4-2", 4
+	preset.TeamInstructions = presetInstructions27
+	tactic := zazTactic()
+	tactic.TeamInstructions = kzInstructions27
 	last := LastLineup{Opponent: 1545, Players: zazSelection(), Formation: zazFormation(), ShirtNumbers: zazShirtNumbers()}
 	other := LastLineup{Opponent: 652, Players: emptySelection(), Formation: zazFormation()}
 	lineups := map[int32]LastLineup{652: last, 670: other}
@@ -553,9 +565,9 @@ func TestParseTactics(t *testing.T) {
 		}{
 			{
 				name: "selected XI and one tactic",
-				body: enc.e.tacticsBody(158530, 652, zazSelection(), 0, []Tactic{zazTactic()}, lineups, []int32{652, 670}, preset),
+				body: enc.e.tacticsBody(158530, 652, zazSelection(), 0, []Tactic{tactic}, lineups, []int32{652, 670}, preset),
 				want: Tactics{
-					Human: 158530, Team: 652, Selection: zazSelection(), Active: 0, Tactics: []Tactic{zazTactic()},
+					Human: 158530, Team: 652, Selection: zazSelection(), Active: 0, Tactics: []Tactic{tactic},
 					LastLineups: lineups,
 				},
 			},
@@ -682,8 +694,8 @@ func TestParseTacticsFallsBackToScan(t *testing.T) {
 	// Offsets in valid: 0 humans, 2 human tag, 15 team entry tag, 16
 	// selection tag, 125 set pieces version.
 	firstTactic := bytes.Index(valid, []byte{tacticTag, 0x42, 0, 0x1a})
-	// Tactic head 8, four strings, header 3 + bitset 16 + style + "NULL".
-	firstSlot := firstTactic + 8 + 4*4 + len("ZaZ - Autumn 3.39 ST") + 3 + 16 + 4 + len("Custom") + 4
+	// Tactic head 8, four strings, header 3 + bitset 4 (no words) + style + "NULL".
+	firstSlot := firstTactic + 8 + 4*4 + len("ZaZ - Autumn 3.39 ST") + 3 + 4 + 4 + len("Custom") + 4
 	firstOptions := firstSlot + 9 + 2
 	if valid[125] != byte(enc26.object) || valid[firstSlot] != byte(enc26.object) || valid[firstOptions] != 2 {
 		t.Fatalf("offsets do not match the encoding")
@@ -840,8 +852,50 @@ func skipError(b []byte, skip func(*reader)) error {
 	return r.err
 }
 
-func TestSkipBitset(t *testing.T) {
-	consumes(t, appendBitset(nil), skipBitset)
+func TestReadBitset(t *testing.T) {
+	five := Bitset{Version: 7, Count: 5, Words: [maxBitsetWords]uint32{1, 2, 3, 4}}
+	for _, tt := range []struct {
+		name string
+		in   []byte
+		want Bitset
+	}{
+		{"27.0.0 team instructions", appendBitset(nil, kzInstructions27), kzInstructions27},
+		{"no words", appendBitset(nil, Bitset{Version: 2}), Bitset{Version: 2}},
+		{"more words than kept", appendBitset(nil, five), five},
+		{"plan bitset", appendBitset(nil, planBits), planBits},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var got Bitset
+			consumes(t, tt.in, func(r *reader) { got = readBitset(r) })
+			if got != tt.want {
+				t.Errorf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBitsetHas(t *testing.T) {
+	b := kzInstructions27
+	var got []int
+	for i := range 32 * (maxBitsetWords + 1) {
+		if b.Has(i) {
+			got = append(got, i)
+		}
+	}
+	if want := []int{3, 7, 16, 17, 33, 35, 44, 51, 57, 61, 66, 69, 70, 79}; !reflect.DeepEqual(got, want) {
+		t.Errorf("bits %v, want %v", got, want)
+	}
+	if b.Has(-1) {
+		t.Error("bit -1 set")
+	}
+	short := Bitset{Version: 7, Count: 1, Words: [maxBitsetWords]uint32{0, 1}}
+	if short.Has(32) {
+		t.Error("bit 32 set beyond the stored words")
+	}
+	long := Bitset{Version: 7, Count: maxBitsetWords + 1, Words: [maxBitsetWords]uint32{0, 0, 0, 1}}
+	if !long.Has(96) || long.Has(130) {
+		t.Errorf("bits 96 and 130 of %d words: %v, %v; want true, false", long.Count, long.Has(96), long.Has(130))
+	}
 }
 
 func TestSkipRoutine(t *testing.T) {

@@ -2,6 +2,7 @@ package fm
 
 import (
 	"cmp"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -18,10 +19,13 @@ const (
 	// Saved 2026-02-11 in game, just after the agent-chat approaches in
 	// TestLoadTestSave27Interest.
 	testSave27InterestPath = "../../data/test_save_27_interest.fm"
-	kzTeam27               = 16521    // Kauno Žalgiris's team index
-	enzoUID27              = 14229525 // Enzo Fernández
-	salahUID27             = 98028755 // Mohamed Salah
-	mikelionisUID27        = 47055959 // Deividas Mikelionis, KŽ's goalkeeper
+	// testSave27InstructionsPath is the KŽ save of 2026-11-07 20:40 (game
+	// date 2026-05-04), whose tactic has team instructions set in game.
+	testSave27InstructionsPath = "../../data/test_save_27_instructions.fm"
+	kzTeam27                   = 16521    // Kauno Žalgiris's team index
+	enzoUID27                  = 14229525 // Enzo Fernández
+	salahUID27                 = 98028755 // Mohamed Salah
+	mikelionisUID27            = 47055959 // Deividas Mikelionis, KŽ's goalkeeper
 )
 
 func TestLoadTestSave27Info(t *testing.T) {
@@ -62,6 +66,50 @@ func TestLoadTestSave27Tactics(t *testing.T) {
 				t.Errorf("%s: warning %q", path, w)
 			}
 		}
+	}
+}
+
+// KŽ's team instructions as the Team Instructions screen showed them
+// (2026-11-07, game date 2026-05-04): the 14 options that are not the default.
+func TestLoadTestSave27Instructions(t *testing.T) {
+	v := loadTestSaveAt(t, testSave27InstructionsPath, LoadOptions{}).View(false)
+
+	tac, ok := v.Tactic()
+	if !ok || tac.Name != "Positive 4-2-3-1 DM AM Wide - Custom Control Possession" || tac.Mentality != "Positive" {
+		t.Fatalf("tactic %q, %q, %v", tac.Name, tac.Mentality, ok)
+	}
+	want := []TeamInstruction{
+		{"in_possession", "Passing Directness", "Shorter"},
+		{"in_possession", "Build-Up Strategy", "Play Through Press"},
+		{"in_possession", "Shots from Distance", "Discourage"},
+		{"in_possession", "Patience", "Work Ball Into Box"},
+		{"in_possession", "Play for Set Pieces", "Keep Ball in Play"},
+		{"in_possession", "GK Distribution", "Centre-Backs"},
+		{"in_possession", "Goal Kicks", "Short"},
+		{"in_possession", "Attacking Width", "Wider"},
+		{"in_possession", "Time Wasting", "Standard"},
+		{"out_of_possession", "Defensive Line", "Higher"},
+		{"out_of_possession", "Line of Engagement", "High Press"},
+		{"out_of_possession", "Trigger Press", "More Often"},
+		{"out_of_possession", "Short Goalkeeper Distribution", "Yes"},
+		{"out_of_possession", "Defensive Transition", "Counter-Press"},
+	}
+	if !reflect.DeepEqual(tac.TeamInstructions, want) || tac.UnknownTeamInstructionBits != nil {
+		t.Errorf("team instructions %+v, unknown bits %v;\nwant %+v", tac.TeamInstructions, tac.UnknownTeamInstructionBits, want)
+	}
+}
+
+// The interest save (game date 2026-02-11) holds an earlier set of KŽ's
+// instructions: Tempo Lower in place of Wider and Discourage.
+func TestLoadTestSave27InterestInstructions(t *testing.T) {
+	v := loadTestSaveAt(t, testSave27InterestPath, LoadOptions{}).View(false)
+
+	tac, ok := v.Tactic()
+	if !ok || len(tac.TeamInstructions) != 13 || tac.UnknownTeamInstructionBits != nil {
+		t.Fatalf("tactic %v: %d team instructions %+v, unknown bits %v; want 13, none", ok, len(tac.TeamInstructions), tac.TeamInstructions, tac.UnknownTeamInstructionBits)
+	}
+	if !slices.Contains(tac.TeamInstructions, TeamInstruction{"in_possession", "Tempo", "Lower"}) {
+		t.Errorf("team instructions %+v lack Tempo: Lower", tac.TeamInstructions)
 	}
 }
 

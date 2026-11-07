@@ -334,7 +334,7 @@ func TestRoleAbilityIsExplained(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, wants := range map[string][]string{
-		"get_tactic":      {"role_ability", "squad_depth or squad_roles"},
+		"get_tactic":      {"role_ability", "squad_depth or squad_roles", "team_instructions"},
 		"get_player":      {"best_roles", "best_out_of_possession_roles"},
 		"compare_players": {"best_roles", "best_out_of_possession_roles"},
 		"search_players":  {"role", "role_ability", "interest", "out_of_possession_role", "out_of_possession_role_ability"},
