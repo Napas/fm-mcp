@@ -49,6 +49,8 @@ type Game struct {
 	// lineupPlayers: players of the selection and last lineups by person index.
 	lineupPlayers map[uint32]*Player
 	aux           []playerAux // by Player.auxIdx
+	// clubLevels is clubSquadLevels by club index (true current ability; interest only).
+	clubLevels    map[int64]int
 	roleRules     roleRules
 	hasSeason     bool            // false when the save's season stats could not be read
 	hasFixtures   bool            // false when fix_man.dat could not be read
@@ -125,6 +127,7 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 		}
 	}
 	maps.DeleteFunc(inLineup, func(_ uint32, p *Player) bool { return p == nil })
+	g.clubLevels = clubSquadLevels(g.players, w)
 	g.tactic = newTactic(extras.Tactics, w, inLineup, g.aux, g.roleRules)
 	g.lineupPlayers = inLineup
 	if extras.Tactics != nil {

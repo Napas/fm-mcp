@@ -79,7 +79,7 @@ Done 2026-10-23: `joined_club`, per-90 sort and filter, `detail`, position ratin
 
 - **Relegation exemption**: `0x12ade1c` can exempt a player from `recently_left_your_club`; not decoded. The model assumes no exemption.
 - **"Wanted by a club" (Wnt) bonus**: not decoded. Open cases: Stáňa and Maxsø.
-- **Free-agent path** (`0x1284858`): not decoded enough to separate Musongi, David Silva and van Hattum; free agents are `uncertain` unless a gate applies.
+- **Free-agent path**: 27.0.0 reason 2 against the previous club and playing time are decoded ("27.0.0 free agents"); about 20 other factors are not. Open: read the per-club cached level from `game_db.dat` instead of computing it, the division byte COMP `+0x1aa`, and `PLAYER_CAREER_STATS[5]`.
 - **Squad ranking** `0x2f9e580`: sets the offered level; not decoded.
 - **Vega and Lau Jiménez**: in-memory inputs the save does not show (contract events beyond the ring, person `+0xa8` items, negotiation and scouting records) can exempt or block them; Vega passes FM's loan filter with a loan sum of -18 435.
 - **Ages outside 24-25**: the model is tested on few players outside that range.

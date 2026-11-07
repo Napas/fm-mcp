@@ -150,6 +150,11 @@ func targetReputation(w World, managerTeam int64) int {
 	if !ok {
 		return 0
 	}
+	return clubReputation(w, club)
+}
+
+// clubReputation is the first-team reputation of club; 0 when it has none.
+func clubReputation(w World, club int64) int {
 	if t := clubFirstTeam(w, club); t != nil {
 		return t.Reputation
 	}
@@ -246,14 +251,17 @@ func clubReputationGapTerms(p *Player, in interestInputs, w World, rt int) (club
 	if m := playingTimeLevel(p, c); m <= levelFringe && m != levelProspect {
 		current = int(float64(current) * lowStatusDiscount)
 	}
-	d := target - current
+	return steppedGap(target - current), worldReputationTerm(target, p.Reputation.World)
+}
+
+// steppedGap multiplies a negative club gap d by the step it falls in.
+func steppedGap(d int) int {
 	for _, s := range gapSteps {
 		if d <= s.upTo {
-			d *= s.factor
-			break
+			return d * s.factor
 		}
 	}
-	return d, worldReputationTerm(target, p.Reputation.World)
+	return d
 }
 
 // clubReputationGapLoan is 0x128c898 for a loan: the world reputation term

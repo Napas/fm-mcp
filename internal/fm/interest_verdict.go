@@ -31,6 +31,7 @@ const (
 	FactorOnlyOneClub       = "only_one_club"
 	FactorClubReputationGap = "club_reputation_gap"
 	FactorDependsOnRole     = "depends_on_role"
+	FactorFreeAgent         = "free_agent"
 )
 
 const (
@@ -95,12 +96,13 @@ type interestTarget struct {
 
 // interestCase is a judged player with what the reason texts need.
 type interestCase struct {
-	p        *Player
-	in       interestInputs
-	to       interestTarget
-	terms    interestTerms // zero when gated or a free agent
-	gate     string        // the code of the first hard gate he meets; "" when none
-	verdicts Interest
+	p         *Player
+	in        interestInputs
+	to        interestTarget
+	terms     interestTerms // zero when gated; a free agent's are gap and pt10 only
+	gate      string        // the code of the first hard gate he meets; "" when none
+	freeAgent bool          // judged by the free-agent path
+	verdicts  Interest
 }
 
 // interestOf is nil for players judgeInterest does not evaluate.
@@ -146,6 +148,7 @@ func (g *Game) judgeInterest(p *Player) (interestCase, bool) {
 		return c, true
 	}
 	if in.main == nil {
+		g.judgeFreeAgent(&c)
 		return c, true
 	}
 	c.terms = g.interestTerms(p, to.reputation)
@@ -171,6 +174,8 @@ func (c interestCase) reasonCode(k InterestKind) string {
 		return ""
 	case c.gate != "":
 		return c.gate
+	case k == InterestLoan && c.freeAgent:
+		return FactorFreeAgent
 	case k == InterestLoan:
 		return sumReasonCode(c.terms.penaltyL, c.terms.gapLoan)
 	}
@@ -189,13 +194,19 @@ func (g *Game) describeInterest(c interestCase) *Interest {
 		if out.Transfer == VerdictOut {
 			out.TransferReason = g.sumReason(c, false)
 		}
-		if out.Loan == VerdictOut {
+		switch {
+		case c.freeAgent:
+			out.LoanReason = &InterestFactor{FactorFreeAgent, "Is a free agent, so can't be loaned"}
+		case out.Loan == VerdictOut:
 			out.LoanReason = g.sumReason(c, true)
 		}
 	}
-	if c.in.main != nil {
+	switch {
+	case c.in.main != nil:
 		out.TransferFactors = g.transferFactors(c, out.Transfer != VerdictOut)
 		out.LoanFactors = g.loanFactors(c, out.Loan != VerdictOut)
+	case c.freeAgent && c.terms.gap < 0:
+		out.TransferFactors = []InterestFactor{*g.gapFactor(c, false)}
 	}
 	return &out
 }
@@ -262,13 +273,13 @@ func (g *Game) justJoinedFactor(c interestCase, loan bool) *InterestFactor {
 }
 
 // gapFactor describes c's club reputation gap by its more negative term:
-// his contract club's against yours, or his world reputation against your
-// club. A loan's gap is the world reputation term alone.
+// his contract club's (a free agent's previous club's) against yours, or his
+// world reputation against your club. A loan's gap is the world term alone.
 func (g *Game) gapFactor(c interestCase, loan bool) *InterestFactor {
 	if !loan {
-		if club, world := clubReputationGapTerms(c.p, c.in, g.world, c.to.reputation); club < 0 && club <= world {
-			first := contractFirstTeam(c.in.main, g.world)
-			return &InterestFactor{FactorClubReputationGap, fmt.Sprintf("%s is a bigger club than %s", g.world.Clubs[first.ClubIndex].Name, c.to.name)}
+		club, world, bigger := g.transferGapTerms(c)
+		if club < 0 && club <= world {
+			return &InterestFactor{FactorClubReputationGap, fmt.Sprintf("%s is a bigger club than %s", g.world.Clubs[bigger].Name, c.to.name)}
 		}
 	}
 	pronoun := "His"
@@ -276,6 +287,20 @@ func (g *Game) gapFactor(c interestCase, loan bool) *InterestFactor {
 		pronoun = "Her"
 	}
 	return &InterestFactor{FactorClubReputationGap, fmt.Sprintf("%s reputation is above %s's", pronoun, c.to.name)}
+}
+
+// transferGapTerms are the club and world terms of c's transfer gap, and the
+// club (his contract club or a free agent's previous club) compared with the target.
+func (g *Game) transferGapTerms(c interestCase) (club, world int, bigger int64) {
+	if c.freeAgent {
+		club, world = g.freeAgentGapTerms(c.p, c.in, c.to.reputation)
+		return club, world, c.in.previousClub
+	}
+	club, world = clubReputationGapTerms(c.p, c.in, g.world, c.to.reputation)
+	if club < 0 {
+		bigger = contractFirstTeam(c.in.main, g.world).ClubIndex
+	}
+	return club, world, bigger
 }
 
 // transferFactors are the terms of c that weigh against a transfer; kept
