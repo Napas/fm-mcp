@@ -275,16 +275,35 @@ func TestLoadTestSave27bMatchesGame(t *testing.T) {
 	}
 }
 
-// Statuses set in game between the two saves: Gambo Transfer Listed, Trumpa
-// Listed for Loan, Černych Unavailable for loan.
+// Statuses set in game between the two transfer status saves: Gambo Transfer
+// Listed, Trumpa Listed for Loan, Černych Unavailable for loan.
+const gamboUID27, trumpaUID27, cernychUID27 = 2000591749, 2000425049, 17012660
+
+func TestLoadTestSave27ExcludeUnavailableForLoan(t *testing.T) {
+	v := loadTestSaveAt(t, testSave27ListAfterPath, LoadOptions{}).View(false)
+	search := func(exclude []string) []uint32 {
+		res, err := v.Search(Filter{Club: "Kauno Žalgiris", ExcludeTransferStatus: exclude, Limit: 200})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return uids(res.Players)
+	}
+	if all := search(nil); !slices.Contains(all, gamboUID27) || !slices.Contains(all, cernychUID27) || !slices.Contains(all, trumpaUID27) {
+		t.Fatalf("players %v; want Gambo, Černych and Trumpa without the exclude", all)
+	}
+	got := search([]string{"unavailable_for_loan"})
+	if slices.Contains(got, gamboUID27) || slices.Contains(got, cernychUID27) || !slices.Contains(got, trumpaUID27) {
+		t.Errorf("players %v; want Trumpa kept, Gambo and Černych left out", got)
+	}
+}
+
 func TestLoadTestSave27TransferStatus(t *testing.T) {
-	const gambo, trumpa, cernych = 2000591749, 2000425049, 17012660
 	for _, tt := range []struct {
 		path string
 		want map[uint32][]string
 	}{
-		{testSave27ListBeforePath, map[uint32][]string{gambo: {"unavailable_for_loan"}, trumpa: {"unavailable_for_loan"}, cernych: nil}},
-		{testSave27ListAfterPath, map[uint32][]string{gambo: {"transfer_listed", "unavailable_for_loan"}, trumpa: {"loan_listed"}, cernych: {"unavailable_for_loan"}}},
+		{testSave27ListBeforePath, map[uint32][]string{gamboUID27: {"unavailable_for_loan"}, trumpaUID27: {"unavailable_for_loan"}, cernychUID27: nil}},
+		{testSave27ListAfterPath, map[uint32][]string{gamboUID27: {"transfer_listed", "unavailable_for_loan"}, trumpaUID27: {"loan_listed"}, cernychUID27: {"unavailable_for_loan"}}},
 	} {
 		v := loadTestSaveAt(t, tt.path, LoadOptions{}).View(false)
 		for uid, want := range tt.want {

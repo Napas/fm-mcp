@@ -2305,6 +2305,7 @@ func TestSearchByProfileFilters(t *testing.T) {
 		{"min_reputation": 1350, "max_reputation": 1350, "min_height_cm": 190},
 		{"max_reputation": 10000, "min_height_cm": 190},
 		{"transfer_status": []string{"loan_listed"}},
+		{"exclude_transfer_status": []string{"transfer_listed"}, "min_height_cm": 190},
 	} {
 		args["team_index"] = 547
 		var rows searchRows
@@ -2316,6 +2317,10 @@ func TestSearchByProfileFilters(t *testing.T) {
 			!slices.Equal(rows.Players[0].TransferStatus, []string{"loan_listed"}) {
 			t.Errorf("search_players %v = %+v, want only Ashby, current reputation 1350, loan listed", args, rows.Players)
 		}
+	}
+	var excluded searchRows
+	if res := h.call("search_players", map[string]any{"team_index": 547, "min_height_cm": 190, "exclude_transfer_status": []string{"loan_listed"}}, &excluded); res.IsError || len(excluded.Players) != 0 {
+		t.Errorf("search_players excluding loan_listed: error %v, players %+v; want none", res.IsError, excluded.Players)
 	}
 	// Ratings under 15 are included.
 	var rated searchRows
@@ -2333,7 +2338,7 @@ func TestSearchByProfileFilters(t *testing.T) {
 		t.Fatal(err)
 	}
 	i := slices.IndexFunc(tools.Tools, func(tool *mcp.Tool) bool { return tool.Name == "search_players" })
-	for _, want := range []string{"positions", "min_position_rating", "max_attributes", "min_reputation", "max_reputation", "position_ratings", "transfer_status"} {
+	for _, want := range []string{"positions", "min_position_rating", "max_attributes", "min_reputation", "max_reputation", "position_ratings", "transfer_status", "exclude_transfer_status"} {
 		if !strings.Contains(tools.Tools[i].Description, want) {
 			t.Errorf("search_players description lacks %q", want)
 		}

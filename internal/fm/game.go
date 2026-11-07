@@ -253,6 +253,9 @@ type Filter struct {
 	MaxReputation int
 	// TransferStatus matches players with any of these statuses.
 	TransferStatus []string
+	// ExcludeTransferStatus leaves out players with any of these statuses;
+	// players without a contract are kept.
+	ExcludeTransferStatus []string
 }
 
 // checkRefs rejects team and nation references that match nothing, so an

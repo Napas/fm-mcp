@@ -495,10 +495,11 @@ type query struct {
 	minPer90       func(*Player) bool // nil without MinPer90
 	minMinutes     int                // MinSeasonMinutes, else per90DefaultMinutes in a per-90 search
 	// per90 lists the per-90 stats rows carry: the sort's, then MinPer90's.
-	per90         []string
-	traits        uint64   // Traits as savefile.TraitNames bits
-	personalities []string // Personalities as personalityLabels spell them
-	transferFlags uint8    // TransferStatus as transferStatuses bits
+	per90                []string
+	traits               uint64   // Traits as savefile.TraitNames bits
+	personalities        []string // Personalities as personalityLabels spell them
+	transferFlags        uint8    // TransferStatus as transferStatuses bits
+	excludeTransferFlags uint8    // ExcludeTransferStatus as transferStatuses bits
 }
 
 func (g *Game) compile(f Filter) (query, error) {
@@ -684,14 +685,31 @@ func compileProfileFilters(q *query) error {
 		}
 		q.personalities = append(q.personalities, personalityLabels[i])
 	}
-	for _, name := range q.TransferStatus {
-		i := slices.IndexFunc(transferStatuses, func(s transferStatus) bool { return strings.EqualFold(s.name, name) })
-		if i < 0 {
-			return fmt.Errorf("%w: transfer_status %q; valid values: %s", ErrInvalidFilter, name, strings.Join(transferStatusNames(transferStatusBits), ", "))
-		}
-		q.transferFlags |= transferStatuses[i].bit
+	var err error
+	if q.transferFlags, err = transferStatusFlags("transfer_status", q.TransferStatus); err != nil {
+		return err
+	}
+	if q.excludeTransferFlags, err = transferStatusFlags("exclude_transfer_status", q.ExcludeTransferStatus); err != nil {
+		return err
+	}
+	if both := q.transferFlags & q.excludeTransferFlags; both != 0 {
+		return fmt.Errorf("%w: in both transfer_status and exclude_transfer_status: %s", ErrInvalidFilter, strings.Join(transferStatusNames(both), ", "))
 	}
 	return nil
+}
+
+// transferStatusFlags returns the bits for names, case-insensitively. field
+// names the filter in the error.
+func transferStatusFlags(field string, names []string) (uint8, error) {
+	var flags uint8
+	for _, name := range names {
+		i := slices.IndexFunc(transferStatuses, func(s transferStatus) bool { return strings.EqualFold(s.name, name) })
+		if i < 0 {
+			return 0, fmt.Errorf("%w: %s %q; valid values: %s", ErrInvalidFilter, field, name, strings.Join(transferStatusNames(transferStatusBits), ", "))
+		}
+		flags |= transferStatuses[i].bit
+	}
+	return flags, nil
 }
 
 // compilePer90 validates the per90_ sort and MinPer90, and sets minMinutes:
@@ -858,6 +876,7 @@ func (q query) judge(x seen) verdict {
 		q.teams != nil && !q.teams[p.TeamIndex],
 		q.nation != "" && !strings.Contains(p.nationKey, q.nation),
 		q.transferFlags != 0 && (p.Contract == nil || p.Contract.transferFlags&q.transferFlags == 0),
+		p.Contract != nil && p.Contract.transferFlags&q.excludeTransferFlags != 0,
 		!q.expiresBy.IsZero() && (p.Contract == nil || p.Contract.End.IsZero() || p.Contract.End.After(q.expiresBy)),
 		q.MinHeightCM > 0 && (p.HeightCM == 0 || p.HeightCM < q.MinHeightCM),
 		q.MaxHeightCM > 0 && (p.HeightCM == 0 || p.HeightCM > q.MaxHeightCM),
