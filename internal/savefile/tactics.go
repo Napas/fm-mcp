@@ -145,9 +145,32 @@ type Tactic struct {
 	Name string
 	// Mentality is the game's Mentality enum (4 Balanced, 6 Attacking; 6 verified in game).
 	Mentality uint8
+	// TeamInstructions is the header's bitset: one bit per chosen option
+	// ("27.0.0 team instructions").
+	TeamInstructions Bitset
 	// Slots[i] pairs slot i's in-possession position with the
 	// out-of-possession one stored at its slot number.
 	Slots [tacticSlots]TacticSlot
+}
+
+// maxBitsetWords is the most bitset words kept; 27.0.0 uses 3.
+const maxBitsetWords = 4
+
+// Bitset is a stored bitset: u8 version, u8 (2 in every sample),
+// u8 n, n × u32, u8 (255 in every sample).
+type Bitset struct {
+	Version uint8 // team instructions: 6 in 26.x, 7 in 27.0.0
+	Count   uint8 // words stored; only the first maxBitsetWords are kept
+	Words   [maxBitsetWords]uint32
+}
+
+// Has reports whether bit i (bit i%32 of word i/32) is set.
+func (b Bitset) Has(i int) bool {
+	w := i / 32
+	if i < 0 || w >= int(b.Count) || w >= maxBitsetWords {
+		return false
+	}
+	return b.Words[w]&(1<<(i%32)) != 0
 }
 
 // TacticSlot is one of a tactic's 11 positions, in and out of possession.
@@ -478,7 +501,7 @@ func skipPlan(r *reader) {
 		r.str()
 		r.take(3)
 		readObjectVersion(r, "plan item version")
-		skipBitset(r)
+		readBitset(r)
 		r.take(2)
 	}
 	r.expectU8(listTag, "plan end tag")
@@ -532,7 +555,7 @@ func readTactic(r *reader) (Tactic, error) {
 	for range 3 {
 		r.str() // empty in every sample
 	}
-	t.Mentality = readTacticHeader(r)
+	t.Mentality, t.TeamInstructions = readTacticHeader(r)
 	// Slot i plays out of possession at the position stored in slot n, its
 	// number (checked in game in 27.0.0, assumed for 26.x; see "27.0.0 tactics").
 	var oop [tacticSlots]SlotRole
@@ -566,17 +589,17 @@ func readTactic(r *reader) (Tactic, error) {
 	return t, r.err
 }
 
-// readTacticHeader reads u8 4, u8, the mentality, a bitset, the style
-// ("Custom" in the human's tactic, empty in presets) and u32 "NULL"
-// (0x47ac118). It returns the mentality.
-func readTacticHeader(r *reader) uint8 {
+// readTacticHeader reads u8 4, u8, the mentality, the team-instruction bitset,
+// the style ("Custom" in the human's tactic, empty in presets) and a u32 code
+// ("NULL"; "CONT" for Control Possession) (0x47ac118).
+func readTacticHeader(r *reader) (uint8, Bitset) {
 	r.expectU8(tacticHeaderTag, "tactic header tag")
 	r.u8()
 	mentality := r.u8()
-	skipBitset(r)
+	bits := readBitset(r)
 	r.str()
 	r.u32()
-	return mentality
+	return mentality, bits
 }
 
 // readSlotRole reads a POSITION: the mask, the role options with their player
@@ -590,7 +613,7 @@ func readSlotRole(r *reader) SlotRole {
 	n := listCount(r, r.u32(), 16, "role options")
 	for range n {
 		r.u64() // role
-		skipBitset(r)
+		readBitset(r)
 		r.u32()
 	}
 	r.take(12 * listCount(r, r.u32(), 12, "option pairs")) // u32, u64
@@ -598,11 +621,19 @@ func readSlotRole(r *reader) SlotRole {
 	return p
 }
 
-// skipBitset skips u8, u8, u8 n, n × u32, u8.
-func skipBitset(r *reader) {
-	r.take(2)
-	r.take(4 * int(r.u8()))
-	r.take(1)
+// readBitset reads u8 version, u8, u8 n, n × u32, u8.
+func readBitset(r *reader) Bitset {
+	b := Bitset{Version: r.u8()}
+	r.u8()
+	b.Count = r.u8()
+	for i := range int(b.Count) {
+		w := r.u32()
+		if i < maxBitsetWords {
+			b.Words[i] = w
+		}
+	}
+	r.u8()
+	return b
 }
 
 // skipPositionMap skips u32 n + n × (u32 key, u32 m + m × POSITION).

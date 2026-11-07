@@ -20,13 +20,53 @@ const xiSize = 11
 // Tactic is the human manager's current first-team tactic with its players.
 // Names of roles FM26 renamed are guesses.
 type Tactic struct {
-	TeamIndex    int64          `json:"team_index"`
-	Team         string         `json:"team,omitempty"`
-	Name         string         `json:"name"`
-	Mentality    string         `json:"mentality,omitempty"` // empty when the stored value is off the scale
-	LineupSource string         `json:"lineup_source"`
-	Slots        []TacticSlot   `json:"slots"`
-	Bench        []TacticPlayer `json:"bench,omitempty"`
+	TeamIndex    int64  `json:"team_index"`
+	Team         string `json:"team,omitempty"`
+	Name         string `json:"name"`
+	Mentality    string `json:"mentality,omitempty"` // empty when the stored value is off the scale
+	LineupSource string `json:"lineup_source"`
+	// TeamInstructions lists the options set (in possession, out of
+	// possession, set pieces); unlisted instructions are at their default.
+	// Nil when none is set or the bitset is not decoded (26.x saves, or
+	// an unknown version, which checkTactics reports).
+	TeamInstructions []TeamInstruction `json:"team_instructions,omitempty"`
+	// UnknownTeamInstructionBits are set bits with no known option.
+	UnknownTeamInstructionBits []int          `json:"unknown_team_instruction_bits,omitempty"`
+	Slots                      []TacticSlot   `json:"slots"`
+	Bench                      []TacticPlayer `json:"bench,omitempty"`
+}
+
+// TeamInstruction is one option a tactic sets on the Team Instructions screen.
+type TeamInstruction struct {
+	Phase       string `json:"phase"`       // in_possession, out_of_possession or set_pieces
+	Instruction string `json:"instruction"` // e.g. "Passing Directness"
+	Option      string `json:"option"`      // e.g. "Shorter"
+}
+
+// PhaseSetPieces is a team-instruction phase beside PhaseInPossession and
+// PhaseOutOfPossession.
+const PhaseSetPieces = "set_pieces"
+
+// phaseNames are the names of savefile's instruction phases, by value.
+var phaseNames = [...]string{
+	savefile.InPossessionInstructions:    PhaseInPossession,
+	savefile.OutOfPossessionInstructions: PhaseOutOfPossession,
+	savefile.SetPieceInstructions:        PhaseSetPieces,
+}
+
+// teamInstructions returns the set options in screen order (by phase, then
+// bit) and the unnamed set bits; none when the bitset is not decoded.
+func teamInstructions(bits savefile.Bitset) ([]TeamInstruction, []int) {
+	set, unknown, err := bits.TeamInstructions()
+	if err != nil {
+		return nil, nil
+	}
+	slices.SortStableFunc(set, func(a, b savefile.TeamInstruction) int { return int(a.Phase) - int(b.Phase) })
+	var out []TeamInstruction
+	for _, o := range set {
+		out = append(out, TeamInstruction{Phase: phaseNames[o.Phase], Instruction: o.Instruction, Option: o.Option})
+	}
+	return out, unknown
 }
 
 // TacticSlot is one of the tactic's 11 positions and the player in it.
@@ -81,6 +121,11 @@ func checkTactics(t savefile.Tactics, err error, managerTeam int64) (*savefile.T
 	if t.Team >= 0 && managerTeam != noTeam && int64(t.Team) != managerTeam {
 		warnings = append(warnings, fmt.Sprintf("current tactic unavailable: the saved tactic is for team %d, not the manager's first team %d", t.Team, managerTeam))
 		t.Tactics = nil
+	}
+	if tac := current(&t); tac != nil {
+		if _, _, err := tac.TeamInstructions.TeamInstructions(); err != nil {
+			warnings = append(warnings, fmt.Sprintf("team instructions not decoded: %v", err))
+		}
 	}
 	if t.BadFormations > 0 {
 		warnings = append(warnings, fmt.Sprintf("%d teams' last-match formations could not be decoded and are missing", t.BadFormations))
@@ -156,6 +201,7 @@ func newTactic(t *savefile.Tactics, w World, players map[uint32]*Player, aux []p
 		Slots: l.slots(tac.Slots[:]), Bench: l.bench(),
 	}
 	out.Mentality, _ = tac.MentalityName()
+	out.TeamInstructions, out.UnknownTeamInstructionBits = teamInstructions(tac.TeamInstructions)
 	for i, s := range tac.Slots {
 		p := l.player(i)
 		if p == nil {

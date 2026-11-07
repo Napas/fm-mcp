@@ -46,7 +46,8 @@ SET_PIECES     = u16 0x42, 2 × list, u8, i32 person, 3 × u8, 10 × list, u8, 8
 list           = u32 n + n × (u8 2, i32 person index)
 TACTIC         = u8 0x22, u16 0x42, 4 bytes build stamp (1a 03 00 01 in 26.3.2, 1a 02 00 01 in 26.2.0),
                  u8 (2 human, 1 preset), string name, 3 × string (empty)
-                 u8 4, u8 2, u8 mentality, bitset, string style ("Custom"), u32 "NULL"   (0x47ac118)
+                 u8 4, u8 2, u8 mentality, bitset team instructions, string style ("Custom"),
+                   u32 style code ("NULL"; "CONT" for Control Possession)                   (0x47ac118)
                  11 × (POSITION in possession, POSITION out of possession, u8 slot number n: this slot takes
                    the out-of-possession POSITION stored in slot n; checked in game in 27.0.0,
                    assumed for 26.x; see "27.0.0 tactics")
@@ -55,7 +56,8 @@ TACTIC         = u8 0x22, u16 0x42, 4 bytes build stamp (1a 03 00 01 in 26.3.2, 
 POSITION       = u16 0x42, u8, u32 position mask, u8 0xff, u8 0                                   (0x4923d74)
                  u8, u8, u32 n + n × (u64 role option, INSTR), u32 m + m × (u32, u64)              (0x4923e94)
                  u64 selected role | duty
-INSTR          = bitset, u32;  bitset = u8, u8, u8 n, n × u32, u8
+INSTR          = bitset player instructions (hypothesis), u32
+bitset         = u8 version, u8 (2), u8 n, n × u32, u8 (255); bit i is bit i%32 of word i/32
 LAST_LINEUP    = u32 8, u8 0, i32 team, u8 0, i32 opponent, FORMATION in possession, FORMATION out of possession,
                  26 × i32 person (XI by slot, then bench), 26 × u8 shirt number, 26 bytes not decoded
 FORMATION      = u8 3, u8 mentality, u8 2, 11 × (u8 5, u16 slot code)                            (0x490f744)
@@ -145,8 +147,53 @@ Evidence (`data/test_save_27.fm`, 2026-01-19; `data/test_save_27b.fm`, 2026-01-2
 - **Last lineup**: the 243-byte record keeps every offset up to the shirt numbers. Empty records hold the formation tags at 14 and 50, then exactly 130 bytes of 0xff for the 26 persons and 26 shirt numbers. KŽ's record (opponent 6215 FK Banga, which points back) holds 26 persons, the XI with shirts 1–11 and the bench with 12–27; the goalkeeper is Deividas Mikelionis (`fm`). The 27 bytes after the shirt numbers are not decoded. They look like `u32` bitfield, `3 × u32`, `11 × u8`, against `u32`, `4 × u32`, `6 × u8` in 26.x (inference).
 - All roles and positions in both saves' tactics and formations have names in `tacticnames.go`.
 
+- **Bitset versions**: the team-instruction bitset is version 6 in 26.x and 7 in 27.0.0 (3 words in both); the role-option bitsets are version 1 in 26.3.2 and 2 in 27.0.0 (2 words).
+
 Checked in game: the human's tactic (name, mentality, all 22 positions and roles) and KŽ's last-match XI (positions, sides and shirt numbers in possession; positions and roles out of possession). The FM27 game code was not traced.
+
+### 27.0.0 team instructions — verified 27.0.0 (code + in game)
+
+The tactic header's bitset holds one bit per option chosen on the Team Instructions screen. An instruction left at its default sets no bit, except Time Wasting Standard (79), so the default's label is not stored. `savefile.Bitset.TeamInstructions` names the bits of a version-7, 3-word bitset. Version 6 (26.x) is not decoded; any other version or word count is `ErrUnsupported`, and `fm` adds a load warning ("team instructions not decoded").
+
+**Bit order** (code): `game_plugin` 27.0.0 holds an 84-entry table of 4-character option ids at `0x52f34d8` (next to `TACTIC_UI_HANDLER`). Entry n is the option of bit n. Each id is the value of a field of the C# class `TacticTeamInstructionOptions` (IL2CPP metadata, version 39: field default values are the 4-character strings), whose names give the option: entry 3 `a4UD` = `PassingStyleShorter`, entry 17 `0KWG` = `WorkBallIntoBox`. Entries 0, 31–34, 64, 74 and 75 hold the placeholder `WN0c`, and entry 41 (`uXzY`) has no C# field.
+
+| Bits | Instruction (phase) | Options by bit |
+|------|---------------------|----------------|
+| 1–4 | Passing Directness (in possession) | Much More Direct, More Direct, **Shorter**, Much Shorter |
+| 5–6 | Pass Reception | Into Space, Into Feet |
+| 7–8 | Build-Up Strategy | **Play Through Press**, Bypass Press |
+| 9, 17 | Patience | Hit Early Crosses; **Work Ball Into Box** |
+| 10–12 | Crossing Style | Floated, Whipped, Low Crosses |
+| 13–14 | Dribbling | Run at Defence, Dribble Less |
+| 15–16 | Shots from Distance | Encourage (C# ShootOnSight), **Discourage** (C# StayPatient) |
+| 18, 33 | Play for Set Pieces | Play for Set Pieces; **Keep Ball in Play** (bit 33, inference below) |
+| 19–20 | Creative Freedom | More Expressive, More Disciplined |
+| 21–24 | Progress Through | Left Flank, Right Flank, Middle, Both Flanks |
+| 25–30 | Supporting Runs | Overlap Both Flanks, Left, Right; Underlap Both Flanks, Left, Right |
+| 35–40 | GK Distribution | **Centre-Backs**, Full-Backs, Flanks, Over Opposition Defence, Playmaker, Target Forward |
+| 42–43 | GK Distribution (Speed) | Quick, Slow |
+| 44–45 | Goal Kicks | **Short**, Long |
+| 46–49 | Tempo | Much Higher, Higher, Lower, Much Lower |
+| 50–53 | Attacking Width | Much Wider, **Wider**, Narrower, Much Narrower |
+| 54–55 | Attacking Transition | Counter, Hold Shape |
+| 56–59 | Defensive Line (out of possession) | Much Higher, **Higher**, Deeper, Much Deeper |
+| 60 | Goalkeeper Up for Attacking Set Pieces (set pieces) | Yes |
+| 61–63 | Line of Engagement | **High Press**, Mid Block, Low Block |
+| 65–68 | Trigger Press (C# PressingIntensity) | Much More Often, **More Often**, Less Often, Much Less Often |
+| 69 | Short Goalkeeper Distribution (C# PreventShortGKDistribution) | **Yes** |
+| 70–71 | Defensive Transition | **Counter-Press**, Regroup |
+| 72–73 | Tackling | Get Stuck In, Stay on Feet |
+| 76–77 | Defensive Line Behaviour | Hold Line, Drop Off |
+| 78–79 | Time Wasting (in possession) | More Often, **Standard** |
+| 80–81 | Pressing Trap | Trap Inside, Trap Outside |
+| 82–83 | Cross Engagement | Stop Crosses, Invite Crosses |
+
+Bold options and every instruction title were read off the Team Instructions screen. The other labels are derived from the C# names (inference).
+
+Evidence (in game, `data/test_save_27_instructions.fm`: copy of the KŽ save of 2026-11-07 20:40, game date 2026-05-04): "Positive 4-2-3-1 DM AM Wide - Custom Control Possession" (mentality 5, Positive; style shown as Control Possession) stores words `00030088 2208100a 00008064`, bits 3, 7, 16, 17, 33, 35, 44, 51, 57, 61, 66, 69, 70, 79. The screen shows 13 non-default choices and Time Wasting Standard: each of the 13 bits with an option id names one of them. Bit 33 has no id; Keep Ball in Play is the only choice left, so bit 33 = Keep Ball in Play is an inference. Every 27.0.0 preset and the 4-3-3 DM Wide copies in `data/test_save_27b.fm` store bit 62 only (Mid Block). Time Wasting has no bit for Less Often; whether Less Often or Standard is its default is not known. No sample sets a player instruction: every role-option bitset in KŽ's tactics is 0.
+
+Player instructions (not decoded): the C# enum `PlayerInstruction` numbers them PI_NONE 0, PI_PASS_SHORTER 1 … PI_ATTACK_BACK_ZONE 42 (metadata). Whether the role-option bitset uses these values as bit numbers is not checked.
 
 ## Open questions
 
-- `tactics_man.dat`: the style string ("Custom" shows as "Clean Slate"); whether duties appear anywhere in game or affect the match engine; the active-tactic index and where other tactic slots live; team instructions and per-role player instructions (bitsets); the set-piece lists; the meanings in the rest of a team entry and human section (set-piece routines, REC22, plans, the two team maps); saves with more than one human; the last-lineup record's 26 bytes after the shirt numbers (bitfield and unknown values) and the formation byte that is always 2; where the date of a team's last match is (not in the record; probably a fixture in `rgman/comp_*`); the renamed role labels. Whether 26.x pairs slot numbers the same way (`savefile` assumes so; no 26.x sample has out-of-order numbers). 27.0.0: whether the last-lineup record and the match report still agree for a match played with out-of-order slot numbers (the 20 Jan friendly may have been played before the tactic's slots were renumbered); the last-lineup record's 27 trailing bytes; which POSITION byte was dropped.
+- `tactics_man.dat`: the style string ("Custom" shows as "Clean Slate"); whether duties appear anywhere in game or affect the match engine; the active-tactic index and where other tactic slots live; per-role player instructions (bitsets; see "27.0.0 team instructions") and the 26.x team-instruction bits; 27.0.0 team-instruction bits 0, 31, 32, 34, 41, 64, 74 and 75, and the default of each instruction (no bit is stored for it); the style code ("CONT") of other styles; the maps and 191-byte block after a tactic's slots (non-zero in `data/test_save_27_instructions.fm`: 20 keys that look like person indices); the set-piece lists; the meanings in the rest of a team entry and human section (set-piece routines, REC22, plans, the two team maps); saves with more than one human; the last-lineup record's 26 bytes after the shirt numbers (bitfield and unknown values) and the formation byte that is always 2; where the date of a team's last match is (not in the record; probably a fixture in `rgman/comp_*`); the renamed role labels. Whether 26.x pairs slot numbers the same way (`savefile` assumes so; no 26.x sample has out-of-order numbers). 27.0.0: whether the last-lineup record and the match report still agree for a match played with out-of-order slot numbers (the 20 Jan friendly may have been played before the tactic's slots were renumbered); the last-lineup record's 27 trailing bytes; which POSITION byte was dropped.

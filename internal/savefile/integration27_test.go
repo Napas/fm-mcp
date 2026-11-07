@@ -10,8 +10,11 @@ import (
 const (
 	testSave27Path  = "../../data/test_save_27.fm"
 	testSave27bPath = "../../data/test_save_27b.fm" // after Kauno Žalgiris's first match
-	kzHuman27       = 115841
-	kzTeam27        = 16521
+	// testSave27InstructionsPath is the KŽ save of 2026-11-07 20:40 (game date
+	// 2026-05-04), whose tactic has team instructions set in game.
+	testSave27InstructionsPath = "../../data/test_save_27_instructions.fm"
+	kzHuman27                  = 115841
+	kzTeam27                   = 16521
 )
 
 // kzTeamEntries27 are the human's team entries in both FM27 saves.
@@ -220,11 +223,15 @@ func kzSlots27(oopPos [11]uint32, oopRole [11]uint64) [tacticSlots]TacticSlot {
 // game (2026-01-23) the CM (MC right) and AM (MC left) drop to CM, and the
 // right winger to WMF on the right.
 func kzTactic27() Tactic {
-	return Tactic{Name: "4-3-3 DM Wide", Mentality: 4, Slots: kzSlots27(
+	return Tactic{Name: "4-3-3 DM Wide", Mentality: 4, TeamInstructions: presetInstructions27, Slots: kzSlots27(
 		[11]uint32{1, 4, 0x200010, 0x100010, 8, 0x80, 0x200400, 0x100400, 0x100, 0x200, 0x4000},
 		[11]uint64{0x400001, 0x200200, 0x200008, 0x200008, 0x200200, 0x208000, 0x500000, 0x500000, 0x800400000, 0x800400000, 0x40000400000},
 	)}
 }
+
+// presetInstructions27 are the team instructions of every 27.0.0 preset: bit
+// 62 only.
+var presetInstructions27 = Bitset{Version: 7, Count: 3, Words: [maxBitsetWords]uint32{0, 1 << 30}}
 
 // kzFormation27 is KŽ's last-match formation: out-of-possession positions in
 // the tactic's stored order, no slot numbers.
@@ -265,6 +272,20 @@ func TestTestSave27bTactics(t *testing.T) {
 		if kz.Formation.Slots[i] != s {
 			t.Errorf("KŽ formation slot %d = %+v, want %+v", i, kz.Formation.Slots[i], s)
 		}
+	}
+}
+
+// KŽ's tactic carries the team instructions set in game (screenshots of
+// 2026-11-07, game date 2026-05-04).
+func TestTestSave27InstructionsTactic(t *testing.T) {
+	tac, _ := readTactics27(t, testSave27InstructionsPath)
+
+	if tac.Team != kzTeam27 || tac.Active != 0 || len(tac.Tactics) != 1 {
+		t.Fatalf("team %d, active %d, %d tactics", tac.Team, tac.Active, len(tac.Tactics))
+	}
+	got := tac.Tactics[0]
+	if got.Name != "Positive 4-2-3-1 DM AM Wide - Custom Control Possession" || got.Mentality != 5 || got.TeamInstructions != kzInstructions27 {
+		t.Errorf("tactic %q, mentality %d, instructions %+v", got.Name, got.Mentality, got.TeamInstructions)
 	}
 }
 
