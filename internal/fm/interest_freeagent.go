@@ -141,15 +141,13 @@ func freeAgentPlayingTime(p *Player, rt int) int {
 	return max(0, 5*(rt-cr)+(transferLevel-want)*cr)
 }
 
-// judgeFreeAgent sets c's verdicts and terms for a free agent past the hard
-// gates. A free agent can't be loaned (0x1f6eebc gives -100 000). The
-// transfer is out when reason 2 is negative (his previous club or his world
-// reputation out-sizes the target) and the sum stays below FM's Interested
-// level. About 20 free-agent factors are not decoded, so every other free
-// agent is uncertain, never likely.
+// judgeFreeAgent sets c's transfer verdict and terms for a free agent past
+// the hard gates. The transfer is out when reason 2 is negative (his previous
+// club or his world reputation out-sizes the target) and the sum stays below
+// FM's Interested level. About 20 free-agent factors are not decoded, so
+// every other case is uncertain, never likely.
 func (g *Game) judgeFreeAgent(c *interestCase) {
 	c.freeAgent = true
-	c.verdicts.Loan = VerdictOut
 	c.terms.gap = g.freeAgentGap(c.p, c.in, c.to.reputation)
 	c.terms.pt10 = freeAgentPlayingTime(c.p, c.to.reputation)
 	if c.terms.gap < 0 && c.terms.gap+c.terms.pt10 < interestedLevel {

@@ -102,7 +102,7 @@ type interestCase struct {
 	to        interestTarget
 	terms     interestTerms // zero when gated; a free agent's are gap and pt10 only
 	gate      string        // the code of the first hard gate he meets; "" when none
-	onLoan    bool          // on loan elsewhere: FM's loan filter fails him
+	loanGate  string        // the code of the loan-only out reason decided before the sum; "" when none
 	freeAgent bool          // judged by the free-agent path
 	verdicts  Interest
 }
@@ -151,10 +151,15 @@ func (g *Game) judgeInterest(p *Player) (interestCase, bool) {
 		return c, true
 	}
 	// FM's loan filter (game_plugin 27.0.0 0xcffffc) drops a player already
-	// on loan. Its type-18 club-link exemption is not applied: links are not
-	// parsed.
-	if p.Loan != nil {
-		c.onLoan = true
+	// on loan; its type-18 club-link exemption is not applied, as links are
+	// not parsed. A free agent can't be loaned (0x1f6eebc gives -100 000).
+	switch {
+	case p.Loan != nil:
+		c.loanGate = FactorAlreadyOnLoan
+	case in.main == nil:
+		c.loanGate = FactorFreeAgent
+	}
+	if c.loanGate != "" {
 		c.verdicts.Loan = VerdictOut
 	}
 	if in.main == nil {
@@ -184,10 +189,8 @@ func (c interestCase) reasonCode(k InterestKind) string {
 		return ""
 	case c.gate != "":
 		return c.gate
-	case k == InterestLoan && c.onLoan:
-		return FactorAlreadyOnLoan
-	case k == InterestLoan && c.freeAgent:
-		return FactorFreeAgent
+	case k == InterestLoan && c.loanGate != "":
+		return c.loanGate
 	case k == InterestLoan:
 		return sumReasonCode(c.terms.penaltyL, c.terms.gapLoan)
 	}
@@ -207,10 +210,8 @@ func (g *Game) describeInterest(c interestCase) *Interest {
 			out.TransferReason = g.sumReason(c, false)
 		}
 		switch {
-		case c.onLoan:
-			out.LoanReason = alreadyOnLoanFactor(c.p.Loan)
-		case c.freeAgent:
-			out.LoanReason = &InterestFactor{FactorFreeAgent, "Is a free agent, so can't be loaned"}
+		case c.loanGate != "":
+			out.LoanReason = loanGateFactor(c)
 		case out.Loan == VerdictOut:
 			out.LoanReason = g.sumReason(c, true)
 		}
@@ -258,12 +259,19 @@ func (g *Game) gateFactor(c interestCase) *InterestFactor {
 	return &InterestFactor{c.gate, fmt.Sprintf("Left %s %d days ago", c.to.name, gameDaysSince(g.Info.Date, c.in.joined))}
 }
 
-func alreadyOnLoanFactor(loan *Contract) *InterestFactor {
-	text := "On loan at " + loan.Team
-	if !loan.End.IsZero() {
-		text += " until " + loan.End.Format(interestDateLayout)
+func loanGateFactor(c interestCase) *InterestFactor {
+	switch c.loanGate {
+	case FactorFreeAgent:
+		return &InterestFactor{FactorFreeAgent, "Is a free agent, so can't be loaned"}
+	case FactorAlreadyOnLoan:
+		loan := c.p.Loan
+		text := "On loan at " + loan.Team
+		if !loan.End.IsZero() {
+			text += " until " + loan.End.Format(interestDateLayout)
+		}
+		return &InterestFactor{FactorAlreadyOnLoan, text}
 	}
-	return &InterestFactor{FactorAlreadyOnLoan, text}
+	return nil
 }
 
 // sumReasonCode names the most negative term of an out sum.

@@ -207,5 +207,17 @@ func TestInterestFreeAgentVerdicts(t *testing.T) {
 		if got.For(InterestTransferOrLoan) == VerdictOut {
 			t.Error("transfer_or_loan out with the transfer open")
 		}
+		if c, _ := g.judgeInterest(p); c.reasonCode(InterestLoan) != FactorFreeAgent {
+			t.Errorf("loan reason code = %q", c.reasonCode(InterestLoan))
+		}
+	})
+	t.Run("on loan before free agent", func(t *testing.T) {
+		g, p := freeAgentGame(1000, 0, 94, 0, 23)
+		p.Loan = &Contract{TeamIndex: 20, Team: "Tottenham Hotspur"}
+		c, _ := g.judgeInterest(p)
+		got := g.interestOf(p)
+		if c.reasonCode(InterestLoan) != FactorAlreadyOnLoan || got.LoanReason == nil || got.LoanReason.Code != FactorAlreadyOnLoan {
+			t.Errorf("loan reason code %q, reason %+v", c.reasonCode(InterestLoan), got.LoanReason)
+		}
 	})
 }
