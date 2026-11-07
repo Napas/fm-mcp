@@ -2144,7 +2144,7 @@ func TestInterestIsExplained(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"only_just_joined", "transfer_arranged", "retiring", "only_one_club", "recently_left_your_club", "club_reputation_gap", "free_agent", "previous club",
+		"only_just_joined", "transfer_arranged", "retiring", "only_one_club", "recently_left_your_club", "club_reputation_gap", "already_on_loan", "free_agent", "previous club",
 		"his own reputation", "never likely", "game_overview", "warnings", "own players", "other gender", "club is unknown",
 		"transfer_reason", "loan_reason", "transfer_factors", "loan_factors", "estimate",
 	} {

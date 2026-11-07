@@ -83,6 +83,8 @@ Done 2026-10-23: `joined_club`, per-90 sort and filter, `detail`, position ratin
 - **Squad ranking** `0x2f9e580`: sets the offered level; not decoded.
 - **Vega and Lau Jiménez**: in-memory inputs the save does not show (contract events beyond the ring, person `+0xa8` items, negotiation and scouting records) can exempt or block them; Vega passes FM's loan filter with a loan sum of -18 435.
 - **Ages outside 24-25**: the model is tested on few players outside that range.
+- **Regular starters refusing loans** (27.0.0): four Regular Starters refused a loan to KŽ while a Future Prospect accepted; no decoded term separates them. Lead: the club-level factor `0x1f76b80` and its in-memory player level `0x14ea848` (`docs/format/player-interest.md`, "27.0.0 loan filter").
+- **Club links** (`club +0x118`, pool `CLUB_LINK`): not found in the save. Needed for the type-18 exemption from `already_on_loan`.
 
 ## Fog of war
 

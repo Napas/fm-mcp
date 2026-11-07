@@ -1,6 +1,7 @@
 package fm
 
 import (
+	"cmp"
 	"slices"
 	"strings"
 	"testing"
@@ -338,5 +339,37 @@ func TestLoadTestSave27Interest(t *testing.T) {
 		if tt.out && (in.TransferReason == nil || in.TransferReason.Code != FactorClubReputationGap) {
 			t.Errorf("%s: reason %+v", tt.name, in.TransferReason)
 		}
+	}
+}
+
+// Every loanee fails the loan (FM's filter, 27.0.0 0xcffffc). Michelbrink is on loan
+// at Energie Cottbus.
+func TestLoadTestSave27AlreadyOnLoan(t *testing.T) {
+	const michelbrink = 2000193965
+	g := loadTestSaveAt(t, testSave27ListAfterPath, LoadOptions{})
+	loanees := 0
+	for _, p := range g.players {
+		if p.Loan == nil {
+			continue
+		}
+		c, ok := g.judgeInterest(p)
+		if !ok {
+			continue
+		}
+		loanees++
+		if want := cmp.Or(c.gate, FactorAlreadyOnLoan); c.verdicts.Loan != VerdictOut || c.reasonCode(InterestLoan) != want {
+			t.Fatalf("%s (%d): loan %s for %q, want out for %q", p.Name, p.UID, c.verdicts.Loan, c.reasonCode(InterestLoan), want)
+		}
+	}
+	if loanees == 0 {
+		t.Fatal("no loanee judged")
+	}
+	p := g.byUID[michelbrink]
+	if p == nil {
+		t.Fatal("no Michelbrink")
+	}
+	in := g.interestOf(p)
+	if in == nil || in.LoanReason == nil || *in.LoanReason != (InterestFactor{FactorAlreadyOnLoan, "On loan at FC Energie Cottbus until 30 June 2027"}) {
+		t.Errorf("Michelbrink interest = %+v", in)
 	}
 }
