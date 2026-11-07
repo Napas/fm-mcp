@@ -75,7 +75,7 @@ type Player struct {
 	playingTime, originalPlayingTime, actualPlayingTime savefile.PlayingTime
 	auxIdx                                              uint32    // index of the player's data in Game.aux
 	Contract                                            *Contract // nil for free agents
-	Loan                                                *Contract // set while on loan at TeamIndex
+	Loan                                                *Contract // set while on loan; its team is TeamIndex or the club a B team at TeamIndex belongs to
 	FutureContract                                      *Contract // pre-agreed move
 	// LoyaltyBonusRemaining is the main contract's unpaid loyalty bonus, GBP.
 	LoyaltyBonusRemaining int64

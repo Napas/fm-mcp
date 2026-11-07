@@ -520,6 +520,12 @@ func TestInterestNotEvaluated(t *testing.T) {
 		if g.interestOf(p) != nil {
 			t.Error("loanee of the human's club evaluated")
 		}
+		g.aux[0].interest.main.TeamIndex = 20
+		p.TeamIndex = 21                  // registered with a team of another club
+		p.Loan = &Contract{TeamIndex: 11} // on loan to the human's reserves
+		if g.interestOf(p) != nil {
+			t.Error("player on loan to the human's club evaluated")
+		}
 	})
 	t.Run("other gender", func(t *testing.T) {
 		p, in := interestPlayer()
@@ -716,6 +722,44 @@ func TestInterestFreeAgentGates(t *testing.T) {
 		if got == nil || got.Transfer != want || got.Loan != want || (want == VerdictOut) != (got.TransferReason != nil) {
 			t.Errorf("%s: %+v", name, got)
 		}
+	}
+}
+
+// A player on loan elsewhere fails FM's loan filter (27.0.0 0xcffffc); his
+// transfer verdict is unchanged.
+func TestInterestAlreadyOnLoan(t *testing.T) {
+	p, in := interestPlayer()
+	in.joined, in.main.Signed = unsetDate, unsetDate // loanees get no just-joined penalty
+	g := interestGame(p, in)
+	before := *g.interestOf(p)
+	p.TeamIndex, p.Club = 21, "Stade Brestois"
+	p.Loan = &Contract{TeamIndex: 21, Team: "Stade Brestois", End: time.Date(2036, 6, 30, 0, 0, 0, 0, time.UTC)}
+	got := g.interestOf(p)
+	if got.Loan != VerdictOut || got.Transfer != before.Transfer || got.TransferReason != nil {
+		t.Fatalf("got %+v, transfer before %s", got, before.Transfer)
+	}
+	want := InterestFactor{FactorAlreadyOnLoan, "On loan at Stade Brestois until 30 June 2036"}
+	if got.LoanReason == nil || *got.LoanReason != want {
+		t.Errorf("loan reason = %+v, want %+v", got.LoanReason, want)
+	}
+	if got.For(InterestTransferOrLoan) == VerdictOut {
+		t.Error("transfer_or_loan out with the transfer open")
+	}
+
+	p.Loan.End = time.Time{}
+	if got := g.interestOf(p); got.LoanReason == nil || got.LoanReason.Text != "On loan at Stade Brestois" {
+		t.Errorf("no end date: %+v", got.LoanReason)
+	}
+}
+
+// A hard gate names itself for both kinds, even for a loanee.
+func TestInterestAlreadyOnLoanAfterGates(t *testing.T) {
+	p, in := interestPlayer()
+	in.onlyOneClub = true
+	g := interestGame(p, in)
+	p.Loan = &Contract{TeamIndex: 21, Team: "Stade Brestois"}
+	if got := g.interestOf(p); got.LoanReason == nil || got.LoanReason.Code != FactorOnlyOneClub {
+		t.Errorf("loan reason = %+v", got.LoanReason)
 	}
 }
 
@@ -983,6 +1027,19 @@ func TestSearchInterestCountsTheReasonForTheKind(t *testing.T) {
 		if res.InterestDropped.Total != 1 || res.InterestDropped.ByReason[want] != 1 {
 			t.Errorf("%s: dropped = %+v, want 1 %s", kind, res.InterestDropped, want)
 		}
+	}
+}
+
+// A loanee whose loan sum is also out is dropped as already_on_loan.
+func TestSearchInterestCountsAlreadyOnLoan(t *testing.T) {
+	g := differentReasonsGame(t)
+	g.players[0].Loan = &Contract{TeamIndex: 22, Team: "Club D"}
+	res, err := g.View(false).Search(Filter{Interest: "loan"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.InterestDropped.Total != 1 || res.InterestDropped.ByReason[FactorAlreadyOnLoan] != 1 {
+		t.Errorf("dropped = %+v, want 1 %s", res.InterestDropped, FactorAlreadyOnLoan)
 	}
 }
 
