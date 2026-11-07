@@ -51,6 +51,9 @@ func TestSearchProfileFilters(t *testing.T) {
 		{"transfer listed", Filter{Club: "tottenham", TransferStatus: []string{"transfer_listed"}}, []uint32{1}},
 		{"any transfer status", Filter{Club: "tottenham", TransferStatus: []string{"Loan_Listed", "transfer_listed"}}, []uint32{2, 1}},
 		{"unavailable for loan", Filter{Club: "tottenham", TransferStatus: []string{"unavailable_for_loan"}}, []uint32{1, 4}},
+		{"exclude unavailable for loan keeps players without a contract", Filter{Club: "tottenham", ExcludeTransferStatus: []string{"Unavailable_For_Loan"}}, []uint32{2, 5}},
+		{"exclude any transfer status", Filter{Club: "tottenham", ExcludeTransferStatus: []string{"loan_listed", "transfer_listed"}}, []uint32{4, 5}},
+		{"include one status, exclude another", Filter{Club: "tottenham", TransferStatus: []string{"unavailable_for_loan"}, ExcludeTransferStatus: []string{"transfer_listed"}}, []uint32{4}},
 	}
 	for _, tt := range tests {
 		res, err := g.View(false).Search(tt.f)
@@ -154,6 +157,8 @@ func TestSearchRejectsBadProfileFilters(t *testing.T) {
 		{Filter{MaxReputation: 10001}, "max_reputation 10001 is outside 0-10000"},
 		{Filter{MaxReputation: -1}, "max_reputation -1 is outside 0-10000"},
 		{Filter{TransferStatus: []string{"listed"}}, `transfer_status "listed"; valid values: transfer_listed, loan_listed, unavailable_for_loan`},
+		{Filter{ExcludeTransferStatus: []string{"listed"}}, `exclude_transfer_status "listed"; valid values: transfer_listed, loan_listed, unavailable_for_loan`},
+		{Filter{TransferStatus: []string{"loan_listed"}, ExcludeTransferStatus: []string{"Loan_Listed"}}, "in both transfer_status and exclude_transfer_status: loan_listed"},
 	} {
 		if _, err := v.Search(tt.f); !errors.Is(err, ErrInvalidFilter) || !strings.Contains(err.Error(), tt.want) {
 			t.Errorf("%+v: %v; want an invalid filter mentioning %q", tt.f, err, tt.want)
