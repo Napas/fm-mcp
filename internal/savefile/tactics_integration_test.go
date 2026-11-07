@@ -158,29 +158,36 @@ func TestRealSaveTactics(t *testing.T) {
 		t.Errorf("Metz shirt numbers = %v", xi)
 	}
 	// Marseille, Metz's opponent.
-	checkMetzOpponent(t, tac, 670, 5, [11]SlotRole{
+	checkMetzOpponent(t, tac, 670, 5, [11]posRole{
 		{0x1, 0x1}, {0x4, 0x100000000000}, {0x200010, 0x1000000}, {0x100010, 0x1000000}, {0x8, 0x10000000000000},
 		{0x200080, 0x400000000000}, {0x100080, 0x8000}, {0x800, 0x80}, {0x2000, 0x100000000}, {0x1000, 0x80}, {0x4000, 0x400},
-	}, [11]SlotRole{
+	}, [11]posRole{
 		{0x1, 0x4}, {0x4, 0x800}, {0x200010, 0x8}, {0x100010, 0x20}, {0x8, 0x400}, {0x200080, 0x10000}, {0x100080, 0x40000},
 		{0x100, 0x1000000000}, {0x200, 0x800000000}, {0x204000, 0x100000000000}, {0x104000, 0x40000000000},
 	})
 	checkAllFormations(t, tac, 15016)
 }
 
+type posRole struct {
+	Position uint32
+	Role     uint64
+}
+
+func posRoleOf(s SlotRole) posRole { return posRole{s.Position, s.Role} }
+
 // checkMetzOpponent checks the last match of FC Metz's last opponent: its
 // opponent, mentality and both phases' positions and roles.
-func checkMetzOpponent(t *testing.T, tac Tactics, team int32, mentality uint8, wantIP, wantOOP [tacticSlots]SlotRole) {
+func checkMetzOpponent(t *testing.T, tac Tactics, team int32, mentality uint8, wantIP, wantOOP [tacticSlots]posRole) {
 	t.Helper()
 	l := tac.LastLineups[team]
 	if l.Opponent != metzTeam || l.Formation == nil || l.Formation.Mentality != mentality {
 		t.Fatalf("team %d last lineup = %+v; want opponent %d, mentality %d", team, l, metzTeam, mentality)
 	}
 	for i, s := range l.Formation.Slots {
-		if s.InPossession != wantIP[i] {
+		if posRoleOf(s.InPossession) != wantIP[i] {
 			t.Errorf("team %d slot %d in possession = %+v, want %+v", team, i, s.InPossession, wantIP[i])
 		}
-		if s.OutOfPossession != wantOOP[i] {
+		if posRoleOf(s.OutOfPossession) != wantOOP[i] {
 			t.Errorf("team %d slot %d out of possession = %+v, want %+v", team, i, s.OutOfPossession, wantOOP[i])
 		}
 	}
@@ -236,10 +243,10 @@ func TestRealSave9DecTactics(t *testing.T) {
 		t.Errorf("Metz shirt numbers = %v, want %v", got[:20], want[:20])
 	}
 	// Reims, Metz's opponent.
-	checkMetzOpponent(t, tac, 1545, 4, [11]SlotRole{
+	checkMetzOpponent(t, tac, 1545, 4, [11]posRole{
 		{0x1, 0x20000000000000}, {0x4, 0x8}, {0x200010, 0x1000000}, {0x100010, 0x1000000}, {0x8, 0x10000000000000},
 		{0x200080, 0x8000}, {0x100080, 0x10}, {0x800, 0x8000000}, {0x2000, 0x20000000000}, {0x1000, 0x200000000000}, {0x4000, 0x80000},
-	}, [11]SlotRole{
+	}, [11]posRole{
 		{0x1, 0x4}, {0x4, 0x800}, {0x200010, 0x20}, {0x100010, 0x8}, {0x8, 0x800}, {0x200080, 0x10000}, {0x100080, 0x20000},
 		{0x100, 0x800000000}, {0x200, 0x800000000}, {0x2000, 0x40000000}, {0x4000, 0x100000000000},
 	})

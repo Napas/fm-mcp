@@ -13,8 +13,12 @@ const (
 	// testSave27InstructionsPath is the KŽ save of 2026-11-07 20:40 (game date
 	// 2026-05-04), whose tactic has team instructions set in game.
 	testSave27InstructionsPath = "../../data/test_save_27_instructions.fm"
-	kzHuman27                  = 115841
-	kzTeam27                   = 16521
+	// testSave27PlayerInstructionsPath is the KŽ save of 2026-11-07 22:25,
+	// with player instructions set in game on Švedkauskas (GK) and Krekovič
+	// (AML).
+	testSave27PlayerInstructionsPath = "../../data/test_save_27_player_instructions.fm"
+	kzHuman27                        = 115841
+	kzTeam27                         = 16521
 )
 
 // kzTeamEntries27 are the human's team entries in both FM27 saves.
@@ -222,11 +226,16 @@ func kzSlots27(oopPos [11]uint32, oopRole [11]uint64) [tacticSlots]TacticSlot {
 // kzTactic27 is the preset with slots 5 to 10 changed out of possession. In
 // game (2026-01-23) the CM (MC right) and AM (MC left) drop to CM, and the
 // right winger to WMF on the right.
+// Its in-possession positions have no role options, so no player instructions.
 func kzTactic27() Tactic {
-	return Tactic{Name: "4-3-3 DM Wide", Mentality: 4, TeamInstructions: presetInstructions27, Slots: kzSlots27(
+	t := Tactic{Name: "4-3-3 DM Wide", Mentality: 4, TeamInstructions: presetInstructions27, Slots: kzSlots27(
 		[11]uint32{1, 4, 0x200010, 0x100010, 8, 0x80, 0x200400, 0x100400, 0x100, 0x200, 0x4000},
 		[11]uint64{0x400001, 0x200200, 0x200008, 0x200008, 0x200200, 0x208000, 0x500000, 0x500000, 0x800400000, 0x800400000, 0x40000400000},
 	)}
+	for i := range t.Slots {
+		t.Slots[i].OutOfPossession.Instructions = playerBits27()
+	}
+	return t
 }
 
 // presetInstructions27 are the team instructions of every 27.0.0 preset: bit
@@ -286,6 +295,30 @@ func TestTestSave27InstructionsTactic(t *testing.T) {
 	got := tac.Tactics[0]
 	if got.Name != "Positive 4-2-3-1 DM AM Wide - Custom Control Possession" || got.Mentality != 5 || got.TeamInstructions != kzInstructions27 {
 		t.Errorf("tactic %q, mentality %d, instructions %+v", got.Name, got.Mentality, got.TeamInstructions)
+	}
+}
+
+// Slot 0 (Švedkauskas, GK): More Direct Passes, Ease Off Tackles. Slot 10
+// (Krekovič, AML): Shoot Less Often, Tackle Harder. No other slot has any.
+func TestTestSave27PlayerInstructions(t *testing.T) {
+	tac, _ := readTactics27(t, testSave27PlayerInstructionsPath)
+	if len(tac.Tactics) != 1 {
+		t.Fatalf("%d tactics", len(tac.Tactics))
+	}
+	want := map[[2]int]Bitset{
+		{0, 0}: playerBits27(2), {0, 1}: playerBits27(32),
+		{10, 0}: playerBits27(19), {10, 1}: playerBits27(31),
+	}
+	for i, s := range tac.Tactics[0].Slots {
+		for phase, p := range []SlotRole{s.InPossession, s.OutOfPossession} {
+			w, ok := want[[2]int{i, phase}]
+			if !ok {
+				w = playerBits27()
+			}
+			if p.Instructions != w {
+				t.Errorf("slot %d phase %d: %+v, want %+v", i, phase, p.Instructions, w)
+			}
+		}
 	}
 }
 
