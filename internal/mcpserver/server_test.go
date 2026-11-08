@@ -2708,3 +2708,52 @@ func TestSearchRowsCarryOtherNationalities(t *testing.T) {
 		t.Errorf("rows = %+v, want Musiala with other nationality 33", rows.Players)
 	}
 }
+
+func TestHomegrownStatusOnProfilesAndInSearch(t *testing.T) {
+	academy := raw(5, "Harry", "Kane", 547, 135, 3)
+	academy.TrainedAt = []savefile.Training{{Ref: 416, Rule: 1}}
+	academy.TrainedIn = []savefile.Training{{Ref: 139, Rule: 1}}
+	h := harnessWith(t, academy)
+	var rows struct {
+		Players []PlayerSummary `json:"players"`
+	}
+	for _, args := range []map[string]any{{"trained_at_team_index": 547}, {"trained_in_nation_index": 139}} {
+		if res := h.call("search_players", args, &rows); res.IsError {
+			t.Fatalf("search_players %v: %s", args, allText(res))
+		}
+		if len(rows.Players) != 1 || rows.Players[0].UID != 5 || len(rows.Players[0].TrainedAtClubs) != 1 || len(rows.Players[0].TrainedInNations) != 1 {
+			t.Errorf("%v: rows = %+v, want Kane only, with his homegrown status", args, rows.Players)
+		}
+	}
+	rows.Players = nil
+	if res := h.call("search_players", map[string]any{"team_index": 547}, &rows); res.IsError {
+		t.Fatalf("search_players: %s", allText(res))
+	}
+	i := slices.IndexFunc(rows.Players, func(r PlayerSummary) bool { return r.UID == 5 })
+	if i < 0 {
+		t.Fatalf("rows = %+v, want Kane among them", rows.Players)
+	}
+	if r := rows.Players[i]; r.TrainedAtClubs != nil || r.TrainedInNations != nil {
+		t.Errorf("Kane's row carries homegrown status without a homegrown filter: %+v", r)
+	}
+	var p struct {
+		TrainedAtClubs []struct {
+			Club      string `json:"club"`
+			TeamIndex int64  `json:"team_index"`
+			Rules     []int  `json:"rules"`
+		} `json:"trained_at_clubs"`
+		TrainedInNations []struct {
+			NationIndex int64 `json:"nation_index"`
+			Rules       []int `json:"rules"`
+		} `json:"trained_in_nations"`
+	}
+	if res := h.call("get_player", map[string]any{"uid": 5}, &p); res.IsError {
+		t.Fatalf("get_player: %s", allText(res))
+	}
+	if len(p.TrainedAtClubs) != 1 || p.TrainedAtClubs[0].Club != "Spurs" || p.TrainedAtClubs[0].TeamIndex != 547 || !slices.Equal(p.TrainedAtClubs[0].Rules, []int{1}) {
+		t.Errorf("trained_at_clubs = %+v, want Spurs (547) rules [1]", p.TrainedAtClubs)
+	}
+	if len(p.TrainedInNations) != 1 || p.TrainedInNations[0].NationIndex != 139 {
+		t.Errorf("trained_in_nations = %+v, want 139", p.TrainedInNations)
+	}
+}

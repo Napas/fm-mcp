@@ -304,6 +304,27 @@ func TestParsePlayerReadsOtherNationalitiesFromTheRelationshipVector(t *testing.
 	}
 }
 
+func TestParsePlayerReadsHomegrownItemsFromTheRelationshipVector(t *testing.T) {
+	p := parseWithRelations(t, relations(
+		relationItem(480, 0, relationClub, relationTrainedAtClub, 1),
+		relationItem(142, 0, relationNation, relationTrainedInNation, 1),
+		relationItem(480, 0, relationClub, relationTrainedAtClub, 10), // a second rule, in save order
+		relationItem(139, 0, relationNation, relationTrainedInNation, 12),
+		relationItem(77, 0, relationNation, relationTrainedAtClub, 1), // not a club
+		relationItem(78, 0, relationClub, relationTrainedInNation, 1), // not a nation
+	))
+
+	if want := []Training{{Ref: 480, Rule: 1}, {Ref: 480, Rule: 10}}; !reflect.DeepEqual(p.TrainedAt, want) {
+		t.Errorf("TrainedAt = %+v, want %+v", p.TrainedAt, want)
+	}
+	if want := []Training{{Ref: 142, Rule: 1}, {Ref: 139, Rule: 12}}; !reflect.DeepEqual(p.TrainedIn, want) {
+		t.Errorf("TrainedIn = %+v, want %+v", p.TrainedIn, want)
+	}
+	if p.OtherNations != nil || p.ClubAffinities != nil {
+		t.Errorf("OtherNations = %v, ClubAffinities = %+v, want none", p.OtherNations, p.ClubAffinities)
+	}
+}
+
 // The vector is optional data: a bad one leaves no club affinities but keeps
 // the player.
 func TestParsePlayerSkipsMissingOrBadRelationshipVectors(t *testing.T) {
@@ -316,8 +337,8 @@ func TestParsePlayerSkipsMissingOrBadRelationshipVectors(t *testing.T) {
 		"truncated items": append(append([]byte{1, 5}, item...), nation...),
 		"too many items":  tooMany,
 	} {
-		if p := parseWithRelations(t, rel); p.ClubAffinities != nil || p.OtherNations != nil {
-			t.Errorf("%s: ClubAffinities = %+v, OtherNations = %v, want none", name, p.ClubAffinities, p.OtherNations)
+		if p := parseWithRelations(t, rel); p.ClubAffinities != nil || p.OtherNations != nil || p.TrainedAt != nil || p.TrainedIn != nil {
+			t.Errorf("%s: ClubAffinities = %+v, OtherNations = %v, TrainedAt = %v, TrainedIn = %v, want none", name, p.ClubAffinities, p.OtherNations, p.TrainedAt, p.TrainedIn)
 		}
 	}
 }

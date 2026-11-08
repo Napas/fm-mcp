@@ -170,10 +170,10 @@ func TestProfileListsFavouredClubsFrom50OfKnownClubs(t *testing.T) {
 
 	spurs, leeds, chelsea := int64(547), int64(900), int64(20739)
 	want := []FavouredClub{
-		{Club: "Spurs", TeamIndex: &spurs, As: "supporter"},
-		{Club: "Leeds United", TeamIndex: &leeds, As: "player"},
-		{Club: "Chelsea Women", TeamIndex: &chelsea},
-		{Club: "Svendborg fB", As: "player"},
+		{ClubRef: ClubRef{Club: "Spurs", TeamIndex: &spurs}, As: "supporter"},
+		{ClubRef: ClubRef{Club: "Leeds United", TeamIndex: &leeds}, As: "player"},
+		{ClubRef: ClubRef{Club: "Chelsea Women", TeamIndex: &chelsea}},
+		{ClubRef: ClubRef{Club: "Svendborg fB"}, As: "player"},
 	}
 	if !reflect.DeepEqual(p.FavouredClubs, want) {
 		t.Errorf("favoured clubs %+v, want %+v", p.FavouredClubs, want)

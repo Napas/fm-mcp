@@ -810,3 +810,64 @@ func TestOtherNationalities(t *testing.T) {
 		t.Errorf("england: got %v, want [1 2]", uids(res.Players))
 	}
 }
+
+func TestHomegrown(t *testing.T) {
+	w := World{Teams: testWorld.Teams, Clubs: testWorld.Clubs, Nations: map[int64]string{139: "England", 167: "Scotland"}}
+	academy := rawPlayer(1, "Harry", "Kane")
+	academy.TrainedAt = []savefile.Training{{Ref: 416, Rule: 1}, {Ref: 276, Rule: 5}, {Ref: 416, Rule: 10}, {Ref: 999, Rule: 1}}
+	academy.TrainedIn = []savefile.Training{{Ref: 139, Rule: 1}, {Ref: 167, Rule: 2}, {Ref: 139, Rule: 12}}
+	signing := rawPlayer(2, "Son", "Heung-min")
+	signing.TrainedAt = []savefile.Training{{Ref: 20, Rule: 1}}
+	none := rawPlayer(3, "Dejan", "Kulusevski")
+	women := rawPlayer(4, "Lauren", "James")
+	women.Female, women.TeamIndex = true, 20739
+	women.TrainedAt = []savefile.Training{{Ref: 9, Rule: 1}}
+	g := NewGame(Info{Date: gameDate, ManagerTeamIndex: 547}, []savefile.Player{academy, signing, none, women}, w, PlayerExtras{})
+	v := g.View(true) // fog of war never hides homegrown status
+
+	p, _ := v.Profile(1)
+	wantClubs := []TrainedAt{
+		{ClubRef: ClubRef{Club: "Spurs", TeamIndex: ptr(int64(547))}, Rules: []int{1, 10}},
+		{ClubRef: ClubRef{Club: "Svendborg fB"}, Rules: []int{5}},
+	}
+	if !reflect.DeepEqual(p.TrainedAtClubs, wantClubs) {
+		t.Errorf("TrainedAtClubs = %+v, want %+v", p.TrainedAtClubs, wantClubs)
+	}
+	wantNations := []TrainedIn{
+		{NationRef: NationRef{NationIndex: 139, Nation: "England"}, Rules: []int{1, 12}},
+		{NationRef: NationRef{NationIndex: 167, Nation: "Scotland"}, Rules: []int{2}},
+	}
+	if !reflect.DeepEqual(p.TrainedInNations, wantNations) {
+		t.Errorf("TrainedInNations = %+v, want %+v", p.TrainedInNations, wantNations)
+	}
+	if p, _ := v.Profile(2); p.TrainedInNations != nil {
+		t.Errorf("Son's TrainedInNations = %+v, want none", p.TrainedInNations)
+	}
+
+	for name, tt := range map[string]struct {
+		f    Filter
+		want []uint32
+	}{
+		"club by its U21 team": {Filter{TrainedAtTeamIndex: ptr(int64(27845))}, []uint32{1}},
+		"other club":           {Filter{TrainedAtTeamIndex: ptr(int64(900))}, []uint32{2}},
+		"nation":               {Filter{TrainedInNationIndex: ptr(int64(167))}, []uint32{1}},
+		"women's club":         {Filter{TrainedAtTeamIndex: ptr(int64(20739))}, []uint32{4}},
+	} {
+		res, err := v.Search(tt.f)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got := uids(res.Players); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: got %v, want %v", name, got, tt.want)
+		}
+	}
+	for name, f := range map[string]Filter{
+		"unknown team":   {TrainedAtTeamIndex: ptr(int64(12345))},
+		"national team":  {TrainedAtTeamIndex: ptr(int64(1233))},
+		"unknown nation": {TrainedInNationIndex: ptr(int64(5))},
+	} {
+		if _, err := v.Search(f); !errors.Is(err, ErrInvalidFilter) {
+			t.Errorf("%s: err = %v, want ErrInvalidFilter", name, err)
+		}
+	}
+}

@@ -2,6 +2,7 @@ package fm
 
 import (
 	"cmp"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -504,5 +505,43 @@ func TestLoadTestSave27OtherNationalities(t *testing.T) {
 	}
 	if !slices.ContainsFunc(res.Players, func(p Profile) bool { return p.UID == 28124579 }) {
 		t.Errorf("Nigeria at Bayern = %v, want Musiala among them", uids(res.Players))
+	}
+}
+
+// Homegrown status is the relationship vector's club items of type 72 and
+// nation items of type 70 (see "Relationships and favoured clubs").
+// Musiala's clubs are his real academies: Chelsea, then Bayern.
+func TestLoadTestSave27Homegrown(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27Path, LoadOptions{GameDBDir: gameDBDir()})
+	v := g.View(false)
+
+	p, ok := v.Profile(28124579) // Jamal Musiala
+	if !ok {
+		t.Fatal("Musiala not found")
+	}
+	var clubs, nations []string
+	for _, c := range p.TrainedAtClubs {
+		clubs = append(clubs, fmt.Sprint(c.Club, c.Rules))
+	}
+	for _, n := range p.TrainedInNations {
+		nations = append(nations, fmt.Sprint(n.Nation, n.Rules))
+	}
+	if want := []string{"FC Bayern[1]", "Chelsea[10 2]"}; !slices.Equal(clubs, want) {
+		t.Fatalf("trained at %v, want %v", clubs, want)
+	}
+	if want := []string{"England[2]", "Germany[1]"}; !slices.Equal(nations, want) {
+		t.Errorf("trained in %v, want %v", nations, want)
+	}
+
+	chelsea := p.TrainedAtClubs[1].TeamIndex
+	if chelsea == nil {
+		t.Fatal("Chelsea has no team_index")
+	}
+	res, err := v.Search(Filter{TrainedAtTeamIndex: chelsea, TrainedInNationIndex: &p.NationIndex, Limit: 500})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(res.Players, func(r Profile) bool { return r.UID == p.UID }) {
+		t.Errorf("trained at Chelsea and in Germany = %v, want Musiala among them", uids(res.Players))
 	}
 }
