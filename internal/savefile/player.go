@@ -50,7 +50,11 @@ const (
 	maxRelations     = 125
 	relationItemSize = 16
 	relationClub     = 1 // item +10, object kind: a CLUB table index
+	relationNation   = 8 // item +10, object kind: a NATION table index
 	relationFavoured = 3 // item +11, relation type: favoured club (getter 0x2f92e50)
+	// relationNationality is item +11 for a further nationality (getter
+	// 0xcf45d4, 27.0.0).
+	relationNationality = 9
 )
 
 // basicGapGate is the first database version seen with the 10-byte gap; the
@@ -204,7 +208,10 @@ type Player struct {
 	Loan           *Contract // set while on loan; TeamIndex is the loan team
 	FutureContract *Contract // a pre-agreed contract that starts later
 	Injuries       []Injury
-	ClubAffinities []ClubAffinity // in save order; nil when the vector is absent or does not decode
+	// From the relationship vector, in save order; nil when it is absent or
+	// does not decode.
+	ClubAffinities []ClubAffinity
+	OtherNations   []int64 // nation indices of his nationalities after NationIndex
 }
 
 // parsePlayer decodes a player record. dataVersion selects the BASIC part
@@ -271,34 +278,35 @@ func parsePlayer(body []byte, rec Record, nt NameTables, dataVersion uint16) (Pl
 	p.NationIndex = r.i64()
 	copy(p.Hidden[:], r.take(8))
 	p.BirthplaceIndex = r.i64()
-	p.ClubAffinities = clubAffinities(person[r.off:])
+	readRelations(&p, person[r.off:])
 	return p, r.err
 }
 
-// clubAffinities reads the relationship vector at the start of b and keeps
-// the club-affinity items. The vector is optional data, so a bad one gives
-// nil rather than failing the player; the rest of the vector is not read.
-func clubAffinities(b []byte) []ClubAffinity {
+// readRelations fills p's club affinities and other nationalities from the
+// relationship vector at the start of b. A bad vector leaves them nil instead
+// of failing the player.
+func readRelations(p *Player, b []byte) {
 	if len(b) < 2 || b[0] != 1 {
-		return nil
+		return
 	}
 	n := int(b[1])
 	if n > maxRelations || 2+n*relationItemSize > len(b) {
-		return nil
+		return
 	}
-	var out []ClubAffinity
 	for i := range n {
 		it := b[2+i*relationItemSize:]
-		if it[10] != relationClub || it[11] != relationFavoured {
-			continue
+		ref := int64(binary.LittleEndian.Uint64(it)) //nolint:gosec // signed ref
+		switch {
+		case it[10] == relationClub && it[11] == relationFavoured:
+			p.ClubAffinities = append(p.ClubAffinities, ClubAffinity{
+				Club:   ref,
+				Value:  int8(it[12]), //nolint:gosec // signed field
+				Reason: it[8],
+			})
+		case it[10] == relationNation && it[11] == relationNationality:
+			p.OtherNations = append(p.OtherNations, ref)
 		}
-		out = append(out, ClubAffinity{
-			Club:   int64(binary.LittleEndian.Uint64(it)), //nolint:gosec // signed ref
-			Value:  int8(it[12]),                          //nolint:gosec // signed field
-			Reason: it[8],
-		})
 	}
-	return out
 }
 
 // findBasicPart returns the offset in b of the last plausible basic person

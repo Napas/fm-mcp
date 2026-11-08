@@ -773,3 +773,40 @@ func TestSearchMinMonthsAtClub(t *testing.T) {
 		t.Errorf("negative months err = %v", err)
 	}
 }
+
+// A player's other nationalities show on his profile and match nation filters
+// as his first nationality does.
+func TestOtherNationalities(t *testing.T) {
+	w := World{Teams: testWorld.Teams, Nations: map[int64]string{139: "England", 33: "Nigeria", 153: "Lithuania"}}
+	english := rawPlayer(1, "Bukayo", "Saka")
+	dual := rawPlayer(2, "Jamal", "Musiala")
+	dual.OtherNations = []int64{33, 999} // 999: a nation without a name
+	lithuanian := rawPlayer(3, "Fedor", "Černych")
+	lithuanian.NationIndex = 153
+	g := NewGame(Info{Date: gameDate}, []savefile.Player{english, dual, lithuanian}, w, PlayerExtras{})
+	v := g.View(false)
+
+	p, _ := v.Profile(2)
+	want := []NationRef{{NationIndex: 33, Nation: "Nigeria"}, {NationIndex: 999}}
+	if !reflect.DeepEqual(p.OtherNationalities, want) {
+		t.Errorf("OtherNationalities = %+v, want %+v", p.OtherNationalities, want)
+	}
+	if p, _ := v.Profile(1); p.OtherNationalities != nil {
+		t.Errorf("Saka's OtherNationalities = %+v, want none", p.OtherNationalities)
+	}
+	for name, f := range map[string]Filter{
+		"nation":       {Nation: "niger"},
+		"nation index": {NationIndex: ptr(int64(33))},
+	} {
+		res, err := v.Search(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := uids(res.Players); !slices.Equal(got, []uint32{2}) {
+			t.Errorf("%s: got %v, want [2]", name, got)
+		}
+	}
+	if res, _ := v.Search(Filter{Nation: "england"}); !slices.Equal(uids(res.Players), []uint32{1, 2}) {
+		t.Errorf("england: got %v, want [1 2]", uids(res.Players))
+	}
+}

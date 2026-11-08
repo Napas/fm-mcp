@@ -29,6 +29,12 @@ type PositionRating struct {
 	Rating   int    `json:"rating"`
 }
 
+// NationRef names a nation; Nation is empty when the nation has no known name.
+type NationRef struct {
+	NationIndex int64  `json:"nation_index"`
+	Nation      string `json:"nation,omitempty"`
+}
+
 // PlayerBasics are the facts about a player that fog of war never hides.
 type PlayerBasics struct {
 	UID         uint32    `json:"uid"`
@@ -38,8 +44,10 @@ type PlayerBasics struct {
 	Age         int       `json:"age"`
 	NationIndex int64     `json:"nation_index"`
 	Nation      string    `json:"nation,omitempty"`
-	TeamIndex   int64     `json:"team_index"`
-	Club        string    `json:"club,omitempty"`
+	// OtherNationalities are his nationalities after Nation, in save order.
+	OtherNationalities []NationRef `json:"other_nationalities,omitempty"`
+	TeamIndex          int64       `json:"team_index"`
+	Club               string      `json:"club,omitempty"`
 	// SquadNumber is the number registered with his current contract's team
 	// (his loan club while on loan); 0 when none.
 	SquadNumber int `json:"squad_number,omitempty"`
@@ -83,6 +91,7 @@ type Player struct {
 	traits    uint64   // savefile.Player.Traits
 	names     []string // normalized name words, for matching
 	nationKey string   // see nationKey
+	otherKeys []string // nationKey of each OtherNationalities name
 }
 
 // notForSaleValue is the game's value cap. Verified in game: players saved
@@ -150,6 +159,10 @@ func newPlayer(raw savefile.Player, on time.Time, w World) *Player {
 	}
 	p.traits, p.negativeLabels, p.devoted = raw.Traits, raw.FlagBit3, isDevoted(raw, w)
 	p.nationKey = nationKey(p.Nation)
+	for _, n := range raw.OtherNations {
+		p.OtherNationalities = append(p.OtherNationalities, NationRef{NationIndex: n, Nation: w.Nations[n]})
+		p.otherKeys = append(p.otherKeys, nationKey(w.Nations[n]))
+	}
 	p.names = nameWords(raw.FirstName, raw.LastName, raw.CommonName, raw.FullName)
 	return p
 }
@@ -224,4 +237,15 @@ func age(birth, on time.Time) int {
 		years--
 	}
 	return years
+}
+
+// holdsNation reports whether nation is one of his nationalities.
+func (p *Player) holdsNation(nation int64) bool {
+	return p.NationIndex == nation || slices.ContainsFunc(p.OtherNationalities, func(n NationRef) bool { return n.NationIndex == nation })
+}
+
+// nationMatches reports whether any nationality name contains key (a nationKey).
+func (p *Player) nationMatches(key string) bool {
+	return strings.Contains(p.nationKey, key) ||
+		slices.ContainsFunc(p.otherKeys, func(k string) bool { return strings.Contains(k, key) })
 }
