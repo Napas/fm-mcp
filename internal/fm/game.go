@@ -257,9 +257,10 @@ type Filter struct {
 	// ExcludeTransferStatus leaves out players with any of these statuses;
 	// players without a contract are kept.
 	ExcludeTransferStatus []string
-	// TrainedAtTeamIndex matches players trained at the club owning this team.
+	// TrainedAtTeamIndex matches players with a homegrown item for the club
+	// owning this team.
 	TrainedAtTeamIndex *int64
-	// TrainedInNationIndex matches players trained in this nation.
+	// TrainedInNationIndex matches players with a homegrown item for this nation.
 	TrainedInNationIndex *int64
 }
 

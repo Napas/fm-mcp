@@ -40,7 +40,7 @@ Done 2026-10-23: `joined_club`, per-90 sort and filter, `detail`, position ratin
 - **Career history**: previous seasons' stats, transfer history and fees paid, for form trends and resale decisions. Only the current season (plus the last-season snapshot, d18) is served.
 - **Staff**: no tools for coaches, scouts or physios. A staff search with attributes (Working with Youngsters, Judging Potential) for hiring. Non-player person records are not decoded (see "Favoured personnel").
 - **Morale, happiness, promises**: only playing time is exposed. Decodability unknown.
-- **Eligibility**: EU status, for non-EU limits (other nationalities and homegrown status are served; homegrown rule ids are not named). FM26's current Ligue 1 rule not checked.
+- **Eligibility**: EU status, for non-EU limits (other nationalities and homegrown status are served; rule ids served raw; labels seen in game in `docs/format/players.md`). FM26's current Ligue 1 rule not checked.
 
 ### Analytical layer
 

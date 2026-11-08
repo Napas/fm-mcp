@@ -55,7 +55,8 @@ const (
 	// relationNationality is item +11 for a further nationality (getter
 	// 0xcf45d4, 27.0.0).
 	relationNationality = 9
-	// Homegrown items (27.0.0 0xd06550): trained at a club, trained in a nation.
+	// Homegrown items (27.0.0 0xd06550): a club or nation tied to the player
+	// by a homegrown rule.
 	relationTrainedInNation = 70
 	relationTrainedAtClub   = 72
 )
@@ -149,7 +150,7 @@ type ClubAffinity struct {
 // Training is one homegrown item.
 type Training struct {
 	Ref  int64 // CLUB index (Player.TrainedAt) or NATION index (Player.TrainedIn)
-	Rule uint8 // item +12: homegrown rule id (1..12 seen, not named)
+	Rule uint8 // item +12: homegrown rule id (1..12 seen; labels in docs/format/players.md)
 }
 
 // ReasonName names Reason as the profile's "As a supporter" and "As a

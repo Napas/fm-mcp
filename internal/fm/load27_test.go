@@ -13,6 +13,8 @@ import (
 const (
 	testSave27Path  = "../../data/test_save_27.fm"
 	testSave27bPath = "../../data/test_save_27b.fm" // after Kauno Žalgiris's first match
+	// The KŽ save whose players' homegrown rows were checked in game.
+	testSave27HomegrownPath = "../../data/test_save_27_homegrown.fm"
 	// Saved before and after setting three KŽ players' transfer statuses in
 	// game, 2026-11-06.
 	testSave27ListBeforePath = "../../data/test_save_27_list_before.fm"
@@ -508,6 +510,17 @@ func TestLoadTestSave27OtherNationalities(t *testing.T) {
 	}
 }
 
+// homegrownEntries lists p's homegrown clubs and nations as name[rules].
+func homegrownEntries(p Profile) (clubs, nations []string) {
+	for _, c := range p.TrainedAtClubs {
+		clubs = append(clubs, fmt.Sprint(c.Club, c.Rules))
+	}
+	for _, n := range p.TrainedInNations {
+		nations = append(nations, fmt.Sprint(n.Nation, n.Rules))
+	}
+	return clubs, nations
+}
+
 // Homegrown status is the relationship vector's club items of type 72 and
 // nation items of type 70 (see "Relationships and favoured clubs").
 // Musiala's clubs are his real academies: Chelsea, then Bayern.
@@ -519,13 +532,7 @@ func TestLoadTestSave27Homegrown(t *testing.T) {
 	if !ok {
 		t.Fatal("Musiala not found")
 	}
-	var clubs, nations []string
-	for _, c := range p.TrainedAtClubs {
-		clubs = append(clubs, fmt.Sprint(c.Club, c.Rules))
-	}
-	for _, n := range p.TrainedInNations {
-		nations = append(nations, fmt.Sprint(n.Nation, n.Rules))
-	}
+	clubs, nations := homegrownEntries(p)
 	if want := []string{"FC Bayern[1]", "Chelsea[10 2]"}; !slices.Equal(clubs, want) {
 		t.Fatalf("trained at %v, want %v", clubs, want)
 	}
@@ -543,5 +550,31 @@ func TestLoadTestSave27Homegrown(t *testing.T) {
 	}
 	if !slices.ContainsFunc(res.Players, func(r Profile) bool { return r.UID == p.UID }) {
 		t.Errorf("trained at Chelsea and in Germany = %v, want Musiala among them", uids(res.Players))
+	}
+}
+
+// Players whose homegrown rows were checked in game ("Relationships and
+// favoured clubs").
+func TestLoadTestSave27HomegrownInGameSamples(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27HomegrownPath, LoadOptions{GameDBDir: gameDBDir()})
+	v := g.View(false)
+
+	for _, tt := range []struct {
+		uid            uint32
+		nations, clubs []string
+	}{
+		{2000500515, []string{"Lithuania[1]"}, []string{"Kauno Žalgiris[1]"}},                                               // Jonas Jankauskas
+		{28049320, []string{"England[1]"}, []string{"Spurs[1 10]"}},                                                         // Harry Kane
+		{2000585292, []string{"Italy[1 3 12]"}, []string{"Cagliari[1 7]"}},                                                  // Mamadou Barry
+		{2000077193, []string{"Spain[1]", "Türkiye[12 1]"}, []string{"Fenerbahçe[1]", "R. Madrid[1]", "Gençlerbirliği[2]"}}, // Arda Güler
+	} {
+		p, ok := v.Profile(tt.uid)
+		if !ok {
+			t.Fatalf("player %d not found", tt.uid)
+		}
+		clubs, nations := homegrownEntries(p)
+		if !slices.Equal(nations, tt.nations) || !slices.Equal(clubs, tt.clubs) {
+			t.Errorf("%s: nations %v clubs %v, want %v %v", p.Name, nations, clubs, tt.nations, tt.clubs)
+		}
 	}
 }

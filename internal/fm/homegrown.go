@@ -6,14 +6,15 @@ import (
 	"github.com/Napas/fm-mcp/internal/savefile"
 )
 
-// TrainedAt is a club where a player counts as trained.
+// TrainedAt is a club tied to a player by homegrown rules, met or not yet.
 type TrainedAt struct {
 	ClubRef
-	// Rules are the save's homegrown rule ids, in save order; not named.
+	// Rules are homegrown rule ids in save order. 1 showed as "Homegrown
+	// 15-21" on every player checked; see docs/format/players.md.
 	Rules []int `json:"rules"`
 }
 
-// TrainedIn is a nation where a player counts as trained.
+// TrainedIn is a nation tied to a player by homegrown rules, met or not yet.
 type TrainedIn struct {
 	NationRef
 	Rules []int `json:"rules"` // as TrainedAt.Rules
