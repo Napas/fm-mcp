@@ -71,7 +71,7 @@ func New(opts Options) *mcp.Server {
 	addTool(srv, &mcp.Tool{Name: "game_overview", Description: "In-game date, the human manager and club, the club's transfer and wage budgets, how many players the save holds, and whether fog of war is on."}, s.overview)
 	addTool(srv, &mcp.Tool{Name: "set_fog_of_war", Description: "Turn fog of war on or off. Only call this when the user explicitly asks to."}, s.setFogOfWar)
 	addTool(srv, &mcp.Tool{Name: "find_players", Description: "Find players by name, most reputable first. Each word must start a word of the name, ignoring case and accents ('son heung' finds Son Heung-Min; 'ly' does not find Reilly). Hyphenated and apostrophe names match from each part."}, withGame(s, findPlayers))
-	addTool(srv, &mcp.Tool{Name: "get_player", Description: "Full profile of one player: attributes (1-20, hidden ones included), personality, media handling, traits, favoured clubs, position ratings (1-20; ratings below 10 are left out), current and potential ability (1-200), best_roles and best_out_of_possession_roles (his top 3 in- and out-of-possession roles by role_ability, at positions rated 15+), reputation and reputation level, age, club and nation, and season stats per competition for the current season (club, league, domestic cups, continental, friendlies, internationals). With fog of war on, values your scouts do not know are left out. detail \"summary\" keeps only the club season_detail row and drops the interest factors." + interestDescription}, withGame(s, getPlayer))
+	addTool(srv, &mcp.Tool{Name: "get_player", Description: "Full profile of one player: attributes (1-20, hidden ones included), personality, media handling, traits, favoured clubs, position ratings (1-20; ratings below 10 are left out), current and potential ability (1-200), best_roles and best_out_of_possession_roles (his top 3 in- and out-of-possession roles by role_ability, at positions rated 15+), reputation and reputation level, age, club, nation and other_nationalities, and season stats per competition for the current season (club, league, domestic cups, continental, friendlies, internationals). With fog of war on, values your scouts do not know are left out. detail \"summary\" keeps only the club season_detail row and drops the interest factors." + interestDescription}, withGame(s, getPlayer))
 	addTool(srv, &mcp.Tool{Name: "compare_players", Description: "Profiles of several players side by side, including best_roles, best_out_of_possession_roles and season stats per competition; position ratings below 10 are left out. By default (detail \"summary\") season_detail has only the club row and interest has no factors; pass detail \"full\" for every competition row and the factors." + interestDescription}, withGame(s, comparePlayers))
 	addTool(srv, &mcp.Tool{Name: "find_clubs", Description: "Find teams (first, youth, reserve, national) by name, most reputable first. Each word must start a word of the name or short name; case and accents ignored ('tottenham', 'spurs', 'st pauli'). Returns team_index for get_squad, squad_depth and search_players."}, withGame(s, findClubs))
 	addTool(srv, &mcp.Tool{Name: "get_squad", Description: "A team's details (division, reputation, finances), its players highest current ability first, and players contracted to it but out on loan. For a national team, the players are its called-up squad. Defaults to the human manager's first team."}, withGame(s, squad))
@@ -114,6 +114,7 @@ squad_number (get_player, compare_players, get_squad) is the number registered w
 A contract's start is when its current terms were signed (the contract screen's Start); joined is when the player joined that team. A player's joined_club is when he joined his current club, as his profile shows it; it can be later than his contract's joined.
 loyalty_bonus_remaining (get_player, compare_players) is the main contract's loyalty bonus still to be paid, weekly until the contract ends; FM shows it rounded, like other amounts.
 role_ability (get_tactic slots, search_players with role, best_xi, squad_roles, best_roles in get_player and compare_players) is FM's role ability: how well a player suits an in-possession role at a position, on the current-ability scale (0-200). A player's best role usually equals his current ability: the game halves a role ability under the role's threshold (100 for Free Role, Wide Forward and Box To Box Playmaker, 80 or 60 for a few others), the best role included. The game shows it as stars against its own assessment of the player, which the server cannot reproduce, so use it to rank, not to predict stars. One player's roles came out in the game's order in every sample checked, but ties may be listed in another order; across players it agrees with the game's order about 3 times in 4. search_players, squad_roles and best roles have no side: at DC, DM, MC, AMC and ST they use the better of left and right (it matters for Wide and Overlapping Centre-Back, and for out-of-possession roles that cover a wide position), while get_tactic uses the slot's side, so the two can differ for the same player; best_xi uses the slot's side, as get_tactic does; without one, out-of-possession roles that cover a wide position (except the wide centre-backs) do not blend with it, so best_xi can rate them below search_players. It is hidden with current ability under fog of war. out_of_possession_role_ability (get_tactic, search_players with out_of_possession_role), best_out_of_possession_roles and role_ability in squad_roles' out_of_possession rows are the same for an out-of-possession role, following FM27's code: no role halves it, and FM26 saves get the same rules.
+nation is the first nationality; other_nationalities are the rest. search_players' nation and nation_index match any. Fog of war does not hide them.
 reputation_level (get_player, compare_players, get_squad) is the reputation word on FM's player profile: Worldwide, Continental, National, Regional, Local or Obscure. Missing for women's players and player-coaches, and for everyone when game_overview warns that reputation levels are unavailable. Fog of war does not hide it.
 personality (get_player, compare_players, get_squad) is FM's personality label, computed from the hidden attributes, and traits (get_player, compare_players) lists the player's traits (FM's player preferred moves). favoured_clubs (get_player, compare_players) lists the clubs the player favours (FM's Favoured Clubs) by short name, with team_index (the club's first team, when it has one) and as "supporter" or "player" when known.
 media_handling (get_player, compare_players, get_squad) lists FM's media handling styles, e.g. ["Evasive", "Unflappable"], computed from the hidden attributes. Fog of war hides it with the personality (the server's choice; not checked in game).
@@ -425,32 +426,33 @@ func (s *server) setFogOfWar(_ context.Context, _ *mcp.CallToolRequest, in fogIn
 // PlayerSummary is the short form of a player used in lists. Fields fog of
 // war hides are left out.
 type PlayerSummary struct {
-	UID               uint32             `json:"uid"`
-	Name              string             `json:"name"`
-	Age               int                `json:"age"`
-	TeamIndex         int64              `json:"team_index"`
-	Club              string             `json:"club,omitempty"`
-	NationalTeamIndex *int64             `json:"national_team_index,omitempty"` // called up to; TeamIndex stays his team
-	NationalTeam      string             `json:"national_team,omitempty"`
-	NationIndex       int64              `json:"nation_index"`
-	Nation            string             `json:"nation,omitempty"`
-	BestPositions     []string           `json:"best_positions"`
-	CurrentReputation int                `json:"current_reputation"`  // 0-10000
-	Knowledge         *int               `json:"knowledge,omitempty"` // with fog of war on
-	Scouting          fm.Scouting        `json:"scouting,omitempty"`  // with fog of war on
-	CurrentAbility    *int               `json:"current_ability,omitempty"`
-	PotentialAbility  *int               `json:"potential_ability,omitempty"`
-	Value             *int64             `json:"value,omitempty"` // in the user's currency
-	NotForSale        bool               `json:"not_for_sale,omitempty"`
-	TransferStatus    []string           `json:"transfer_status,omitempty"`
-	Wage              *int64             `json:"wage,omitempty"`          // per the wage period; nil when unknown or hidden
-	ContractEnd       string             `json:"contract_end,omitempty"`  // YYYY-MM-DD
-	JoinedClub        string             `json:"joined_club,omitempty"`   // YYYY-MM-DD
-	OnLoanFrom        string             `json:"on_loan_from,omitempty"`  // the parent club while on loan
-	Injury            string             `json:"injury,omitempty"`        // current injury names, comma-separated
-	InjuredUntil      string             `json:"injured_until,omitempty"` // earliest expected return
-	RoleAbility       *int               `json:"role_ability,omitempty"`  // in a search's role; nil otherwise or when hidden
-	Per90             map[string]float64 `json:"per90,omitempty"`         // search's per-90 sort and filter stats
+	UID                uint32             `json:"uid"`
+	Name               string             `json:"name"`
+	Age                int                `json:"age"`
+	TeamIndex          int64              `json:"team_index"`
+	Club               string             `json:"club,omitempty"`
+	NationalTeamIndex  *int64             `json:"national_team_index,omitempty"` // called up to; TeamIndex stays his team
+	NationalTeam       string             `json:"national_team,omitempty"`
+	NationIndex        int64              `json:"nation_index"`
+	Nation             string             `json:"nation,omitempty"`
+	OtherNationalities []fm.NationRef     `json:"other_nationalities,omitempty"`
+	BestPositions      []string           `json:"best_positions"`
+	CurrentReputation  int                `json:"current_reputation"`  // 0-10000
+	Knowledge          *int               `json:"knowledge,omitempty"` // with fog of war on
+	Scouting           fm.Scouting        `json:"scouting,omitempty"`  // with fog of war on
+	CurrentAbility     *int               `json:"current_ability,omitempty"`
+	PotentialAbility   *int               `json:"potential_ability,omitempty"`
+	Value              *int64             `json:"value,omitempty"` // in the user's currency
+	NotForSale         bool               `json:"not_for_sale,omitempty"`
+	TransferStatus     []string           `json:"transfer_status,omitempty"`
+	Wage               *int64             `json:"wage,omitempty"`          // per the wage period; nil when unknown or hidden
+	ContractEnd        string             `json:"contract_end,omitempty"`  // YYYY-MM-DD
+	JoinedClub         string             `json:"joined_club,omitempty"`   // YYYY-MM-DD
+	OnLoanFrom         string             `json:"on_loan_from,omitempty"`  // the parent club while on loan
+	Injury             string             `json:"injury,omitempty"`        // current injury names, comma-separated
+	InjuredUntil       string             `json:"injured_until,omitempty"` // earliest expected return
+	RoleAbility        *int               `json:"role_ability,omitempty"`  // in a search's role; nil otherwise or when hidden
+	Per90              map[string]float64 `json:"per90,omitempty"`         // search's per-90 sort and filter stats
 
 	// OutOfPossessionRoleAbility is the same for a search's out-of-possession role.
 	OutOfPossessionRoleAbility *int `json:"out_of_possession_role_ability,omitempty"`
@@ -468,7 +470,7 @@ func summarize(ps []fm.Profile) []PlayerSummary {
 		out[i] = PlayerSummary{
 			UID: p.UID, Name: p.Name, Age: p.Age,
 			TeamIndex: p.TeamIndex, Club: p.Club, NationalTeamIndex: p.NationalTeamIndex, NationalTeam: p.NationalTeam,
-			NationIndex: p.NationIndex, Nation: p.Nation,
+			NationIndex: p.NationIndex, Nation: p.Nation, OtherNationalities: p.OtherNationalities,
 			BestPositions: p.BestPositions(), CurrentReputation: p.Reputation.Current, Knowledge: p.Knowledge, Scouting: p.Scouting,
 			CurrentAbility: p.CurrentAbility, PotentialAbility: p.PotentialAbility,
 			Value: p.Value, NotForSale: p.NotForSale, TransferStatus: p.TransferStatus, Season: p.Season, RoleAbility: p.RoleAbility, OutOfPossessionRoleAbility: p.OutOfPossessionRoleAbility, PositionRatings: p.PositionRatings, Per90: p.Per90, Interest: p.Interest,
@@ -696,8 +698,8 @@ type searchIn struct {
 	TeamIndex           *int64             `json:"team_index,omitempty" jsonschema:"only players of this team; for a national team, its called-up players"`
 	ContractedTeamIndex *int64             `json:"contracted_team_index,omitempty" jsonschema:"only players whose main contract is with this team, including those out on loan"`
 	ExcludeTeamIndex    *int64             `json:"exclude_team_index,omitempty" jsonschema:"leave out players of this team, e.g. your own"`
-	Nation              string             `json:"nation,omitempty" jsonschema:"part of the nation name"`
-	NationIndex         *int64             `json:"nation_index,omitempty"`
+	Nation              string             `json:"nation,omitempty" jsonschema:"part of a nation name; matches any nationality"`
+	NationIndex         *int64             `json:"nation_index,omitempty" jsonschema:"matches any nationality"`
 	MaxValue            int64              `json:"max_value,omitempty" jsonschema:"in the currency game_overview reports"`
 	MaxWage             int64              `json:"max_wage,omitempty" jsonschema:"in the currency and per the wage_period game_overview reports"`
 	MaxReleaseClause    int64              `json:"max_release_clause,omitempty" jsonschema:"lowest minimum fee release clause at most this, in game_overview's currency; clause kinds (e.g. foreign clubs only) are in get_player's contract clauses"`

@@ -474,3 +474,35 @@ func TestLoadTestSave27AlreadyOnLoan(t *testing.T) {
 		t.Errorf("Michelbrink interest = %+v", in)
 	}
 }
+
+// Other nationalities are the relationship vector's nation items of type 9
+// (see "Relationships and favoured clubs"); the pairs are the players' real
+// ones.
+func TestLoadTestSave27OtherNationalities(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27Path, LoadOptions{GameDBDir: gameDBDir()})
+	v := g.View(false)
+
+	for uid, want := range map[uint32][]string{
+		28124579: {"England", "Nigeria"}, // Jamal Musiala, Germany
+		17012660: {"Russia"},             // Fedor Černych, Lithuania
+	} {
+		p, ok := v.Profile(uid)
+		if !ok {
+			t.Fatalf("player %d not found", uid)
+		}
+		var got []string
+		for _, n := range p.OtherNationalities {
+			got = append(got, n.Nation)
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("%s (%s): other nationalities %v, want %v", p.Name, p.Nation, got, want)
+		}
+	}
+	res, err := v.Search(Filter{Nation: "nigeria", Club: "bayern"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(res.Players, func(p Profile) bool { return p.UID == 28124579 }) {
+		t.Errorf("Nigeria at Bayern = %v, want Musiala among them", uids(res.Players))
+	}
+}

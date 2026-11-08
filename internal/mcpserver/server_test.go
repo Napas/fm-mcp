@@ -2693,3 +2693,18 @@ func TestSquadRolesIsExplained(t *testing.T) {
 		}
 	}
 }
+
+func TestSearchRowsCarryOtherNationalities(t *testing.T) {
+	dual := raw(5, "Jamal", "Musiala", 547, 135, 3)
+	dual.OtherNations = []int64{33}
+	h := harnessWith(t, dual)
+	var rows struct {
+		Players []PlayerSummary `json:"players"`
+	}
+	if res := h.call("search_players", map[string]any{"nation_index": 33}, &rows); res.IsError {
+		t.Fatalf("search_players: %s", allText(res))
+	}
+	if len(rows.Players) != 1 || !reflect.DeepEqual(rows.Players[0].OtherNationalities, []fm.NationRef{{NationIndex: 33}}) {
+		t.Errorf("rows = %+v, want Musiala with other nationality 33", rows.Players)
+	}
+}

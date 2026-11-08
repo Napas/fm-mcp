@@ -288,19 +288,36 @@ func TestParsePlayerReadsClubAffinitiesFromTheRelationshipVector(t *testing.T) {
 	}
 }
 
+func TestParsePlayerReadsOtherNationalitiesFromTheRelationshipVector(t *testing.T) {
+	p := parseWithRelations(t, relations(
+		relationItem(139, 0, relationNation, relationNationality, 100),
+		relationItem(153, 0, relationNation, 70, 1),                   // trained in nation
+		relationItem(33, 0, relationNation, relationNationality, 100), // in save order
+		relationItem(77, 0, relationClub, relationNationality, 100),   // not a nation
+	))
+
+	if want := []int64{139, 33}; !reflect.DeepEqual(p.OtherNations, want) {
+		t.Errorf("OtherNations = %v, want %v", p.OtherNations, want)
+	}
+	if p.ClubAffinities != nil {
+		t.Errorf("ClubAffinities = %+v, want none", p.ClubAffinities)
+	}
+}
+
 // The vector is optional data: a bad one leaves no club affinities but keeps
 // the player.
 func TestParsePlayerSkipsMissingOrBadRelationshipVectors(t *testing.T) {
 	item := relationItem(1115, 1, relationClub, relationFavoured, 100)
+	nation := relationItem(33, 0, relationNation, relationNationality, 100)
 	tooMany := append([]byte{1, maxRelations + 1}, make([]byte, relationItemSize*(maxRelations+1))...)
 	for name, rel := range map[string][]byte{
 		"absent":          nil, // the present flag is 0
 		"unknown flag":    append([]byte{2, 1}, item...),
-		"truncated items": append([]byte{1, 5}, item...),
+		"truncated items": append(append([]byte{1, 5}, item...), nation...),
 		"too many items":  tooMany,
 	} {
-		if p := parseWithRelations(t, rel); p.ClubAffinities != nil {
-			t.Errorf("%s: ClubAffinities = %+v, want none", name, p.ClubAffinities)
+		if p := parseWithRelations(t, rel); p.ClubAffinities != nil || p.OtherNations != nil {
+			t.Errorf("%s: ClubAffinities = %+v, OtherNations = %v, want none", name, p.ClubAffinities, p.OtherNations)
 		}
 	}
 }
