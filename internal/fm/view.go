@@ -15,8 +15,8 @@ import (
 // Profile is a player as the manager sees him. With fog of war on it carries
 // his knowledge; values his scouting does not cover are nil (0 for
 // attributes) and left out of the JSON. Its injuries, positions, national
-// team index, season and favoured clubs are shared with the game: treat them
-// as read-only.
+// team index, season, favoured clubs and homegrown status are shared with the
+// game: read-only.
 type Profile struct {
 	PlayerBasics
 	// ReputationLevel is FM's reputation word, e.g. "National"; fog of war
@@ -35,6 +35,10 @@ type Profile struct {
 	MediaHandling []string `json:"media_handling,omitempty"`
 	// FavouredClubs are in save order; left out with the personality.
 	FavouredClubs []FavouredClub `json:"favoured_clubs,omitempty"`
+	// Homegrown status; never hidden by fog of war. Search rows have it only
+	// with a homegrown filter.
+	TrainedAtClubs   []TrainedAt `json:"trained_at_clubs,omitempty"`
+	TrainedInNations []TrainedIn `json:"trained_in_nations,omitempty"`
 	// Traits are left out when attributes are hidden.
 	Traits     []string `json:"traits,omitempty"`
 	Value      *int64   `json:"value,omitempty"` // in the user's currency
@@ -209,6 +213,9 @@ func (v View) profile(x seen) Profile {
 	out.Contract, out.Loan, out.FutureContract = v.contract(p.Contract, s), v.contract(p.Loan, s), v.contract(p.FutureContract, s)
 	if p.Contract != nil {
 		out.TransferStatus = p.Contract.TransferStatus()
+	}
+	if h := v.g.auxOf(p).homegrown; h != nil {
+		out.TrainedAtClubs, out.TrainedInNations = h.clubs, h.nations
 	}
 	return out
 }
@@ -417,6 +424,9 @@ func (v View) Search(f Filter) (SearchResult, error) {
 			row.PositionRatings = append(row.PositionRatings, x.p.Positions[pos])
 		}
 		row.Per90 = v.g.per90Row(x.p, q.per90)
+		if q.homegrown == nil {
+			row.TrainedAtClubs, row.TrainedInNations = nil, nil
+		}
 	}
 	if res.Total == 0 && res.NeedsScouting == 0 {
 		res.Hint = v.g.emptyClubHint(q)
@@ -493,6 +503,7 @@ type query struct {
 	oopRoleAbility sortKeyFunc
 	interest       InterestKind       // "" without the interest option
 	minPer90       func(*Player) bool // nil without MinPer90
+	homegrown      func(*Player) bool // nil without TrainedAtTeamIndex and TrainedInNationIndex
 	minMinutes     int                // MinSeasonMinutes, else per90DefaultMinutes in a per-90 search
 	// per90 lists the per-90 stats rows carry: the sort's, then MinPer90's.
 	per90                []string
@@ -527,6 +538,7 @@ func (g *Game) compile(f Filter) (query, error) {
 	default:
 		return query{}, fmt.Errorf("%w: interest %q; valid values: %s, %s, %s", ErrInvalidFilter, f.Interest, InterestTransfer, InterestLoan, InterestTransferOrLoan)
 	}
+	q.homegrown = g.homegrownFilter(f)
 	if q.women, err = genderFilter(f.Gender); err != nil {
 		return query{}, err
 	}
@@ -543,7 +555,7 @@ func (g *Game) compile(f Filter) (query, error) {
 			return query{}, fmt.Errorf("%w: no club team matches %q; use find_clubs, or team_index for a national team%s", ErrInvalidFilter, f.Club, exampleTeams(q.national))
 		}
 	}
-	if f.Gender == "" && f.TeamIndex == nil && f.ContractedTeamIndex == nil && f.Club == "" {
+	if f.Gender == "" && f.TeamIndex == nil && f.ContractedTeamIndex == nil && f.Club == "" && f.TrainedAtTeamIndex == nil {
 		q.women = g.managerWomen()
 	}
 	if f.ContractExpiresBy != "" {
@@ -884,7 +896,8 @@ func (q query) judge(x seen) verdict {
 		q.FreeAgentsOnly && p.TeamIndex >= 0,
 		!q.joinedBy.IsZero() && (p.JoinedClub == nil || p.JoinedClub.After(q.joinedBy)),
 		q.minMinutes > 0 && (p.Season == nil || p.Season.Minutes < q.minMinutes),
-		q.minPer90 != nil && !q.minPer90(p):
+		q.minPer90 != nil && !q.minPer90(p),
+		q.homegrown != nil && !q.homegrown(p):
 		return rejected
 	}
 	var j judgement

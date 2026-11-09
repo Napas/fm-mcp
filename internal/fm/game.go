@@ -65,10 +65,11 @@ type Game struct {
 // nothing writes it afterwards. Values computed on demand from Player fields
 // stay methods.
 type playerAux struct {
-	roles    roleInputs
-	favoured []FavouredClub
-	season   savefile.SeasonRecord // this season's scopes; profiles convert them
-	interest interestInputs
+	roles     roleInputs
+	favoured  []FavouredClub
+	homegrown *homegrown            // nil when the player has no homegrown items
+	season    savefile.SeasonRecord // this season's scopes; profiles convert them
+	interest  interestInputs
 }
 
 func (g *Game) auxOf(p *Player) *playerAux { return &g.aux[p.auxIdx] }
@@ -119,7 +120,7 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 			p.Season = seasonStats(*rec.Club)
 		}
 		p.auxIdx = uint32(len(g.aux)) //nolint:gosec // fewer players than 2^32
-		g.aux = append(g.aux, playerAux{roles: newRoleInputs(r), favoured: favouredClubs(r.ClubAffinities, w.Clubs), season: rec, interest: newInterestInputs(r, transfers)})
+		g.aux = append(g.aux, playerAux{roles: newRoleInputs(r), favoured: favouredClubs(r.ClubAffinities, w.Clubs), homegrown: newHomegrown(r, w), season: rec, interest: newInterestInputs(r, transfers)})
 		g.players = append(g.players, p)
 		g.byUID[p.UID] = p
 		if p.NationalTeamIndex != nil {
@@ -198,9 +199,9 @@ func byReputation(a, b *Team) int {
 	return cmp.Or(cmp.Compare(b.Reputation, a.Reputation), cmp.Compare(a.Index, b.Index))
 }
 
-// Filter selects players for Search. Zero values do not filter, except
-// Gender: without a team or club filter it defaults to the gender of the
-// manager's team ("any" for both).
+// Filter selects players for Search. Zero values do not filter, except that
+// Gender defaults to the manager's team's ("any" for both) unless a team,
+// club or trained-at team filter is set.
 type Filter struct {
 	Gender              string
 	Position            string
@@ -256,6 +257,11 @@ type Filter struct {
 	// ExcludeTransferStatus leaves out players with any of these statuses;
 	// players without a contract are kept.
 	ExcludeTransferStatus []string
+	// TrainedAtTeamIndex matches players with a homegrown item for the club
+	// owning this team.
+	TrainedAtTeamIndex *int64
+	// TrainedInNationIndex matches players with a homegrown item for this nation.
+	TrainedInNationIndex *int64
 }
 
 // checkRefs rejects team and nation references that match nothing, so an
@@ -268,8 +274,19 @@ func (g *Game) checkRefs(f Filter) error {
 			}
 		}
 	}
-	if f.NationIndex != nil && g.world.Nations != nil && g.world.Nations[*f.NationIndex] == "" {
-		return fmt.Errorf("%w: no nation with nation_index %d", ErrInvalidFilter, *f.NationIndex)
+	if f.TrainedAtTeamIndex != nil {
+		if g.world.Teams[*f.TrainedAtTeamIndex] == nil {
+			return fmt.Errorf("%w: no team with trained_at_team_index %d; see find_clubs", ErrInvalidFilter, *f.TrainedAtTeamIndex)
+		}
+		if _, ok := g.world.clubOf(*f.TrainedAtTeamIndex); !ok {
+			return fmt.Errorf("%w: trained_at_team_index %d is not a club's team", ErrInvalidFilter, *f.TrainedAtTeamIndex)
+		}
+	}
+	if err := g.checkNation("nation_index", f.NationIndex); err != nil {
+		return err
+	}
+	if err := g.checkNation("trained_in_nation_index", f.TrainedInNationIndex); err != nil {
+		return err
 	}
 	if f.Nation == "" {
 		return nil
@@ -290,6 +307,15 @@ func (g *Game) checkRefs(f Filter) error {
 func (g *Game) checkTeam(index int64) error {
 	if g.world.Teams[index] == nil {
 		return fmt.Errorf("%w: no team with team_index %d; use find_clubs to look one up", ErrInvalidFilter, index)
+	}
+	return nil
+}
+
+// checkNation rejects a nation index that matches no nation. A nil index, or
+// a save without nation names, passes.
+func (g *Game) checkNation(param string, index *int64) error {
+	if index != nil && g.world.Nations != nil && g.world.Nations[*index] == "" {
+		return fmt.Errorf("%w: no nation with %s %d", ErrInvalidFilter, param, *index)
 	}
 	return nil
 }

@@ -55,6 +55,10 @@ const (
 	// relationNationality is item +11 for a further nationality (getter
 	// 0xcf45d4, 27.0.0).
 	relationNationality = 9
+	// Homegrown items (27.0.0 0xd06550): a club or nation tied to the player
+	// by a homegrown rule.
+	relationTrainedInNation = 70
+	relationTrainedAtClub   = 72
 )
 
 // basicGapGate is the first database version seen with the 10-byte gap; the
@@ -143,6 +147,12 @@ type ClubAffinity struct {
 	Reason uint8
 }
 
+// Training is one homegrown item.
+type Training struct {
+	Ref  int64 // CLUB index (Player.TrainedAt) or NATION index (Player.TrainedIn)
+	Rule uint8 // item +12: homegrown rule id (1..12 seen; labels in docs/format/players.md)
+}
+
 // ReasonName names Reason as the profile's "As a supporter" and "As a
 // player" (in-game samples); false for other values.
 func (c ClubAffinity) ReasonName() (string, bool) {
@@ -212,6 +222,8 @@ type Player struct {
 	// does not decode.
 	ClubAffinities []ClubAffinity
 	OtherNations   []int64 // nation indices of his nationalities after NationIndex
+	TrainedAt      []Training
+	TrainedIn      []Training
 }
 
 // parsePlayer decodes a player record. dataVersion selects the BASIC part
@@ -282,9 +294,8 @@ func parsePlayer(body []byte, rec Record, nt NameTables, dataVersion uint16) (Pl
 	return p, r.err
 }
 
-// readRelations fills p's club affinities and other nationalities from the
-// relationship vector at the start of b. A bad vector leaves them nil instead
-// of failing the player.
+// readRelations fills p's club affinities, other nationalities and homegrown
+// items from the relationship vector at the start of b. A bad vector is ignored.
 func readRelations(p *Player, b []byte) {
 	if len(b) < 2 || b[0] != 1 {
 		return
@@ -305,6 +316,10 @@ func readRelations(p *Player, b []byte) {
 			})
 		case it[10] == relationNation && it[11] == relationNationality:
 			p.OtherNations = append(p.OtherNations, ref)
+		case it[10] == relationClub && it[11] == relationTrainedAtClub:
+			p.TrainedAt = append(p.TrainedAt, Training{Ref: ref, Rule: it[12]})
+		case it[10] == relationNation && it[11] == relationTrainedInNation:
+			p.TrainedIn = append(p.TrainedIn, Training{Ref: ref, Rule: it[12]})
 		}
 	}
 }

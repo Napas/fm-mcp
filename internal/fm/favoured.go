@@ -2,10 +2,23 @@ package fm
 
 import "github.com/Napas/fm-mcp/internal/savefile"
 
-// FavouredClub is one of FM's profile "Favoured Clubs".
-type FavouredClub struct {
+// ClubRef names a club and its first team.
+type ClubRef struct {
 	Club      string `json:"club"`                 // see Club.Name
 	TeamIndex *int64 `json:"team_index,omitempty"` // the club's first team; nil when it has none
+}
+
+func clubRef(c Club) ClubRef {
+	r := ClubRef{Club: c.Name}
+	if c.FirstTeam != noTeam {
+		r.TeamIndex = ptr(c.FirstTeam)
+	}
+	return r
+}
+
+// FavouredClub is one of FM's profile "Favoured Clubs".
+type FavouredClub struct {
+	ClubRef
 	// As is "supporter" or "player"; empty for an unknown reason.
 	As string `json:"as,omitempty"`
 }
@@ -23,11 +36,8 @@ func favouredClubs(raw []savefile.ClubAffinity, clubs map[int64]Club) []Favoured
 		if !ok || a.Value < minFavouredValue {
 			continue
 		}
-		f := FavouredClub{Club: c.Name}
+		f := FavouredClub{ClubRef: clubRef(c)}
 		f.As, _ = a.ReasonName()
-		if c.FirstTeam != noTeam {
-			f.TeamIndex = &c.FirstTeam
-		}
 		out = append(out, f)
 	}
 	return out
