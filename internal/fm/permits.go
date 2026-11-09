@@ -8,7 +8,7 @@ import "github.com/Napas/fm-mcp/internal/savefile"
 type WorkPermit struct {
 	NationRef
 	Year int `json:"year"` // probably the year it was granted (inference)
-	// ESCPlace: probably an ESC work permit place (inference).
+	// ESCPlace: an ESC work permit place (FM's "ESC" badge).
 	ESCPlace bool `json:"esc_place,omitempty"`
 }
 
