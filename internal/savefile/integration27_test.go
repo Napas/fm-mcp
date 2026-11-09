@@ -605,3 +605,39 @@ func TestTestSave27Transfers(t *testing.T) {
 		})
 	}
 }
+
+func TestTestSave27WorkPermits(t *testing.T) {
+	const homegrownPath = "../../data/test_save_27_homegrown.fm" // game date 2026-07-16
+	for path, records := range map[string]int{testSave27Path: 896, testSave27bPath: 896, homegrownPath: 949} {
+		t.Run(path, func(t *testing.T) {
+			a := openTestSaveAt(t, path)
+			pools, err := readPoolCounts(a)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ps, err := ReadWorkPermits(a, pools["NATION"])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(ps) != records {
+				t.Errorf("%d permits, want %d", len(ps), records)
+			}
+			byPerson := make(map[uint32][]WorkPermit)
+			for _, p := range ps {
+				byPerson[p.Person] = append(byPerson[p.Person], p)
+			}
+			for person, want := range map[uint32][]WorkPermit{
+				1442: {{Person: 1442, Nation: 167, Year: 2025, Date: Date{Raw: 1, Year: UnsetYear}}}, // Raphael Sallinger, Scotland
+				8286: {{Person: 8286, Nation: 139, Year: 2026, Date: Date{Raw: 33, Year: 2026}}},     // Collins Sichenje, England
+				8334: { // Sékou Koné, at Lausanne: England and Switzerland
+					{Person: 8334, Nation: 139, Year: 2024, Date: Date{Raw: 242, Year: 2025}},
+					{Person: 8334, Nation: 172, Year: 2024, Date: Date{Raw: 1, Year: UnsetYear}},
+				},
+			} {
+				if got := byPerson[person]; !reflect.DeepEqual(got, want) {
+					t.Errorf("person %d = %+v, want %+v", person, got, want)
+				}
+			}
+		})
+	}
+}

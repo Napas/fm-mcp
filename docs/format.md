@@ -22,7 +22,7 @@ Unset dates are saved in 1900. Seen: joined dates of 1900-01-01 on loanees and f
 | [`small-files.md`](format/small-files.md) | game_info, memory_pools, save_game_summary, humans | game_info.dat; memory_pools.dat; save_game_summary.dat; humans.dat |
 | [`fog-of-war.md`](format/fog-of-war.md) | scouting knowledge, baseline, decay | fog_of_war.dat |
 | [`injuries.md`](format/injuries.md) | injury_manager.dat queues, INJURY table (player injury items are in players.md) | injury_manager.dat; Injury types (INJURY) |
-| [`transfers.md`](format/transfers.md) | TRANSFER records, arranged moves, 27.0.0 records | transfer_man.dat; 27.0.0 records |
+| [`transfers.md`](format/transfers.md) | TRANSFER records, arranged moves, 27.0.0 records, work permits | transfer_man.dat; 27.0.0 records; 27.0.0 work permits |
 | [`tactics.md`](format/tactics.md) | tactics grammar, roles/positions enums, last lineups, formations, shirt numbers, 27.0.0 changes, 27.0.0 team and player instructions | tactics_man.dat; Last lineup; 27.0.0 tactics; 27.0.0 team instructions; 27.0.0 player instructions |
 | [`role-ability.md`](format/role-ability.md) | role attribute lists, role rating, best role, role ability, stars, out-of-possession table, 27.0.0 rule changes | Role ability (game code); 27.0.0 role ability |
 | [`player-interest.md`](format/player-interest.md) | interest filter, hard gates, just-joined penalty, reputation gap, playing-time value, verdicts, 27.0.0 free agents, 27.0.0 loan filter | Player interest (game code); 27.0.0 free agents; 27.0.0 loan filter |

@@ -73,6 +73,36 @@ For a past date the game shows a later date that is not in the record (bytes: no
 
 Byte 37 is 0x21 on the 19 moves to the club the player is on loan at and 0x20 on the other 14; it is 0 on all 47 in the 26.3.2 save. Its meaning is unknown.
 
+## 27.0.0 work permits — verified 27.0.0 (code + bytes)
+
+TRANSFER_MANAGER keeps the work permits nations granted in a vector at object offset `+0x720`, sorted by person (loader `0x2e0d4b0`, writer `0x2e0f8e0`, vtable slots 28 and 29; class name from RTTI). In the file it is a u32 count followed by 18-byte records:
+
+| Off | Size | Field | Status |
+|-----|------|-------|--------|
+| 0 | u8 | record version, 2 | code (constant in the writer) + bytes |
+| 1 | i32 | person index (object `+0x8`) | verified (names below) |
+| 5 | u16 | count (`+0xc`); the game adds 1 to it at `0x2df5794` | code; 0 except on 5 Irish permits in the homegrown save (19, 15, 3, 2, 0) |
+| 7 | u16 | `+0xe` | unknown; 0 except on the same 5 records (0, 0, 14, 13, 18) |
+| 9 | u16 | year (`+0x10`) | bytes; matches the signing year on 4 of 4 Arsenal players (Gabriel 2020, Timber 2023, Calafiori and Merino 2024), so probably the year granted (inference) |
+| 11 | u16 | NATION index of the granting nation (a ref, `0x111d318`) | verified (Sallinger: Scotland at Hibernian; Mannone: England at Crawley) |
+| 13 | date | `+0x12` | unknown; 1900-01-01 when unset |
+| 17 | u8 | flags (`+0x16`); bit 0 set exactly when the date is | bytes (all records in 4 saves) |
+
+The getter `0x2e11ee0` returns the date plus 365 days, so the date may be when a permit runs out (inference). Dated records are mostly recent moves to England, e.g. Collins Sichenje (Kenya, Charlton) 2026-02-02 and Rokas Pukštas (Middlesbrough) 2026-08-31 in the homegrown save (game date 2026-07-16). A few dates have upper bits set in the packed u16 (21 and 25).
+
+**The game's check** (`0x2ddd12c(mgr, person, club)`): the person's flag `+0x18` bit 2 marks that a record exists; a binary search by person then looks for a record whose nation is the club's nation. Nations with uid 765, 785, 793 and 801 (England, Northern Ireland, Scotland, Wales; uids verified in the save) count as one, so a permit from one counts in the others. The check reads neither the date nor the flag. Records stay after a move: Sékou Koné (Lausanne) holds an England record (dated 2025-08-30) and a Switzerland one.
+
+**Finding the list** (`savefile.ReadWorkPermits`): the data before it is not decoded, so the parser scans for a u32 count followed by that many records that check out (version 2, years and dates 1900..2200, a nation below the save's NATION count, the flag matching the date) with persons ascending. A body must hold exactly one such list. The scan checks at most one record per 18 bytes of body past each candidate's first record, which real saves use about 900 of.
+
+| Save | Game date | Records | Body offset of the count |
+|------|-----------|---------|--------------------------|
+| `data/test_save_27.fm` | 2026-01-19 | 896 | 3 384 590 |
+| `data/test_save_27b.fm` | 2026-01-22 | 896 | 3 520 468 |
+| `data/test_save_27_interest.fm` | 2026-02-11 | 921 | 4 068 757 |
+| `data/test_save_27_homegrown.fm` | 2026-07-16 | 949 | 3 890 199 |
+
+Granting nations (first save): England 692, Scotland 113, Wales 25, Australia 22, Austria 15, Denmark 11, Switzerland 8, Republic of Ireland 6, a few others. Lithuania grants none; its rules have no work permit tags (England's and Scotland's have `wkpm`, `stWP`, `wpaf`, `wpcc`, `wopm`, `wtpm`; their meaning is not decoded). Whether a player needs a permit comes from those rules and is not read.
+
 ## Open questions
 
-- `transfer_man.dat`: how the game picks the offer date it shows for a past-dated 27.0.0 arranged move, and byte 37; the class parts of TRANSFER records, the fields marked unknown, status values other than 19, what the header count counts, and the 18.8 MB after the records (2036-01-16).
+- `transfer_man.dat`: the work permit date, its flag and the two counts; the list in 26.3.2 saves: the scan finds exactly one in each of five KŽ saves (1 193 to 1 267 records, e.g. England 851 of 1 193 on 2037-07-10); the 26.3.2 writer and the contents are unchecked, and the scan is not build-gated; how the game picks the offer date it shows for a past-dated 27.0.0 arranged move, and byte 37; the class parts of TRANSFER records, the fields marked unknown, status values other than 19, what the header count counts, and the 18.8 MB after the records (2036-01-16).

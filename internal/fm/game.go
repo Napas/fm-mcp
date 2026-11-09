@@ -57,7 +57,8 @@ type Game struct {
 	hasTables     bool            // false when the comp files could not be read
 	fixtures      []storedFixture // in date order
 	tables        []Table
-	tableWarnings []string // why some tables are missing
+	tableWarnings []string                // why some tables are missing
+	permits       map[uint32][]WorkPermit // by player uid; nil when unreadable
 }
 
 // playerAux is per-player data kept outside Player to keep Player within 512
@@ -84,6 +85,8 @@ type PlayerExtras struct {
 	Transfers []savefile.Transfer              // transfer_man.dat; nil when it could not be read
 	Fixtures  []savefile.Fixture               // fix_man.dat; nil when it could not be read
 	Tables    *savefile.LeagueTables           // comp files' tables; nil when they could not be read
+	// WorkPermits are transfer_man.dat's; nil when they could not be read.
+	WorkPermits []savefile.WorkPermit
 	// LeagueStages is the LEAGUE_STAGE memory pool's count, which tables are
 	// counted against.
 	LeagueStages uint32
@@ -129,6 +132,9 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 	}
 	maps.DeleteFunc(inLineup, func(_ uint32, p *Player) bool { return p == nil })
 	g.clubLevels = clubSquadLevels(g.players, w)
+	if extras.WorkPermits != nil {
+		g.permits = workPermits(extras.WorkPermits, raw, w)
+	}
 	g.tactic = newTactic(extras.Tactics, w, inLineup, g.aux, g.roleRules)
 	g.lineupPlayers = inLineup
 	if extras.Tactics != nil {

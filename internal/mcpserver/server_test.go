@@ -2857,3 +2857,34 @@ func TestGetCompetitionRulesIsExplained(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkPermitsOnProfiles(t *testing.T) {
+	kone := raw(7, "Sékou", "Koné", 547, 120, 9)
+	kone.Index = 8334
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "s.fm"), "x", gameDate)
+	h := connect(t, New(Options{SaveDirs: []string{dir}, Load: func(path string) (*fm.Game, error) {
+		return fakeGameWith(path, fm.PlayerExtras{WorkPermits: []savefile.WorkPermit{{Person: 8334, Nation: 139, Year: 2024}}}, kone), nil
+	}}))
+	want := []fm.WorkPermit{{NationRef: fm.NationRef{NationIndex: 139}, Year: 2024}} // the fake world has no nation names
+	var p struct {
+		WorkPermits []fm.WorkPermit `json:"work_permits"`
+	}
+	if res := h.call("get_player", map[string]any{"uid": 7}, &p); res.IsError {
+		t.Fatalf("get_player: %s", allText(res))
+	}
+	if !reflect.DeepEqual(p.WorkPermits, want) {
+		t.Errorf("get_player work_permits = %+v, want %+v", p.WorkPermits, want)
+	}
+	var c struct {
+		Players []struct {
+			WorkPermits []fm.WorkPermit `json:"work_permits"`
+		} `json:"players"`
+	}
+	if res := h.call("compare_players", map[string]any{"uids": []uint32{7}}, &c); res.IsError {
+		t.Fatalf("compare_players: %s", allText(res))
+	}
+	if len(c.Players) != 1 || !reflect.DeepEqual(c.Players[0].WorkPermits, want) {
+		t.Errorf("compare_players = %+v, want work_permits %+v", c.Players, want)
+	}
+}

@@ -162,7 +162,7 @@ func newPlayer(raw savefile.Player, on time.Time, w World) *Player {
 	p.traits, p.negativeLabels, p.devoted = raw.Traits, raw.FlagBit3, isDevoted(raw, w)
 	p.nationKey = nationKey(p.Nation)
 	for _, n := range raw.OtherNations {
-		p.OtherNationalities = append(p.OtherNationalities, NationRef{NationIndex: n, Nation: w.Nations[n]})
+		p.OtherNationalities = append(p.OtherNationalities, w.nationRef(n))
 		p.otherKeys = append(p.otherKeys, nationKey(w.Nations[n]))
 	}
 	if w.EU != nil {

@@ -76,6 +76,10 @@ func Load(path string, opts LoadOptions) (*Game, error) {
 	if err != nil {
 		info.Warnings = append(info.Warnings, fmt.Sprintf("arranged transfers unavailable, so interest cannot tell who has agreed a move: %v", err))
 	}
+	permits, err := readWorkPermits(a, db.NationCount)
+	if err != nil {
+		info.Warnings = append(info.Warnings, fmt.Sprintf("work permits unavailable: %v", err))
+	}
 	var fixtures []savefile.Fixture
 	if len(db.CompetitionKeys) > 0 {
 		if fixtures, err = savefile.ReadFixtures(a); err != nil {
@@ -93,11 +97,14 @@ func Load(path string, opts LoadOptions) (*Game, error) {
 	raw, err := savefile.ReadTactics(a)
 	tactics, warnings := checkTactics(raw, err, info.ManagerTeamIndex)
 	info.Warnings = append(info.Warnings, warnings...)
-	return NewGame(info, db.Players, w, PlayerExtras{Scouted: scouted, Season: records, Tactics: tactics, Transfers: transfers, Fixtures: fixtures, Tables: tables, LeagueStages: db.LeagueStageCount}), nil
+	return NewGame(info, db.Players, w, PlayerExtras{Scouted: scouted, Season: records, Tactics: tactics, Transfers: transfers, WorkPermits: permits, Fixtures: fixtures, Tables: tables, LeagueStages: db.LeagueStageCount}), nil
 }
 
-// readTransfers is swapped in tests.
-var readTransfers = savefile.ReadTransfers
+// readTransfers and readWorkPermits are swapped in tests.
+var (
+	readTransfers   = savefile.ReadTransfers
+	readWorkPermits = savefile.ReadWorkPermits
+)
 
 // readScouting returns the human manager's stored scouting knowledge by
 // player person index.
