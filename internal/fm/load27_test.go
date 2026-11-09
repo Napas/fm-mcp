@@ -534,6 +534,39 @@ func TestLoadTestSave27EUNational(t *testing.T) {
 	}
 }
 
+// The manager's league is A Lyga ("TOPLYGA" in the save); see "27.0.0 competition rules".
+func TestLoadTestSave27CompetitionRules(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27Path, LoadOptions{GameDBDir: gameDBDir()})
+	v := g.View(false)
+
+	r, err := v.CompetitionRules(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Competition != "TOPLYGA" || r.Nation != "Lithuania" || r.RuleGroup != "TOPLYGA" {
+		t.Errorf("manager's league rules %+v, want Lithuania's TOPLYGA", r)
+	}
+	want := []SquadRule{
+		{Rule: "max_squad_size", Value: ptr(30), Scope: 255},
+		{Rule: "same_nation_players_in_11", Value: ptr(3), Scope: 1},
+		{Rule: "under_22_players_in_squad", Value: ptr(5), Scope: 1},
+	}
+	if !reflect.DeepEqual(r.SquadRules, want) {
+		t.Errorf("A Lyga squad rules %+v\nwant %+v", r.SquadRules, want)
+	}
+	pl, err := v.FindCompetition("Premier League")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = []SquadRule{
+		{Rule: "homegrown_players_from_nation", Value: ptr(8), Scope: 1},
+		{Rule: "max_squad_size", Value: ptr(25), Scope: 255},
+	}
+	if r, err := v.CompetitionRules(nil, &pl); err != nil || r.RuleGroup != "ENG_FIXTURE_RULES_PREM" || !reflect.DeepEqual(r.SquadRules, want) {
+		t.Errorf("Premier League rules %+v, %v", r, err)
+	}
+}
+
 // homegrownEntries lists p's homegrown clubs and nations as name[rules].
 func homegrownEntries(p Profile) (clubs, nations []string) {
 	for _, c := range p.TrainedAtClubs {

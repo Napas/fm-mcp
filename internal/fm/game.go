@@ -136,6 +136,9 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 	}
 	g.tables, g.tableWarnings = newTables(extras.Tables, extras.LeagueStages, w)
 	g.Info.Warnings = append(g.Info.Warnings, g.tableWarnings...)
+	if w.RulesWarning != "" {
+		g.Info.Warnings = append(g.Info.Warnings, w.RulesWarning)
+	}
 	var unresolved int
 	if g.fixtures, unresolved = resolveFixtures(extras.Fixtures, w); unresolved > 0 {
 		g.Info.Warnings = append(g.Info.Warnings, fmt.Sprintf("fixtures left out because their competition key does not resolve: %d", unresolved))

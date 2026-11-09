@@ -2793,3 +2793,67 @@ func TestEUNationalOnRowsProfilesAndInSearch(t *testing.T) {
 		t.Errorf("get_player: eu_national %v (%s), want true", p.EUNational, allText(res))
 	}
 }
+
+func rulesHarness(t *testing.T, rules map[int64]fm.RuleGroup) *harness {
+	t.Helper()
+	w := world
+	w.Competitions = map[int64]string{0: "Lithuanian Cup", 1: "TOPLYGA"}
+	w.CompetitionUIDs = []uint32{10, 11}
+	w.Nations = map[int64]string{139: "England", 153: "Lithuania"}
+	w.Rules = rules
+	return connect(t, New(Options{DefaultSave: "/x/a.fm", Logf: func(string, ...any) {}, Load: func(path string) (*fm.Game, error) {
+		return fm.NewGame(fm.Info{SaveName: filepath.Base(path), Date: gameDate, ManagerTeamIndex: 547}, nil, w, fm.PlayerExtras{}), nil
+	}}))
+}
+
+func TestGetCompetitionRules(t *testing.T) {
+	h := rulesHarness(t, map[int64]fm.RuleGroup{1: {NationIndex: 153, Name: "TOPLYGA", Squad: []fm.SquadRule{
+		{Rule: "max_squad_size", Value: ptr(30), Scope: 255},
+		{Rule: "same_nation_players_in_11", Scope: 1, FromYear: 2026, Undecoded: []string{"GmTy"}},
+	}}})
+
+	var got map[string]any
+	if res := h.call("get_competition_rules", map[string]any{"competition": "toplyga"}, &got); res.IsError {
+		t.Fatalf("get_competition_rules: %s", allText(res))
+	}
+	want := map[string]any{
+		"competition_index": 1.0, "competition": "TOPLYGA", "nation_index": 153.0, "nation": "Lithuania", "rule_group": "TOPLYGA",
+		"squad_rules": []any{
+			map[string]any{"rule": "max_squad_size", "value": 30.0, "scope": 255.0},
+			map[string]any{"rule": "same_nation_players_in_11", "scope": 1.0, "from_year": 2026.0, "undecoded_conditions": []any{"GmTy"}},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v\nwant %v", got, want)
+	}
+	if res := h.call("get_competition_rules", map[string]any{"competition_index": 0}, nil); !res.IsError ||
+		!strings.Contains(allText(res), "Lithuanian Cup") || !strings.Contains(allText(res), "continental") {
+		t.Errorf("a competition without rules: %s", allText(res))
+	}
+}
+
+func TestGetCompetitionRulesWithoutRules(t *testing.T) {
+	h := rulesHarness(t, nil)
+
+	if res := h.call("get_competition_rules", map[string]any{"competition_index": 1}, nil); !res.IsError || !strings.Contains(allText(res), "game_overview") {
+		t.Errorf("rules not read: %s", allText(res))
+	}
+}
+
+func TestGetCompetitionRulesIsExplained(t *testing.T) {
+	h := newHarness(t)
+
+	tools, err := h.session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(tools.Tools, func(tool *mcp.Tool) bool { return tool.Name == "get_competition_rules" })
+	if i < 0 {
+		t.Fatal("no get_competition_rules tool")
+	}
+	for _, want := range []string{"minimum or a maximum", "inference", "scope", "undecoded_conditions", "Women's", "continental", "FM 27"} {
+		if !strings.Contains(tools.Tools[i].Description, want) {
+			t.Errorf("get_competition_rules description lacks %q", want)
+		}
+	}
+}

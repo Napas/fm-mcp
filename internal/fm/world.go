@@ -66,6 +66,8 @@ type World struct {
 	Competitions map[int64]string
 	NationScales map[int64]NationScale    // nil when the save's nations do not decode
 	EU           map[int64][]EUMembership // EU member nations; nil when the save's nations do not decode
+	Rules        map[int64]RuleGroup      // rule groups by COMP index; nil when the save's rules were not read
+	RulesWarning string                   // why rules are missing; "" when none
 	// CompetitionUIDs are the COMP records' uids by COMP index; names may be missing.
 	CompetitionUIDs []uint32
 	Stages          map[int64]string          // stage names by STAGE_NAME index
