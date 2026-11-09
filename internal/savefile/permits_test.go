@@ -53,8 +53,8 @@ func TestParseWorkPermits(t *testing.T) {
 	}
 	want := []WorkPermit{
 		{Person: 1442, Nation: 167, Year: 2025, Date: unsetPermitDate},
-		{Person: 8286, Nation: 139, Year: 2026, Date: Date{Raw: 33, Year: 2026}},
-		{Person: 8286, Nation: 139, Year: 2026, Date: Date{Raw: 33, Year: 2026}},
+		{Person: 8286, Nation: 139, Year: 2026, Date: Date{Raw: 33, Year: 2026}, ESC: true},
+		{Person: 8286, Nation: 139, Year: 2026, Date: Date{Raw: 33, Year: 2026}, ESC: true},
 		{Person: 9478, Nation: 163, Year: 2025, Date: unsetPermitDate},
 	}
 	if !reflect.DeepEqual(got, want) {

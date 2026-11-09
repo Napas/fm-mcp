@@ -7,7 +7,7 @@ import (
 
 // Work permit records (TRANSFER_MANAGER +0x720; writer 0x2e0f8e0, 27.0.0):
 // u8 version, i32 person, u16 ×2 (unknown), u16 year, u16 nation, date,
-// u8 flags (bit 0: the date is set).
+// u8 flags (bit 0: set exactly when the date is; probably an ESC place).
 const (
 	permitSize    = 18
 	permitVersion = 2
@@ -26,7 +26,10 @@ type WorkPermit struct {
 	Person uint32 // person index
 	Nation int64  // NATION index of the granting nation
 	Year   uint16 // probably the year it was granted (inference)
-	Date   Date   // unset (1900) on most; meaning unknown
+	Date   Date   // set exactly when ESC is; see docs/format/transfers.md
+	// ESC (flag bit 0): probably an ESC work permit place (inference: one
+	// player checked; England or Wales only).
+	ESC bool
 }
 
 // ReadWorkPermits decodes transfer_man.dat's work permits. nations is the
@@ -107,8 +110,11 @@ func permitOK(r []byte, nations uint32) bool {
 		return false
 	}
 	d := dateAt(r, permitDateOff)
-	return d.plausible(minContractYear, maxContractYear) && (r[permitFlagsOff] == 1) == (d.Year != UnsetYear)
+	return d.plausible(minContractYear, maxContractYear) && permitESC(r) == (d.Year != UnsetYear)
 }
+
+// permitESC reports flag bit 0; permitOK rejects other bits.
+func permitESC(r []byte) bool { return r[permitFlagsOff] == 1 }
 
 func permitAt(r []byte) WorkPermit {
 	le := binary.LittleEndian
@@ -117,5 +123,6 @@ func permitAt(r []byte) WorkPermit {
 		Nation: int64(le.Uint16(r[permitNationOff:])),
 		Year:   le.Uint16(r[permitYearOff:]),
 		Date:   dateAt(r, permitDateOff),
+		ESC:    permitESC(r),
 	}
 }

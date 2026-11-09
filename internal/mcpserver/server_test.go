@@ -2864,17 +2864,21 @@ func TestWorkPermitsOnProfiles(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "s.fm"), "x", gameDate)
 	h := connect(t, New(Options{SaveDirs: []string{dir}, Load: func(path string) (*fm.Game, error) {
-		return fakeGameWith(path, fm.PlayerExtras{WorkPermits: []savefile.WorkPermit{{Person: 8334, Nation: 139, Year: 2024}}}, kone), nil
+		return fakeGameWith(path, fm.PlayerExtras{WorkPermits: []savefile.WorkPermit{{Person: 8334, Nation: 139, Year: 2024, ESC: true}}}, kone), nil
 	}}))
-	want := []fm.WorkPermit{{NationRef: fm.NationRef{NationIndex: 139}, Year: 2024}} // the fake world has no nation names
+	want := []fm.WorkPermit{{NationRef: fm.NationRef{NationIndex: 139}, Year: 2024, ESCPlace: true}} // the fake world has no nation names
 	var p struct {
 		WorkPermits []fm.WorkPermit `json:"work_permits"`
 	}
-	if res := h.call("get_player", map[string]any{"uid": 7}, &p); res.IsError {
+	res := h.call("get_player", map[string]any{"uid": 7}, &p)
+	if res.IsError {
 		t.Fatalf("get_player: %s", allText(res))
 	}
 	if !reflect.DeepEqual(p.WorkPermits, want) {
 		t.Errorf("get_player work_permits = %+v, want %+v", p.WorkPermits, want)
+	}
+	if !strings.Contains(allText(res), `"esc_place":true`) { // pins the JSON name, which the typed decode cannot
+		t.Errorf("get_player JSON lacks esc_place: %s", allText(res))
 	}
 	var c struct {
 		Players []struct {
