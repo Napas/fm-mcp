@@ -7,7 +7,7 @@ import (
 
 // Work permit records (TRANSFER_MANAGER +0x720; writer 0x2e0f8e0, 27.0.0):
 // u8 version, i32 person, u16 ×2 (unknown), u16 year, u16 nation, date,
-// u8 flags (bit 0: set exactly when the date is; probably an ESC place).
+// u8 flags (bit 0: set exactly when the date is; an ESC place).
 const (
 	permitSize    = 18
 	permitVersion = 2
@@ -27,8 +27,7 @@ type WorkPermit struct {
 	Nation int64  // NATION index of the granting nation
 	Year   uint16 // probably the year it was granted (inference)
 	Date   Date   // set exactly when ESC is; see docs/format/transfers.md
-	// ESC (flag bit 0): probably an ESC work permit place (inference: one
-	// player checked; England or Wales only).
+	// ESC (flag bit 0): an ESC work permit place (FM's "ESC" badge); seen for England or Wales only.
 	ESC bool
 }
 
