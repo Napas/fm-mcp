@@ -36,6 +36,7 @@ var world = fm.World{
 	Injuries: map[int64]string{27: "torn anterior cruciate ligament"},
 	// England: national cut 4422, regional 2327, local 465.
 	NationScales: map[int64]fm.NationScale{139: {Factor: 187, ContinentStrength: 0.99, HasContinent: true}},
+	EU:           map[int64][]fm.EUMembership{150: {{}}}, // Italy
 }
 
 func raw(uid uint32, first, last string, club int64, ca int16, pos int) savefile.Player {
@@ -2755,5 +2756,40 @@ func TestHomegrownStatusOnProfilesAndInSearch(t *testing.T) {
 	}
 	if len(p.TrainedInNations) != 1 || p.TrainedInNations[0].NationIndex != 139 {
 		t.Errorf("trained_in_nations = %+v, want 139", p.TrainedInNations)
+	}
+}
+
+func TestEUNationalOnRowsProfilesAndInSearch(t *testing.T) {
+	italian := raw(6, "Guglielmo", "Vicario", 547, 144, 0)
+	italian.NationIndex = 150
+	h := harnessWith(t, italian)
+	var rows struct {
+		Players []PlayerSummary `json:"players"`
+	}
+	for _, tt := range []struct {
+		eu   bool
+		want []uint32
+	}{{true, []uint32{6}}, {false, []uint32{1, 2}}} {
+		rows.Players = nil
+		if res := h.call("search_players", map[string]any{"team_index": 547, "eu_national": tt.eu}, &rows); res.IsError {
+			t.Fatalf("search_players eu_national %v: %s", tt.eu, allText(res))
+		}
+		var got []uint32
+		for _, r := range rows.Players {
+			got = append(got, r.UID)
+			if r.EUNational == nil || *r.EUNational != tt.eu {
+				t.Errorf("eu_national %v: row %d has eu_national %v", tt.eu, r.UID, r.EUNational)
+			}
+		}
+		slices.Sort(got)
+		if !slices.Equal(got, tt.want) {
+			t.Errorf("eu_national %v: got %v, want %v", tt.eu, got, tt.want)
+		}
+	}
+	var p struct {
+		EUNational bool `json:"eu_national"`
+	}
+	if res := h.call("get_player", map[string]any{"uid": 6}, &p); res.IsError || !p.EUNational {
+		t.Errorf("get_player: eu_national %v (%s), want true", p.EUNational, allText(res))
 	}
 }

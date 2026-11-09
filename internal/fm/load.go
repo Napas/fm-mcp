@@ -212,7 +212,7 @@ func namesByUID(kind string, read func() ([]savefile.LangName, error)) (map[uint
 func buildWorld(db *savefile.GameDB, lang langNames) World {
 	w := World{
 		Teams: make(map[int64]*Team, len(db.Teams)), Clubs: make(map[int64]Club, len(db.Clubs)),
-		Nations: lang.nations, Injuries: lang.injuries, NationScales: nationScales(db),
+		Nations: lang.nations, Injuries: lang.injuries, NationScales: nationScales(db), EU: euMemberships(db),
 	}
 	for i, c := range db.Clubs {
 		w.Clubs[int64(i)] = Club{Name: womensName(cmp.Or(c.ShortName, c.Name, "Unnamed club"), c.Women), FirstTeam: noTeam}
@@ -294,6 +294,23 @@ func nationScales(db *savefile.GameDB) map[int64]NationScale {
 	return out
 }
 
+// euMemberships returns the nations' EU memberships by nation index; nil
+// when the save's nations did not decode.
+func euMemberships(db *savefile.GameDB) map[int64][]EUMembership {
+	if len(db.Nations) == 0 {
+		return nil
+	}
+	out := make(map[int64][]EUMembership)
+	for i, n := range db.Nations {
+		for _, b := range n.TradeBlocs {
+			if b.Type == savefile.TradeBlocEU {
+				out[int64(i)] = append(out[int64(i)], EUMembership{From: knownDate(b.From), Until: knownDate(b.Until)})
+			}
+		}
+	}
+	return out
+}
+
 // competitionWarnings reports why competition keys or stage names are missing.
 func competitionWarnings(db *savefile.GameDB) []string {
 	var out []string
@@ -306,12 +323,12 @@ func competitionWarnings(db *savefile.GameDB) []string {
 	return out
 }
 
-// nationWarning reports why reputation levels are missing; "" when they are not.
+// nationWarning reports why reputation levels and EU status are missing; "" when they are not.
 func nationWarning(db *savefile.GameDB) string {
 	if db.NationsErr == nil {
 		return ""
 	}
-	return fmt.Sprintf("reputation levels unavailable: %v", db.NationsErr)
+	return fmt.Sprintf("reputation levels and EU status unavailable: %v", db.NationsErr)
 }
 
 // womensName marks women's sides, which otherwise share their names with

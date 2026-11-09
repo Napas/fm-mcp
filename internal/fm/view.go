@@ -885,6 +885,7 @@ func (q query) judge(x seen) verdict {
 		q.ContractedTeamIndex != nil && (p.Contract == nil || p.Contract.TeamIndex != *q.ContractedTeamIndex),
 		q.ExcludeTeamIndex != nil && p.plays(*q.ExcludeTeamIndex),
 		q.NationIndex != nil && !p.holdsNation(*q.NationIndex),
+		q.EUNational != nil && (p.EUNational == nil || *p.EUNational != *q.EUNational),
 		q.teams != nil && !q.teams[p.TeamIndex],
 		q.nation != "" && !p.nationMatches(q.nation),
 		q.transferFlags != 0 && (p.Contract == nil || p.Contract.transferFlags&q.transferFlags == 0),

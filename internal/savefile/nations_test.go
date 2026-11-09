@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -87,12 +88,13 @@ func TestReadContinentsRejectsTooManyContinents(t *testing.T) {
 type testNation struct {
 	index, uid uint32
 	continent  int32
+	blocs      []TradeBloc
 	lead       []byte // stands for the record's undecoded lists
 }
 
 // nationTail encodes the fixed-grammar end of a NATION record (writer
 // 0x35bf574) before its database record.
-func nationTail(b []byte, continent int32) []byte {
+func nationTail(b []byte, continent int32, blocs ...TradeBloc) []byte {
 	b = append(b, 3)
 	b = le32(b, continent)
 	b = le32(b, 0)
@@ -106,15 +108,17 @@ func nationTail(b []byte, continent int32) []byte {
 	b = binary.LittleEndian.AppendUint32(b, 1) // one 28-byte item
 	b = append(b, bytes.Repeat([]byte{0x11}, 28)...)
 	b = binary.LittleEndian.AppendUint32(b, 0)
-	b = binary.LittleEndian.AppendUint32(b, 2) // two 12-byte items
-	b = append(b, bytes.Repeat([]byte{0x22}, 24)...)
+	b = binary.LittleEndian.AppendUint32(b, uint32(len(blocs))) //nolint:gosec // test sizes
+	for _, tb := range blocs {
+		b = appendDate(appendDate(le32(b, tb.Type), tb.From), tb.Until)
+	}
 	return append(b, bytes.Repeat([]byte{0x33}, nationTailEndSize)...)
 }
 
 func (n testNation) encode(b []byte) []byte {
 	b = append(b, tagNation)
 	b = append(b, n.lead...)
-	b = nationTail(b, n.continent)
+	b = nationTail(b, n.continent, n.blocs...)
 	return dbRecord(b, n.index, n.uid)
 }
 
@@ -128,8 +132,15 @@ func nationBody(ns ...testNation) []byte {
 
 var testNations = []testNation{
 	{index: 0, uid: 5, continent: 0, lead: []byte{0xff, 0xff, 0xff, 0x40}},
-	{index: 1, uid: 765, continent: 2, lead: bytes.Repeat([]byte{0x80}, 30)},
+	{index: 1, uid: 765, continent: 2, blocs: testBlocs, lead: bytes.Repeat([]byte{0x80}, 30)},
 	{index: 2, uid: 1000, continent: -1},
+}
+
+// testBlocs: EU from 2004-01-01 and EEA from 2005-12-06, both open-ended
+// (Lithuania in test_save_27).
+var testBlocs = []TradeBloc{
+	{Type: TradeBlocEU, From: Date{Raw: 1, Year: 2004}, Until: Date{Raw: 1, Year: UnsetYear}},
+	{Type: 1, From: Date{Raw: 340, Year: 2005}, Until: Date{Raw: 1, Year: UnsetYear}},
 }
 
 func TestReadNations(t *testing.T) {
@@ -138,7 +149,8 @@ func TestReadNations(t *testing.T) {
 		t.Fatalf("readNations: %v", err)
 	}
 
-	if want := []Nation{{Index: 0, UID: 5, Continent: 0}, {Index: 1, UID: 765, Continent: 2}, {Index: 2, UID: 1000, Continent: -1}}; !slices.Equal(got, want) {
+	want := []Nation{{Index: 0, UID: 5, Continent: 0}, {Index: 1, UID: 765, Continent: 2, TradeBlocs: testBlocs}, {Index: 2, UID: 1000, Continent: -1}}
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 }

@@ -28,7 +28,7 @@ u8 +0x1f4, u8 +0x1f8, f32 +0x1dc, u8 +0x1f5,
 u8 n  + n × 5    (0x3609bf0: i32 ref, u8)
 u32 m + m × 28   (0x35d3624: 5 × i32 ref, 2 × date)
 u32 k + k × 28   (same)
-u32 j + j × 12   (0x360944c: i32 ref, 4 × u16)
+u32 j + j × 12   (0x360944c: trade blocs, see "27.0.0 trade blocs")
 10 × i32, u16, u8, 11 × u8     (54 bytes)
 ```
 
@@ -44,6 +44,47 @@ The reputation factor is the i16 at record offset 168, one byte earlier than in 
 
 Evidence: Lithuania 74 and Serbia 131 in `data/test_save_27.fm`, `test_save_27b.fm` and the 2026-01-23 save, whose factors range 0..189 with 22 nations at 0. Against the 26.3.2 save the factors correlate at 0.98: France 171 → 173, United States 140 → 140, Serbia 129 → 131, Slovenia 131 → 125, Lithuania 121 → 74. In game (2026-01-23), Davis Akusobi (KŽ B, Lithuania, current 2500, world 500) and Haris Kadrić (on loan at FK Novi Pazar, Serbia, 5000, 2000) are both National; the 26.3.2 rule gives that with these factors (Lithuania's national cut is the 2150 floor).
 
+## 27.0.0 trade blocs — verified 27.0.0 (bytes); EU rule inferred
+
+The NATION tail's last counted list (writer `0x360944c`) is the nation's trade-bloc memberships. `savefile` reads it as `Nation.TradeBlocs`.
+
+| Offset | Size | Field |
+|---|---|---|
+| 0 | i32 | bloc type |
+| 4 | date | from; 1900 when unset |
+| 8 | date | until; 1900 when unset |
+
+Evidence (`data/test_save_27.fm`, game date 2026-01-19; 175 items on 133 nations; every until is unset). Members by name, from the language database:
+
+| Type | Nations | Members | Bloc (inference from the members) |
+|---|---|---|---|
+| 0 | 38 | the 27 EU members; French Guiana, Guadeloupe, Martinique, Saint Martin, Réunion, Mayotte; Albania, Bosnia and Herzegovina, Montenegro, North Macedonia and Serbia from 2030-07-01 | EU |
+| 1 | 44 | type 0's nations, Iceland, Norway, Liechtenstein, Faroe Islands, Northern Ireland and Gibraltar; most from 1994 | EEA |
+| 2 | 76 | African, Caribbean and Pacific nations (Nigeria, Jamaica, Fiji …) | ACP (Cotonou) |
+| 3 | 7 | Bermuda, Cayman Islands, Anguilla, British Virgin Islands, Montserrat, Turks and Caicos Islands, Gibraltar | British overseas territories |
+| 4 | 6 | Kazakhstan, Kyrgyzstan, Turkmenistan, Uzbekistan, Azerbaijan, Türkiye | Turkic states |
+| 5 | 4 | Iceland, Liechtenstein, Norway, Switzerland | EFTA |
+
+England has no items. Type 0's from is unset for 12 nations: Belgium, France, Germany, Italy, Luxembourg, the Netherlands and the six French overseas regions. The others, except the five 2030-07-01 entries, have 1 January of a year: Lithuania 2004, Croatia 2013. From general knowledge, not the save: these are the accession years, and the real days differ (1 May 2004, 1 July 2013).
+
+`fm` serves `eu_national`: true when any of the player's nationalities has a type-0 item active on the game date (from inclusive, until exclusive; any of several items). No nation has more than one type-0 item in the 27, 27b and homegrown saves. That rule is an inference: the engine function that combines nationalities and blocs was not found. The C# front end has `IsEuNational`, `EuropeanUnion`, `EuropeanEconomicArea` and `EuropeanFreeTradeAssociation`. Other nationalities can include region nations (see "Relationships and favoured clubs" in players.md); whether the game skips them is not known.
+
+KŽ squad on that save, for an in-game check:
+
+| Player | Nationalities | `eu_national` |
+|---|---|---|
+| Fedor Černych | Lithuania, Russia | true |
+| Franco Baldassarra | Argentina, Italy | true |
+| Joris Moutachy | Martinique, France | true |
+| Lirim Kastrati | Kosovo, Albania, Italy | true (Italy) |
+| Renan Oliveira | Brazil | false |
+| Anton Tolordava | Georgia | false |
+| Marko Konatar | Serbia | false (until 2030-07-01) |
+| Yukiyoshi Karashima | Japan | false |
+
+Harry Kane is true through his second nationality, the Republic of Ireland.
+
 ## Open questions
 
 - The national-team container body beyond the factor (the women's container → nation rule is inferred); the NATION record before its tail.
+- Trade blocs: whether FM's EU National label follows the type-0 rule above (not checked in game), the blocs of types 1..5, and whether the 26.x tail holds the same list (not checked).

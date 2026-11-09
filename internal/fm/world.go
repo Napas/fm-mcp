@@ -1,7 +1,9 @@
 package fm
 
 import (
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/Napas/fm-mcp/internal/savefile"
 )
@@ -62,11 +64,24 @@ type World struct {
 	Nations      map[int64]string
 	Injuries     map[int64]string
 	Competitions map[int64]string
-	NationScales map[int64]NationScale // nil when the save's nations do not decode
+	NationScales map[int64]NationScale    // nil when the save's nations do not decode
+	EU           map[int64][]EUMembership // EU member nations; nil when the save's nations do not decode
 	// CompetitionUIDs are the COMP records' uids by COMP index; names may be missing.
 	CompetitionUIDs []uint32
 	Stages          map[int64]string          // stage names by STAGE_NAME index
 	Keys            []savefile.CompetitionKey // ACTUAL_COMP_ID records by key index
+}
+
+// EUMembership is a period of a nation's EU membership; a zero time is unset.
+type EUMembership struct {
+	From, Until time.Time
+}
+
+// inEU reports whether nation is an EU member on day on (From inclusive, Until exclusive).
+func (w World) inEU(nation int64, on time.Time) bool {
+	return slices.ContainsFunc(w.EU[nation], func(m EUMembership) bool {
+		return !on.Before(m.From) && (m.Until.IsZero() || on.Before(m.Until))
+	})
 }
 
 // isFirstTeam reports whether team i is its club's first team.

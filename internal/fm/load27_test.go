@@ -510,6 +510,30 @@ func TestLoadTestSave27OtherNationalities(t *testing.T) {
 	}
 }
 
+// EU status follows the NATION trade-bloc lists (see "27.0.0 trade
+// blocs"). England and Brazil are not EU members;
+// Serbia joins on 2030-07-01.
+func TestLoadTestSave27EUNational(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27Path, LoadOptions{GameDBDir: gameDBDir()})
+	v := g.View(false)
+
+	for uid, want := range map[uint32]bool{
+		17012660: true,  // Fedor Černych, Lithuania and Russia
+		14192808: true,  // Franco Baldassarra, Argentina and Italy
+		28049320: true,  // Harry Kane, England and Republic of Ireland
+		62250559: false, // Marko Konatar, Serbia
+		19320257: false, // Renan Oliveira, Brazil
+	} {
+		p, ok := v.Profile(uid)
+		if !ok {
+			t.Fatalf("player %d not found", uid)
+		}
+		if p.EUNational == nil || *p.EUNational != want {
+			t.Errorf("%s (%s): EUNational = %v, want %v", p.Name, p.Nation, p.EUNational, want)
+		}
+	}
+}
+
 // homegrownEntries lists p's homegrown clubs and nations as name[rules].
 func homegrownEntries(p Profile) (clubs, nations []string) {
 	for _, c := range p.TrainedAtClubs {

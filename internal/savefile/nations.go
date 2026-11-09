@@ -31,6 +31,8 @@ const (
 	// tails starting with a larger byte are skipped.
 	maxNationTailHead  = 20
 	maxNationTailItems = 1000
+	// tradeBlocSize is a trade-bloc item (0x360944c): i32 type, 2 × date.
+	tradeBlocSize = 12
 
 	maxContainerRecord = 1 << 20
 	// maxNationFactor: factors seen 0..187 in 26.3.2, 0..189 in 27.0.0. A read
@@ -49,7 +51,17 @@ const (
 
 // nationTailLists are the item sizes of the tail's u32-counted lists, after
 // a u8-counted list of 5-byte items.
-var nationTailLists = []int{28, 28, 12}
+var nationTailLists = []int{28, 28, tradeBlocSize}
+
+// TradeBlocEU is the EU trade-bloc type (see "27.0.0 trade blocs").
+const TradeBlocEU = 0
+
+// TradeBloc is an item of the NATION tail's last list.
+type TradeBloc struct {
+	Type  int32
+	From  Date // UnsetYear when unset
+	Until Date // UnsetYear when unset; unset on every item seen (27.0.0)
+}
 
 // Continent is a CONTINENT record.
 type Continent struct {
@@ -65,6 +77,7 @@ type Nation struct {
 	UID        uint32
 	Continent  int32 // CONTINENT index; -1 for none (defunct nations such as the USSR)
 	MensFactor int16 // men's container +0x572, 0 when the container is not read
+	TradeBlocs []TradeBloc
 }
 
 // containerFactorGate is the first database version seen without the u8
@@ -211,11 +224,11 @@ func nations(body []byte, start int, count uint32, continents int) ([]Nation, bo
 		if rec.Tag != tagNation || i > 0 && rec.UID <= recs[i-1].UID {
 			return nil, false
 		}
-		c, ok := nationContinent(body[rec.Start:rec.End-databaseRecordSize], continents)
+		c, blocs, ok := readNationTail(body[rec.Start:rec.End-databaseRecordSize], continents)
 		if !ok {
 			return nil, false
 		}
-		out = append(out, Nation{Index: rec.Index, UID: rec.UID, Continent: c})
+		out = append(out, Nation{Index: rec.Index, UID: rec.UID, Continent: c, TradeBlocs: blocs})
 	}
 	return out, true
 }
@@ -235,42 +248,62 @@ func nationTrailer(body []byte, pos, j int) bool {
 	return uid == 0 || uid != binary.LittleEndian.Uint32(body[k+8:])
 }
 
-// nationContinent returns the continent of the NATION record b (without its
-// database record), -1 or below continents. The lists before the tail are
-// not decoded, so it takes the last position from which the tail parses to
-// the end of b: the first one is wrong for the United States and Ecuador
-// (26.3.2).
-func nationContinent(b []byte, continents int) (int32, bool) {
+// readNationTail returns the continent (-1 or below continents) and trade blocs
+// of the NATION record b (without its database record). The lists before the
+// tail are not decoded, so it takes the last position from which the tail
+// parses to the end of b: the first one is wrong for the United States and
+// Ecuador (26.3.2).
+func readNationTail(b []byte, continents int) (int32, []TradeBloc, bool) {
 	for p := len(b) - nationTailFixed - 1 - 3*4 - nationTailEndSize; p >= 1; p-- {
 		if b[p] > maxNationTailHead {
 			continue
 		}
 		c := int32(binary.LittleEndian.Uint32(b[p+1:])) //nolint:gosec // signed field
-		if c >= -1 && int(c) < continents && nationTailEnd(b, p) == len(b) {
-			return c, true
+		if c < -1 || int(c) >= continents {
+			continue
+		}
+		if blocs, end := nationTailEnd(b, p); end == len(b) {
+			return c, tradeBlocs(b[blocs:]), true
 		}
 	}
-	return 0, false
+	return 0, nil, false
 }
 
-// nationTailEnd returns where a tail starting at p ends, or -1.
-func nationTailEnd(b []byte, p int) int {
+// nationTailEnd returns where the trade-bloc list (the last counted list) of
+// a tail starting at p starts, and where the tail ends, or -1.
+func nationTailEnd(b []byte, p int) (blocs, end int) {
 	q := p + nationTailFixed
 	if q >= len(b) {
-		return -1
+		return 0, -1
 	}
 	q += 1 + 5*int(b[q])
 	for _, size := range nationTailLists {
 		if q+4 > len(b) {
-			return -1
+			return 0, -1
 		}
 		n := binary.LittleEndian.Uint32(b[q:])
 		if n > maxNationTailItems {
-			return -1
+			return 0, -1
 		}
+		blocs = q
 		q += 4 + size*int(n)
 	}
-	return q + nationTailEndSize
+	return blocs, q + nationTailEndSize
+}
+
+// tradeBlocs reads the u32-counted trade-bloc list at the start of b, which
+// nationTailEnd has bounded; nil when it is empty.
+func tradeBlocs(b []byte) []TradeBloc {
+	n := int(binary.LittleEndian.Uint32(b))
+	if n == 0 {
+		return nil
+	}
+	out := make([]TradeBloc, n)
+	for i := range out {
+		it := b[4+i*tradeBlocSize:]
+		out[i] = TradeBloc{Type: int32(binary.LittleEndian.Uint32(it)), From: dateAt(it, 4), Until: dateAt(it, 8)} //nolint:gosec // signed field
+	}
+	return out
 }
 
 // readNationFactors sets each nation's MensFactor from the NATIONAL_TEAM_CONTAINER

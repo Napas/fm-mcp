@@ -748,10 +748,42 @@ func TestBuildWorldGivesTeamsTheirNationAndNationsTheirScales(t *testing.T) {
 	}
 }
 
+// EU memberships come from the nations' trade blocs of type
+// savefile.TradeBlocEU; 1900 dates are unset.
+func TestBuildWorldGivesNationsTheirEUMemberships(t *testing.T) {
+	unset := savefile.Date{Raw: 1, Year: savefile.UnsetYear}
+	db := &savefile.GameDB{Nations: []savefile.Nation{
+		{Index: 0, TradeBlocs: []savefile.TradeBloc{{Type: savefile.TradeBlocEU, From: unset, Until: unset}}},
+		{Index: 1, TradeBlocs: []savefile.TradeBloc{
+			{Type: savefile.TradeBlocEU, From: unset, Until: savefile.Date{Raw: 1, Year: 1990}},
+			{Type: 1, From: unset, Until: unset},
+			{Type: savefile.TradeBlocEU, From: savefile.Date{Raw: 1, Year: 2004}, Until: savefile.Date{Raw: 182, Year: 2030}},
+		}},
+		{Index: 2, TradeBlocs: []savefile.TradeBloc{{Type: 1, From: unset, Until: unset}}},
+		{Index: 3},
+	}}
+
+	w := buildWorld(db, langNames{})
+
+	want := map[int64][]EUMembership{
+		0: {{}},
+		1: {
+			{Until: time.Date(1990, 1, 1, 0, 0, 0, 0, time.UTC)},
+			{From: time.Date(2004, 1, 1, 0, 0, 0, 0, time.UTC), Until: time.Date(2030, 7, 1, 0, 0, 0, 0, time.UTC)},
+		},
+	}
+	if !maps.EqualFunc(w.EU, want, slices.Equal) {
+		t.Errorf("EU = %+v, want %+v", w.EU, want)
+	}
+	if w := buildWorld(&savefile.GameDB{NationsErr: errors.New("no NATION table")}, langNames{}); w.EU != nil {
+		t.Errorf("EU = %+v without nations, want nil", w.EU)
+	}
+}
+
 func TestLoadWarnsWhenReputationLevelsAreUnavailable(t *testing.T) {
 	db := &savefile.GameDB{NationsErr: errors.New("no NATION table")}
 
-	if w := nationWarning(db); !strings.Contains(w, "reputation levels unavailable") || !strings.Contains(w, "no NATION table") {
+	if w := nationWarning(db); !strings.Contains(w, "reputation levels and EU status unavailable") || !strings.Contains(w, "no NATION table") {
 		t.Errorf("warning %q", w)
 	}
 	if w := nationWarning(&savefile.GameDB{}); w != "" {
