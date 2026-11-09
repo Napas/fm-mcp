@@ -65,9 +65,50 @@ func TestTestSave27Currencies(t *testing.T) {
 }
 
 const (
+	nationEngland27   = 139
 	nationLithuania27 = 153
 	nationSerbia27    = 176
 )
+
+// EU entries: 38 nations, none with an end date; Lithuania from 2004,
+// Serbia from 2030-07-01 (day 182), England none.
+func TestTestSave27TradeBlocs(t *testing.T) {
+	db, err := ReadGameDB(openTestSaveAt(t, testSave27Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if db.NationsErr != nil {
+		t.Fatal(db.NationsErr)
+	}
+	eu := func(n Nation) *TradeBloc {
+		i := slices.IndexFunc(n.TradeBlocs, func(b TradeBloc) bool { return b.Type == TradeBlocEU })
+		if i < 0 {
+			return nil
+		}
+		return &n.TradeBlocs[i]
+	}
+	members := 0
+	for _, n := range db.Nations {
+		if b := eu(n); b != nil {
+			members++
+			if b.Until.Year != UnsetYear {
+				t.Errorf("nation %d: EU until %+v, want unset", n.Index, b.Until)
+			}
+		}
+	}
+	if members != 38 {
+		t.Errorf("%d EU nations, want 38", members)
+	}
+	if b := eu(db.Nations[nationLithuania27]); b == nil || b.From != (Date{Raw: 1, Year: 2004}) {
+		t.Errorf("Lithuania EU %+v, want from 2004 day 1", b)
+	}
+	if b := eu(db.Nations[nationSerbia27]); b == nil || b.From != (Date{Raw: 182, Year: 2030}) {
+		t.Errorf("Serbia EU %+v, want from 2030 day 182", b)
+	}
+	if bs := db.Nations[nationEngland27].TradeBlocs; bs != nil {
+		t.Errorf("England blocs %+v, want none", bs)
+	}
+}
 
 // Lithuania's and Serbia's men's factors, the inputs of the reputation
 // levels checked in game (fm's TestLoadTestSave27bReputationLevel).

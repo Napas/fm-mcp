@@ -811,6 +811,66 @@ func TestOtherNationalities(t *testing.T) {
 	}
 }
 
+// A player is an EU national when any of his nationalities is an EU member
+// on the game date (2025-07-07).
+func TestEUNational(t *testing.T) {
+	year := func(y int) time.Time { return time.Date(y, 1, 1, 0, 0, 0, 0, time.UTC) }
+	w := World{Teams: testWorld.Teams, Nations: map[int64]string{139: "England", 145: "Germany", 153: "Lithuania", 176: "Serbia", 33: "Nigeria", 150: "Italy", 143: "France", 158: "Netherlands"},
+		EU: map[int64][]EUMembership{
+			145: {{}},
+			153: {{From: year(2004)}},
+			176: {{From: time.Date(2030, 7, 1, 0, 0, 0, 0, time.UTC)}},
+			150: {{Until: gameDate}},
+			143: {{From: gameDate}},
+			158: {{Until: year(2020)}, {From: year(2024)}}, // left and rejoined
+		}}
+	english := rawPlayer(1, "Bukayo", "Saka")
+	lithuanian := rawPlayer(2, "Fedor", "Černych")
+	lithuanian.NationIndex = 153
+	serbian := rawPlayer(3, "Haris", "Kadrić")
+	serbian.NationIndex = 176
+	dual := rawPlayer(4, "Jamal", "Musiala")
+	dual.NationIndex, dual.OtherNations = 33, []int64{145}
+	left := rawPlayer(5, "Sandro", "Tonali")
+	left.NationIndex = 150
+	joinsToday := rawPlayer(6, "Kylian", "Mbappé")
+	joinsToday.NationIndex = 143
+	rejoined := rawPlayer(7, "Virgil", "van Dijk")
+	rejoined.NationIndex = 158
+	g := NewGame(Info{Date: gameDate}, []savefile.Player{english, lithuanian, serbian, dual, left, joinsToday, rejoined}, w, PlayerExtras{})
+	v := g.View(false)
+
+	for uid, want := range map[uint32]bool{1: false, 2: true, 3: false, 4: true, 5: false, 6: true, 7: true} {
+		if p, _ := v.Profile(uid); p.EUNational == nil || *p.EUNational != want {
+			t.Errorf("%s: EUNational = %v, want %v", p.Name, p.EUNational, want)
+		}
+	}
+	for name, tt := range map[string]struct {
+		eu   bool
+		want []uint32
+	}{
+		"EU":     {true, []uint32{2, 4, 6, 7}},
+		"non-EU": {false, []uint32{1, 3, 5}},
+	} {
+		res, err := v.Search(Filter{EUNational: &tt.eu})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got := uids(res.Players); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: got %v, want %v", name, got, tt.want)
+		}
+	}
+
+	w.EU = nil
+	g = NewGame(Info{Date: gameDate}, []savefile.Player{lithuanian}, w, PlayerExtras{})
+	if p, _ := g.View(false).Profile(2); p.EUNational != nil {
+		t.Errorf("without EU data: EUNational = %v, want unknown", *p.EUNational)
+	}
+	if _, err := g.View(false).Search(Filter{EUNational: ptr(true)}); !errors.Is(err, ErrInvalidFilter) {
+		t.Errorf("without EU data: err = %v, want ErrInvalidFilter", err)
+	}
+}
+
 func TestHomegrown(t *testing.T) {
 	w := World{Teams: testWorld.Teams, Clubs: testWorld.Clubs, Nations: map[int64]string{139: "England", 167: "Scotland"}}
 	academy := rawPlayer(1, "Harry", "Kane")

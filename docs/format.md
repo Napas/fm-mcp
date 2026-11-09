@@ -32,7 +32,7 @@ Unset dates are saved in 1900. Seen: joined dates of 1900-01-01 on loanees and f
 | [`contracts.md`](format/contracts.md) | ACTUAL_PERSON fields before the marker, contract types, FULL header, clauses, bonuses, transfer status, playing time, actual playing time, squad numbers, loyalty bonus | Contracts (ACTUAL_PERSON part) |
 | [`clubs.md`](format/clubs.md) | CLUB/COMP/TEAM tables, club budgets, squad lists | Clubs, teams and competitions; 27.0.0 club layout; Club budgets (CLUB_FINANCE); Squad lists |
 | [`currencies.md`](format/currencies.md) | CURRENCY_RECORD rates, display rule, display rounding, game preferences (currency, wage period) | Currencies (CURRENCY_RECORD); Display rounding; Display preferences (outside the save) |
-| [`nations.md`](format/nations.md) | CONTINENT strengths, NATION tail grammar, reputation factors | Continents, nations and national-team containers; 27.0.0 national-team containers |
+| [`nations.md`](format/nations.md) | CONTINENT strengths, NATION tail grammar, reputation factors, 27.0.0 trade blocs (EU status) | Continents, nations and national-team containers; 27.0.0 national-team containers; 27.0.0 trade blocs |
 | [`fixtures.md`](format/fixtures.md) | fix_man.dat lists, FIXTURE base, 27.0.0 base, FIXTURE_RESULT scores | fix_man.dat; FIXTURE; 27.0.0 FIXTURE base; FIXTURE_RESULT |
 | [`competitions.md`](format/competitions.md) | competition keys (ACTUAL_COMP_ID), stage names, league tables in comp files, 27.0.0 row tail | Competition keys (ACTUAL_COMP_ID); Stage names (STAGE_NAME); League tables (LEAGUE_STAGE rows); 27.0.0 league tables |
 | [`language-db.md`](format/language-db.md) | lang_db.dat container, nation/injury/competition names by uid rank | Language database (names) |

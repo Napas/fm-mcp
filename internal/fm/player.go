@@ -58,12 +58,14 @@ type PlayerBasics struct {
 	Positions         []PositionRating `json:"positions"`
 	PlayerCoach       bool             `json:"player_coach,omitempty"`
 	Female            bool             `json:"female,omitempty"`
-	HeightCM          int              `json:"height_cm,omitempty"`
-	Condition         float64          `json:"condition_pct"`         // guess
-	Sharpness         float64          `json:"match_sharpness_pct"`   // guess
-	JoinedClub        *time.Time       `json:"joined_club,omitempty"` // nil when the save has none
-	Injuries          []InjuryInfo     `json:"injuries,omitempty"`
-	Season            *SeasonStats     `json:"season,omitempty"` // nil without a match this season
+	// EUNational: any nationality is an EU member on the game date; nil without EU data.
+	EUNational *bool        `json:"eu_national,omitempty"`
+	HeightCM   int          `json:"height_cm,omitempty"`
+	Condition  float64      `json:"condition_pct"`         // guess
+	Sharpness  float64      `json:"match_sharpness_pct"`   // guess
+	JoinedClub *time.Time   `json:"joined_club,omitempty"` // nil when the save has none
+	Injuries   []InjuryInfo `json:"injuries,omitempty"`
+	Season     *SeasonStats `json:"season,omitempty"` // nil without a match this season
 }
 
 // Player is a player as the save stores him. A View turns him into the
@@ -162,6 +164,9 @@ func newPlayer(raw savefile.Player, on time.Time, w World) *Player {
 	for _, n := range raw.OtherNations {
 		p.OtherNationalities = append(p.OtherNationalities, NationRef{NationIndex: n, Nation: w.Nations[n]})
 		p.otherKeys = append(p.otherKeys, nationKey(w.Nations[n]))
+	}
+	if w.EU != nil {
+		p.EUNational = ptr(w.inEU(raw.NationIndex, on) || slices.ContainsFunc(raw.OtherNations, func(n int64) bool { return w.inEU(n, on) }))
 	}
 	p.names = nameWords(raw.FirstName, raw.LastName, raw.CommonName, raw.FullName)
 	return p

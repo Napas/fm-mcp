@@ -262,6 +262,8 @@ type Filter struct {
 	TrainedAtTeamIndex *int64
 	// TrainedInNationIndex matches players with a homegrown item for this nation.
 	TrainedInNationIndex *int64
+	// EUNational filters on EU status; needs the save's EU data.
+	EUNational *bool
 }
 
 // checkRefs rejects team and nation references that match nothing, so an
@@ -287,6 +289,9 @@ func (g *Game) checkRefs(f Filter) error {
 	}
 	if err := g.checkNation("trained_in_nation_index", f.TrainedInNationIndex); err != nil {
 		return err
+	}
+	if f.EUNational != nil && g.world.EU == nil {
+		return fmt.Errorf("%w: EU status is not available for this save", ErrInvalidFilter)
 	}
 	if f.Nation == "" {
 		return nil
