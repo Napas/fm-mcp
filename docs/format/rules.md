@@ -45,7 +45,7 @@ The rules tree's `fxrl` list holds the rule groups. Each has a `name` and an `sq
 | Lithuanian Cup | 94 same_nation_players_in_11 3 (1) |
 | Super Cup | 94 same_nation_players_in_11 3 (1) |
 
-Rule type names come from the game's table at `0x5677250` in the 27.0.0 arm64 slice (448 named types with ids 0..522; e.g. 9 `max_squad_size`, 18 `non_eec_players_in_squad`, 146 `homegrown_players_from_nation`). Whether a value is a minimum or a maximum depends on the type and is not stored in the rule: max_squad_size is a maximum by its name, the rest is inference.
+Rule type names come from the game's table at `0x5677250` in the 27.0.0 arm64 slice (449 named types with ids 0..522; e.g. 9 `max_squad_size`, 18 `non_eec_players_in_squad`, 146 `homegrown_players_from_nation`). Whether a value is a minimum or a maximum depends on the type and is not stored in the rule: max_squad_size is a maximum by its name, the rest is inference.
 
 **Competitions.** A 27.0.0 COMP record holds its NATION index as a u32 at record offset 57, and a list of format trees (one per format variant, e.g. `lit_a_lyga`, `lit_a_lyga_9_teams`, `lit_a_lyga_9_teams_compat`) as a list without its type byte at offset 122, 124, 178 or 180. `savefile` searches offsets 61..255 for a list that decodes and whose every item's `comp` is the record's uid. Each format's top-level `fxri` indexes the nation's `fxrl`; 255 means none. Stages and rounds have their own `fxri`, not read.
 
