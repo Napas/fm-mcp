@@ -963,6 +963,20 @@ func TestLoadWarnsWithoutTransfers(t *testing.T) {
 	}
 }
 
+func TestLoadWarnsWithoutWorkPermits(t *testing.T) {
+	orig := readWorkPermits
+	readWorkPermits = func(*savefile.Archive, uint32) ([]savefile.WorkPermit, error) { return nil, errors.New("boom") }
+	t.Cleanup(func() { readWorkPermits = orig })
+
+	g := loadTestSaveAt(t, testSave27Path, LoadOptions{})
+	if want := "work permits unavailable: boom"; !slices.Contains(g.Info.Warnings, want) {
+		t.Errorf("warnings = %q, want %q", g.Info.Warnings, want)
+	}
+	if len(g.permits) != 0 {
+		t.Errorf("%d players with work permits, want none", len(g.permits))
+	}
+}
+
 func TestBuildWorldSetsHasManager(t *testing.T) {
 	db := &savefile.GameDB{Teams: []savefile.Team{{Index: 0, Manager: 5, Container: -1}, {Index: 1, Manager: -1, Container: -1}}}
 	w := buildWorld(db, langNames{})

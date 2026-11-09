@@ -136,6 +136,16 @@ func FuzzReadTransfers(f *testing.F) {
 	})
 }
 
+func FuzzReadWorkPermits(f *testing.F) {
+	f.Add(permitList(sallingerPermit, sichenjePermit, esuaPermit), uint32(200))
+	f.Fuzz(func(t *testing.T, b []byte, nations uint32) {
+		ps, _ := parseWorkPermits(b, nations)
+		if len(ps) > len(b)/permitSize {
+			t.Fatalf("%d permits from %d bytes", len(ps), len(b))
+		}
+	})
+}
+
 func FuzzReadRules(f *testing.F) {
 	var recs []byte
 	recs = containerWithRules(recs, 0, 779, lithuaniaRules)

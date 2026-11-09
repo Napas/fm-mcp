@@ -39,6 +39,9 @@ type Profile struct {
 	// with a homegrown filter.
 	TrainedAtClubs   []TrainedAt `json:"trained_at_clubs,omitempty"`
 	TrainedInNations []TrainedIn `json:"trained_in_nations,omitempty"`
+	// WorkPermits (single-player profiles only) are in save order; fog of war
+	// does not hide them.
+	WorkPermits []WorkPermit `json:"work_permits,omitempty"`
 	// Traits are left out when attributes are hidden.
 	Traits     []string `json:"traits,omitempty"`
 	Value      *int64   `json:"value,omitempty"` // in the user's currency
@@ -173,6 +176,7 @@ func (v View) Profile(uid uint32) (Profile, bool) {
 	x := v.see(p)
 	out := v.profile(x)
 	out.Interest = v.g.interestOf(p)
+	out.WorkPermits = v.g.permits[uid]
 	if x.s.full() {
 		roles := &v.g.auxOf(p).roles
 		out.BestRoles = roles.bestRoles(inPossession, v.g.roleRules)

@@ -103,6 +103,8 @@ func (w World) teamName(i int64) string {
 	return ""
 }
 
+func (w World) nationRef(i int64) NationRef { return NationRef{NationIndex: i, Nation: w.Nations[i]} }
+
 // hasNation reports whether a nation name's key contains key.
 func (w World) hasNation(key string) bool {
 	for _, name := range w.Nations {

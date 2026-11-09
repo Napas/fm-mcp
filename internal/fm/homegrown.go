@@ -47,7 +47,7 @@ func newHomegrown(raw savefile.Player, w World) *homegrown {
 	for _, t := range raw.TrainedIn {
 		i := slices.IndexFunc(h.nations, func(n TrainedIn) bool { return n.NationIndex == t.Ref })
 		if i < 0 {
-			h.nations, i = append(h.nations, TrainedIn{NationRef: NationRef{NationIndex: t.Ref, Nation: w.Nations[t.Ref]}}), len(h.nations)
+			h.nations, i = append(h.nations, TrainedIn{NationRef: w.nationRef(t.Ref)}), len(h.nations)
 		}
 		h.nations[i].Rules = append(h.nations[i].Rules, int(t.Rule))
 	}
