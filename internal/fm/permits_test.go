@@ -14,7 +14,7 @@ func TestWorkPermits(t *testing.T) {
 	none := rawPlayer(2, "Dejan", "Kulusevski")
 	none.Index = 9
 	permits := []savefile.WorkPermit{
-		{Person: 8334, Nation: 139, Year: 2024, Date: savefile.Date{Raw: 242, Year: 2025}},
+		{Person: 8334, Nation: 139, Year: 2024, Date: savefile.Date{Raw: 242, Year: 2025}, ESC: true},
 		{Person: 8334, Nation: 172, Year: 2024, Date: savefile.Date{Raw: 1, Year: savefile.UnsetYear}},
 		{Person: 77, Nation: 139, Year: 2020}, // not a player
 	}
@@ -23,7 +23,7 @@ func TestWorkPermits(t *testing.T) {
 
 	p, _ := v.Profile(12095306)
 	want := []WorkPermit{
-		{NationRef: NationRef{NationIndex: 139, Nation: "England"}, Year: 2024},
+		{NationRef: NationRef{NationIndex: 139, Nation: "England"}, Year: 2024, ESCPlace: true},
 		{NationRef: NationRef{NationIndex: 172, Nation: "Switzerland"}, Year: 2024},
 	}
 	if !reflect.DeepEqual(p.WorkPermits, want) {

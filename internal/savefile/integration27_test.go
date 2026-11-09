@@ -627,10 +627,10 @@ func TestTestSave27WorkPermits(t *testing.T) {
 				byPerson[p.Person] = append(byPerson[p.Person], p)
 			}
 			for person, want := range map[uint32][]WorkPermit{
-				1442: {{Person: 1442, Nation: 167, Year: 2025, Date: Date{Raw: 1, Year: UnsetYear}}}, // Raphael Sallinger, Scotland
-				8286: {{Person: 8286, Nation: 139, Year: 2026, Date: Date{Raw: 33, Year: 2026}}},     // Collins Sichenje, England
+				1442: {{Person: 1442, Nation: 167, Year: 2025, Date: Date{Raw: 1, Year: UnsetYear}}},        // Raphael Sallinger, Scotland
+				8286: {{Person: 8286, Nation: 139, Year: 2026, Date: Date{Raw: 33, Year: 2026}, ESC: true}}, // Collins Sichenje, England
 				8334: { // Sékou Koné, at Lausanne: England and Switzerland
-					{Person: 8334, Nation: 139, Year: 2024, Date: Date{Raw: 242, Year: 2025}},
+					{Person: 8334, Nation: 139, Year: 2024, Date: Date{Raw: 242, Year: 2025}, ESC: true},
 					{Person: 8334, Nation: 172, Year: 2024, Date: Date{Raw: 1, Year: UnsetYear}},
 				},
 			} {

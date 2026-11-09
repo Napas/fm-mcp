@@ -640,8 +640,8 @@ func TestLoadTestSave27WorkPermits(t *testing.T) {
 	g := loadTestSaveAt(t, testSave27Path, LoadOptions{GameDBDir: gameDBDir()})
 	v := g.View(false)
 	for uid, want := range map[uint32][]WorkPermit{
-		12092701: {{NationRef: NationRef{NationIndex: 139, Nation: "England"}, Year: 2026}},  // Collins Sichenje, Charlton
-		210609:   {{NationRef: NationRef{NationIndex: 167, Nation: "Scotland"}, Year: 2025}}, // Raphael Sallinger, Hibernian
+		12092701: {{NationRef: NationRef{NationIndex: 139, Nation: "England"}, Year: 2026, ESCPlace: true}}, // Collins Sichenje, Charlton
+		210609:   {{NationRef: NationRef{NationIndex: 167, Nation: "Scotland"}, Year: 2025}},                // Raphael Sallinger, Hibernian
 	} {
 		p, ok := v.Profile(uid)
 		if !ok {

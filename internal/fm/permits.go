@@ -8,6 +8,8 @@ import "github.com/Napas/fm-mcp/internal/savefile"
 type WorkPermit struct {
 	NationRef
 	Year int `json:"year"` // probably the year it was granted (inference)
+	// ESCPlace: probably an ESC work permit place (inference).
+	ESCPlace bool `json:"esc_place,omitempty"`
 }
 
 // workPermits groups permits by player uid, in save order. Permits of
@@ -15,7 +17,7 @@ type WorkPermit struct {
 func workPermits(permits []savefile.WorkPermit, raw []savefile.Player, w World) map[uint32][]WorkPermit {
 	byPerson := make(map[uint32][]WorkPermit)
 	for _, p := range permits {
-		byPerson[p.Person] = append(byPerson[p.Person], WorkPermit{NationRef: w.nationRef(p.Nation), Year: int(p.Year)})
+		byPerson[p.Person] = append(byPerson[p.Person], WorkPermit{NationRef: w.nationRef(p.Nation), Year: int(p.Year), ESCPlace: p.ESC})
 	}
 	out := make(map[uint32][]WorkPermit, len(byPerson))
 	for _, r := range raw {
