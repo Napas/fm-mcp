@@ -2,6 +2,7 @@ package fm
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 
 	"github.com/Napas/fm-mcp/internal/savefile"
@@ -213,6 +214,7 @@ func buildWorld(db *savefile.GameDB, lang langNames) World {
 	w := World{
 		Teams: make(map[int64]*Team, len(db.Teams)), Clubs: make(map[int64]Club, len(db.Clubs)),
 		Nations: lang.nations, Injuries: lang.injuries, NationScales: nationScales(db), EU: euMemberships(db),
+		Rules: ruleGroups(db), RulesWarning: rulesWarning(db),
 	}
 	for i, c := range db.Clubs {
 		w.Clubs[int64(i)] = Club{Name: womensName(cmp.Or(c.ShortName, c.Name, "Unnamed club"), c.Women), FirstTeam: noTeam}
@@ -323,12 +325,26 @@ func competitionWarnings(db *savefile.GameDB) []string {
 	return out
 }
 
-// nationWarning reports why reputation levels and EU status are missing; "" when they are not.
+// nationWarning reports why reputation levels, EU status and competition
+// rules are missing; "" when they are not.
 func nationWarning(db *savefile.GameDB) string {
 	if db.NationsErr == nil {
 		return ""
 	}
-	return fmt.Sprintf("reputation levels and EU status unavailable: %v", db.NationsErr)
+	return fmt.Sprintf("reputation levels, EU status and competition rules unavailable: %v", db.NationsErr)
+}
+
+// rulesWarning reports why some or all competition rules are missing; ""
+// when none are, for saves before FM 27.0.0 and when nationWarning already
+// says so.
+func rulesWarning(db *savefile.GameDB) string {
+	switch {
+	case db.RulesErr == nil || db.NationsErr != nil || errors.Is(db.RulesErr, savefile.ErrUnsupported):
+		return ""
+	case db.CompetitionRules == nil:
+		return fmt.Sprintf("competition rules unavailable: %v", db.RulesErr)
+	}
+	return fmt.Sprintf("some nations' competition rules unavailable: %v", db.RulesErr)
 }
 
 // womensName marks women's sides, which otherwise share their names with

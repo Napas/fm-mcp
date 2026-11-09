@@ -110,6 +110,60 @@ func TestTestSave27TradeBlocs(t *testing.T) {
 	}
 }
 
+// Competition rules (see "27.0.0 competition rules"): 59 nations have rule
+// groups and 519 competitions name one. The ones checked match the real
+// leagues' rules, e.g. the Premier League's 25-man squad with 8 homegrown.
+func TestTestSave27CompetitionRules(t *testing.T) {
+	for _, path := range []string{testSave27Path, testSave27bPath} {
+		t.Run(path, func(t *testing.T) {
+			db, err := ReadGameDB(openTestSaveAt(t, path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if db.RulesErr != nil {
+				t.Fatal(db.RulesErr)
+			}
+			nations := 0
+			for _, n := range db.Nations {
+				if n.RuleGroups != nil {
+					nations++
+				}
+			}
+			if nations != 59 || len(db.CompetitionRules) != 519 {
+				t.Errorf("%d nations with rules and %d competitions, want 59 and 519", nations, len(db.CompetitionRules))
+			}
+			for _, tt := range []struct {
+				uid    uint32
+				nation int
+				group  RuleGroup
+			}{
+				{aLyga27, nationLithuania27, RuleGroup{Name: "TOPLYGA", Squad: []SquadRule{
+					{Type: 9, Value: 30, HasValue: true, Scope: 255}, // max_squad_size
+					{Type: 94, Value: 3, HasValue: true, Scope: 1},   // same_nation_players_in_11
+					{Type: 141, Value: 5, HasValue: true, Scope: 1},  // under_22_players_in_squad
+				}}},
+				{11, nationEngland27, RuleGroup{Name: "ENG_FIXTURE_RULES_PREM", Squad: []SquadRule{
+					{Type: 146, Value: 8, HasValue: true, Scope: 1}, // homegrown_players_from_nation
+					{Type: 9, Value: 25, HasValue: true, Scope: 255},
+				}}},
+			} {
+				r, ok := db.CompetitionRules[slices.Index(db.CompetitionUIDs, tt.uid)]
+				if !ok || r.Nation != tt.nation {
+					t.Errorf("competition %d: %+v, %v; want nation %d", tt.uid, r, ok, tt.nation)
+					continue
+				}
+				if got := db.Nations[r.Nation].RuleGroups[r.Group]; !reflect.DeepEqual(got, tt.group) {
+					t.Errorf("competition %d: %+v\nwant %+v", tt.uid, got, tt.group)
+				}
+			}
+			// The Women's Super League points into England's women's rules.
+			if r, ok := db.CompetitionRules[slices.Index(db.CompetitionUIDs, 2000101095)]; ok {
+				t.Errorf("Women's Super League: %+v, want none", r)
+			}
+		})
+	}
+}
+
 // Lithuania's and Serbia's men's factors, the inputs of the reputation
 // levels checked in game (fm's TestLoadTestSave27bReputationLevel).
 func TestTestSave27NationFactors(t *testing.T) {

@@ -2,6 +2,7 @@ package fm
 
 import (
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -783,11 +784,31 @@ func TestBuildWorldGivesNationsTheirEUMemberships(t *testing.T) {
 func TestLoadWarnsWhenReputationLevelsAreUnavailable(t *testing.T) {
 	db := &savefile.GameDB{NationsErr: errors.New("no NATION table")}
 
-	if w := nationWarning(db); !strings.Contains(w, "reputation levels and EU status unavailable") || !strings.Contains(w, "no NATION table") {
+	if w := nationWarning(db); !strings.Contains(w, "reputation levels, EU status and competition rules unavailable") || !strings.Contains(w, "no NATION table") {
 		t.Errorf("warning %q", w)
 	}
 	if w := nationWarning(&savefile.GameDB{}); w != "" {
 		t.Errorf("warning %q without an error", w)
+	}
+}
+
+func TestLoadWarnsWhenCompetitionRulesAreMissing(t *testing.T) {
+	broken := errors.New("nation 3 rules: corrupt")
+	for name, tt := range map[string]struct {
+		db   savefile.GameDB
+		want string
+	}{
+		"all read":     {savefile.GameDB{CompetitionRules: map[int]savefile.CompetitionRules{}}, ""},
+		"before 27":    {savefile.GameDB{RulesErr: fmt.Errorf("%w: 27.0.0 only", savefile.ErrUnsupported)}, ""},
+		"no nations":   {savefile.GameDB{NationsErr: broken, RulesErr: broken}, ""}, // nationWarning says so
+		"none read":    {savefile.GameDB{RulesErr: broken}, "competition rules unavailable: nation 3 rules: corrupt"},
+		"some nations": {savefile.GameDB{CompetitionRules: map[int]savefile.CompetitionRules{}, RulesErr: broken}, "some nations' competition rules unavailable: nation 3 rules: corrupt"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := rulesWarning(&tt.db); got != tt.want {
+				t.Errorf("warning %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

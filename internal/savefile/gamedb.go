@@ -126,6 +126,12 @@ type GameDB struct {
 	StageUIDs          []uint32 // STAGE_NAME uids by stage index; names are in the language database
 	StagesErr          error    // why StageUIDs is empty
 	LeagueStageCount   uint32   // LEAGUE_STAGE objects in the memory pools
+	// CompetitionRules are the competitions' rule groups by COMP index, for
+	// the competitions that have one (see "27.0.0 competition rules").
+	CompetitionRules map[int]CompetitionRules
+	// RulesErr says why rules are missing: none were read (CompetitionRules
+	// nil) or it names the nations whose rules did not decode.
+	RulesErr error
 }
 
 // ReadGameDB decodes the save's game_db.dat.
@@ -144,7 +150,8 @@ func ReadGameDB(a *Archive) (*GameDB, error) {
 	}
 	db := &GameDB{Header: h, NationCount: pools["NATION"], InjuryCount: pools["INJURY"]}
 	db.Currencies, db.CurrencyErr = readCurrencies(f.Body, pools)
-	db.Continents, db.Nations, db.NationsErr = readNationData(f.Body, pools, h.DatabaseVersion)
+	var containers []int
+	db.Continents, db.Nations, containers, db.NationsErr = readNationData(f.Body, pools, h.DatabaseVersion)
 	db.CompetitionKeys, db.CompetitionKeysErr = readCompetitionKeys(f.Body)
 	db.StageUIDs, db.StagesErr = readStageNames(f.Body, pools[stageNamePool])
 	db.LeagueStageCount = pools[leagueStagePool]
@@ -172,6 +179,8 @@ func ReadGameDB(a *Archive) (*GameDB, error) {
 	for _, c := range comps {
 		db.CompetitionUIDs = append(db.CompetitionUIDs, c.UID)
 	}
+	// Also sets db.Nations[i].RuleGroups.
+	db.CompetitionRules, db.RulesErr = readGameRules(f.Body, h.DatabaseVersion, db.Nations, db.NationsErr, containers, comps)
 	if db.Teams, _, err = readTeamTable(f.Body, teamCount, h.DatabaseVersion); err != nil {
 		return nil, err
 	}
