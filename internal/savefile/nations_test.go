@@ -205,7 +205,7 @@ func TestReadNationFactors(t *testing.T) {
 	body := append([]byte{1}, tableBytes(4, recs)...)
 	ns := []Nation{{Index: 0, UID: 5}, {Index: 1, UID: 765}, {Index: 2, UID: 1000}}
 
-	if err := readNationFactors(body, 4, ns, dbVersion26_3); err != nil {
+	if _, err := readNationFactors(body, 4, ns, dbVersion26_3); err != nil {
 		t.Fatalf("readNationFactors: %v", err)
 	}
 
@@ -233,7 +233,7 @@ func TestReadNationFactorsByVersion(t *testing.T) {
 			recs = containerRecordAt(recs, tt.offset, 1, 765, 131)
 			ns := []Nation{{Index: 0, UID: 5}, {Index: 1, UID: 765}}
 
-			if err := readNationFactors(tableBytes(2, recs), 2, ns, tt.version); err != nil {
+			if _, err := readNationFactors(tableBytes(2, recs), 2, ns, tt.version); err != nil {
 				t.Fatal(err)
 			}
 			if ns[0].MensFactor != 74 || ns[1].MensFactor != 131 {
@@ -252,7 +252,7 @@ func TestReadNationFactorsRejectsImplausibleFactors(t *testing.T) {
 		recs = containerRecord(recs, 1, 765, factor)
 		ns := []Nation{{Index: 0, UID: 5}, {Index: 1, UID: 765}}
 
-		if err := readNationFactors(tableBytes(2, recs), 2, ns, dbVersion26_3); !errors.Is(err, ErrNotFound) {
+		if _, err := readNationFactors(tableBytes(2, recs), 2, ns, dbVersion26_3); !errors.Is(err, ErrNotFound) {
 			t.Errorf("factor %d: err = %v, want ErrNotFound", factor, err)
 		}
 	}
@@ -265,7 +265,7 @@ func TestReadNationFactorsRejectsShortRecords(t *testing.T) {
 	recs = dbRecord(append(recs, tagContainer, 1, 2), 1, 765) // too short for the factor
 	recs = containerRecord(recs, 2, 99, 50)
 
-	if err := readNationFactors(tableBytes(3, recs), 3, ns, dbVersion26_3); !errors.Is(err, ErrNotFound) {
+	if _, err := readNationFactors(tableBytes(3, recs), 3, ns, dbVersion26_3); !errors.Is(err, ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)
 	}
 }
@@ -274,7 +274,7 @@ func TestReadNationFactorsNeedsAContainerPerNation(t *testing.T) {
 	ns := []Nation{{Index: 0, UID: 5}, {Index: 1, UID: 765}}
 	body := tableBytes(1, containerRecord(nil, 0, 5, 105))
 
-	if err := readNationFactors(body, 1, ns, dbVersion26_3); !errors.Is(err, ErrNotFound) {
+	if _, err := readNationFactors(body, 1, ns, dbVersion26_3); !errors.Is(err, ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)
 	}
 }
@@ -343,7 +343,8 @@ func TestNationReadersGiveUpOnCraftedBodies(t *testing.T) {
 		}},
 		{"container factors", func() error {
 			ns := []Nation{{Index: 0, UID: 5}, {Index: 1, UID: 765}}
-			return readNationFactors(repeatedHeads(size, tableHead(502, tagContainer)), 502, ns, dbVersion26_3)
+			_, err := readNationFactors(repeatedHeads(size, tableHead(502, tagContainer)), 502, ns, dbVersion26_3)
+			return err
 		}},
 	}
 	for _, tt := range tests {
@@ -391,7 +392,8 @@ func TestNationReadersCapCountsCandidatesBeyondTheLimit(t *testing.T) {
 			return err
 		}},
 		{"container factors", func(n int) error {
-			return readNationFactors(headsAfterEnds(n, tableHead(502, tagContainer)), 502, ns, dbVersion26_3)
+			_, err := readNationFactors(headsAfterEnds(n, tableHead(502, tagContainer)), 502, ns, dbVersion26_3)
+			return err
 		}},
 	}
 	for _, tt := range tests {

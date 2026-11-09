@@ -86,5 +86,5 @@ Harry Kane is true through his second nationality, the Republic of Ireland.
 
 ## Open questions
 
-- The national-team container body beyond the factor (the women's container → nation rule is inferred); the NATION record before its tail.
+- The national-team container body beyond the factor and, in 27.0.0 men's containers, the rules tree at offset 180 (see "27.0.0 competition rules" in [`rules.md`](rules.md)); the women's container → nation rule is inferred; the NATION record before its tail.
 - Trade blocs: whether FM's EU National label follows the type-0 rule above (not checked in game), the blocs of types 1..5, and whether the 26.x tail holds the same list (not checked).

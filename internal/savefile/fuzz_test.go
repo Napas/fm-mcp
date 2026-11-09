@@ -2,6 +2,7 @@ package savefile
 
 import (
 	"bytes"
+	"slices"
 	"testing"
 )
 
@@ -120,8 +121,8 @@ func FuzzReadNationTables(f *testing.F) {
 		_, _ = readContinents(body, count)
 		ns, _ := readNations(body, count, maxContinents)
 		ns = append(ns, Nation{Index: 0, UID: 5})
-		_ = readNationFactors(body, count, ns, dbVersion26_3)
-		_ = readNationFactors(body, count, ns, dbVersion27_0)
+		_, _ = readNationFactors(body, count, ns, dbVersion26_3)
+		_, _ = readNationFactors(body, count, ns, dbVersion27_0)
 	})
 }
 
@@ -132,5 +133,23 @@ func FuzzReadTransfers(f *testing.F) {
 		if len(ts) > len(b)/transferBytesPerRecord {
 			t.Fatalf("%d records from %d bytes", len(ts), len(b))
 		}
+	})
+}
+
+func FuzzReadRules(f *testing.F) {
+	var recs []byte
+	recs = containerWithRules(recs, 0, 779, lithuaniaRules)
+	body := tableBytes(1, recs)
+	comp, _ := compRecord(nil, 0, 2300046, 0, 180, format(tU32(2300046), "lit_a_lyga", 0))
+	f.Add(body, comp)
+	f.Fuzz(func(t *testing.T, body, comp []byte) {
+		_, _, _ = readTree(body, 0)
+		ns := []Nation{{Index: 0, UID: 779}}
+		bounds, err := readNationFactors(body, 1, ns, dbVersion27_0)
+		if err != nil {
+			return
+		}
+		all := append(slices.Clone(body), comp...)
+		_, _ = readRules(all, bounds, ns, []Record{{UID: 2300046, Start: len(body), End: len(all)}})
 	})
 }

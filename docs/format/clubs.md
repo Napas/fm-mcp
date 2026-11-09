@@ -20,7 +20,7 @@ Tables are located deterministically: `u32 count, u8 0, first record tag`, right
 
 A first team carries its club's uid (all first teams of both saves). Men's national-team container index = nation index. Women's containers (251–501) follow them: nation index = container − 251 (guess, supported by reputations — 390 → England, and the strongest women's teams map to Spain, England, USA, Germany, Sweden, France). Only the reputation factor of the container record is read (see "Continents, nations and national-team containers").
 
-**COMP** records are not decoded; they end with a bare database record followed by the next record's tag 0, which is how the table is split (`competitionTrailer`). Competition names come from the language database by uid. Fixtures refer to competitions through competition keys, and league tables live in `rgman/comp_<uid>.dat`: see [`competitions.md`](competitions.md).
+**COMP** records are mostly not decoded (27.0.0: the nation at offset 57 and the format trees, see "27.0.0 competition rules" in [`rules.md`](rules.md)); they end with a bare database record followed by the next record's tag 0, which is how the table is split (`competitionTrailer`). Competition names come from the language database by uid. Fixtures refer to competitions through competition keys, and league tables live in `rgman/comp_<uid>.dat`: see [`competitions.md`](competitions.md).
 
 Examples (test save): team 547 → club 416 "Tottenham Hotspur" (uid 728, division Premier League); team 20739 → club "Chelsea", women's flag set; team 1233 → Argentina's national team (container 187).
 
