@@ -97,7 +97,16 @@ func Load(path string, opts LoadOptions) (*Game, error) {
 	raw, err := savefile.ReadTactics(a)
 	tactics, warnings := checkTactics(raw, err, info.ManagerTeamIndex)
 	info.Warnings = append(info.Warnings, warnings...)
-	return NewGame(info, db.Players, w, PlayerExtras{Scouted: scouted, Season: records, Tactics: tactics, Transfers: transfers, WorkPermits: permits, Fixtures: fixtures, Tables: tables, LeagueStages: db.LeagueStageCount}), nil
+	var reports *savefile.MatchReports
+	if r, err := savefile.ReadMatchReports(a); err != nil {
+		info.Warnings = append(info.Warnings, fmt.Sprintf("match reports unavailable: %v", err))
+	} else {
+		reports = &r
+		if r.Skipped > 0 {
+			info.Warnings = append(info.Warnings, fmt.Sprintf("%d retained match reports have an unreadable or unsupported format", r.Skipped))
+		}
+	}
+	return NewGame(info, db.Players, w, PlayerExtras{Scouted: scouted, Season: records, Tactics: tactics, Transfers: transfers, WorkPermits: permits, Fixtures: fixtures, MatchReports: reports, Tables: tables, LeagueStages: db.LeagueStageCount}), nil
 }
 
 // readTransfers and readWorkPermits are swapped in tests.
