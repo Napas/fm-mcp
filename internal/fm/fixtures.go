@@ -25,6 +25,7 @@ const (
 // Fixture is a match, played or not. Fog of war hides nothing: results are
 // public.
 type Fixture struct {
+	MatchID          *uint32   `json:"match_id,omitempty"` // retained, decoded match report ID in this save
 	Date             time.Time `json:"date"`
 	Season           int       `json:"season,omitempty"` // the season's start year; 0 for friendlies
 	CompetitionIndex int64     `json:"competition_index"`
@@ -186,6 +187,7 @@ func (g *Game) fixture(s storedFixture) Fixture {
 		second := s.label.SecondIndex
 		f.SecondCompetitionIndex, f.SecondCompetition = &second, s.label.Second
 	}
+	f.MatchID = g.fixtureReports[fixtureReportKey(s.date, int64(s.Home), int64(s.Away))]
 	return f
 }
 

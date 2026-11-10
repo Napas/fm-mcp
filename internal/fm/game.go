@@ -50,15 +50,17 @@ type Game struct {
 	lineupPlayers map[uint32]*Player
 	aux           []playerAux // by Player.auxIdx
 	// clubLevels is clubSquadLevels by club index (true current ability; interest only).
-	clubLevels    map[int64]int
-	roleRules     roleRules
-	hasSeason     bool            // false when the save's season stats could not be read
-	hasFixtures   bool            // false when fix_man.dat could not be read
-	hasTables     bool            // false when the comp files could not be read
-	fixtures      []storedFixture // in date order
-	tables        []Table
-	tableWarnings []string                // why some tables are missing
-	permits       map[uint32][]WorkPermit // by player uid; nil when unreadable
+	clubLevels     map[int64]int
+	roleRules      roleRules
+	hasSeason      bool            // false when the save's season stats could not be read
+	hasFixtures    bool            // false when fix_man.dat could not be read
+	hasTables      bool            // false when the comp files could not be read
+	fixtures       []storedFixture // in date order
+	matchReports   map[uint32]MatchReport
+	fixtureReports map[reportKey]*uint32
+	tables         []Table
+	tableWarnings  []string                // why some tables are missing
+	permits        map[uint32][]WorkPermit // by player uid; nil when unreadable
 }
 
 // playerAux is per-player data kept outside Player to keep Player within 512
@@ -79,12 +81,13 @@ func (g *Game) auxOf(p *Player) *playerAux { return &g.aux[p.auxIdx] }
 // (maps by person index), tactics, transfers, fixtures and league tables.
 // nil means none or, where a field says so, unreadable.
 type PlayerExtras struct {
-	Scouted   map[uint32]uint8                 // the human manager's stored scouting knowledge
-	Season    map[uint32]savefile.SeasonRecord // current season totals (rgman/player_stats.dat)
-	Tactics   *savefile.Tactics                // the human manager's tactics and lineups (tactics_man.dat)
-	Transfers []savefile.Transfer              // transfer_man.dat; nil when it could not be read
-	Fixtures  []savefile.Fixture               // fix_man.dat; nil when it could not be read
-	Tables    *savefile.LeagueTables           // comp files' tables; nil when they could not be read
+	Scouted      map[uint32]uint8                 // the human manager's stored scouting knowledge
+	Season       map[uint32]savefile.SeasonRecord // current season totals (rgman/player_stats.dat)
+	Tactics      *savefile.Tactics                // the human manager's tactics and lineups (tactics_man.dat)
+	Transfers    []savefile.Transfer              // transfer_man.dat; nil when it could not be read
+	Fixtures     []savefile.Fixture               // fix_man.dat; nil when it could not be read
+	MatchReports *savefile.MatchReports
+	Tables       *savefile.LeagueTables // comp files' tables; nil when they could not be read
 	// WorkPermits are transfer_man.dat's; nil when they could not be read.
 	WorkPermits []savefile.WorkPermit
 	// LeagueStages is the LEAGUE_STAGE memory pool's count, which tables are
@@ -150,6 +153,7 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 		g.Info.Warnings = append(g.Info.Warnings, fmt.Sprintf("fixtures left out because their competition key does not resolve: %d", unresolved))
 	}
 	relabel(g.tables, g.fixtures, w)
+	g.resolveMatchReports(extras.MatchReports, raw)
 	return g
 }
 
