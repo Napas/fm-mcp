@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -59,6 +60,41 @@ If fog of war hides ability, value or wage, judge on what is visible (attributes
 2. For each player weigh age, current and potential ability, position depth (squad_depth), wage and value.
 3. Recommend renew, sell now, or let go for each, and flag release clauses from get_player.`, by), nil
 	}))
+
+	srv.AddPrompt(&mcp.Prompt{
+		Name:        "scout_opponent",
+		Description: "Scout an opponent: form, likely lineup and players to watch (FM27 saves).",
+		Arguments: []*mcp.PromptArgument{
+			{Name: "opponent", Description: "club name, or team_index (a non-negative number is team_index); empty means my next opponent"},
+		},
+	}, textPrompt(func(args map[string]string) (string, error) {
+		subject, step := opponentTarget(args["opponent"])
+		return fmt.Sprintf(`Act as my opposition analyst and scout %s.
+1. Call game_overview and pass on its warnings.
+2. %s
+3. Call get_fixtures with the opponent's team_index, status played and limit 5.
+4. Call get_match with the match_id of each result that has one: every such match lists its goals; match_data stored adds players (rating, xG) and team_stats.
+5. Call get_last_lineup with the opponent's team_index for formation, roles and who played.
+6. Pick three to five key players (goals, assists, high ratings). Call get_player_matches with their uid from get_match; skip unnamed players, which have no uid.
+7. Call get_tactic for my current tactic.
+Report its form (results, goals for and against), how it plays (formation, team_stats), likely lineup, players to watch, and what my tactic should change to face them.
+Matches with match_data pruned or goals_only have goals only; quick_simulated ones only the score. Name them. What is not stored is unknown, not zero.`,
+			subject, step), nil
+	}))
+}
+
+// opponentTarget returns the subject and the step that finds the opponent's
+// team_index. A non-negative number is a team_index, anything else a name.
+func opponentTarget(opponent string) (subject, step string) {
+	opponent = strings.TrimSpace(opponent)
+	if opponent == "" {
+		return "my next opponent", "Call get_fixtures for my team with status upcoming and limit 1; the opponent is the other team. If there is none, ask me for the opponent."
+	}
+	if n, err := strconv.ParseInt(opponent, 10, 64); err == nil && n >= 0 {
+		team := "team_index " + strconv.FormatInt(n, 10)
+		return team, "The opponent is " + team + "."
+	}
+	return opponent, fmt.Sprintf(`Call find_clubs with name %q for the opponent's team_index; prefer a club's first team (no U19, U21 or B in the name) and ask me only if several clubs match.`, opponent)
 }
 
 func textPrompt(render func(map[string]string) (string, error)) mcp.PromptHandler {

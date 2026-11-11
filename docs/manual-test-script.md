@@ -110,6 +110,7 @@ Type `/` in Claude Code; the server's prompts appear as `/mcp__fm__…`.
 | 5.1 | `squad_review` | Strengths, weak positions and contract risks that you agree with |
 | 5.2 | `scout_position` with position `DL`, max age 24, max value 10000000 (euros) | A shortlist that fits the limits |
 | 5.3 | `contract_review` | Expiring contracts that match the game |
+| 5.4 | `scout_opponent` (FM27 save), empty and then with a club name | Last results, scorers and likely lineup match the game; matches without stored detail are named, not shown as zeros |
 
 ## 6. Bad input
 
