@@ -83,7 +83,7 @@ func Load(path string, opts LoadOptions) (*Game, error) {
 	var fixtures []savefile.Fixture
 	if len(db.CompetitionKeys) > 0 {
 		if fixtures, err = savefile.ReadFixtures(a); err != nil {
-			info.Warnings = append(info.Warnings, fmt.Sprintf("fixtures unavailable: %v", err))
+			info.Warnings = append(info.Warnings, fmt.Sprintf("fixtures and match data unavailable: %v", err))
 		} else if fixtures == nil {
 			fixtures = []savefile.Fixture{} // read, but none: not the same as unreadable
 		}
@@ -324,7 +324,7 @@ func euMemberships(db *savefile.GameDB) map[int64][]EUMembership {
 func competitionWarnings(db *savefile.GameDB) []string {
 	var out []string
 	if db.CompetitionKeysErr != nil {
-		out = append(out, fmt.Sprintf("competition keys unavailable, so fixtures cannot be read: %v", db.CompetitionKeysErr))
+		out = append(out, fmt.Sprintf("competition keys unavailable, so fixtures and match data cannot be read: %v", db.CompetitionKeysErr))
 	}
 	if db.StagesErr != nil {
 		out = append(out, fmt.Sprintf("stage names unavailable, so fixture and table stages are unlabelled: %v", db.StagesErr))

@@ -53,7 +53,7 @@ func (v View) LastLineup(team int64) (LastLineup, error) {
 	if l.Formation != nil {
 		slots = l.Formation.Slots[:]
 	}
-	people := lineupPeople{persons: l.Players[:], shirts: l.ShirtNumbers[:], players: v.g.lineupPlayers}
+	people := lineupPeople{persons: l.Players[:], shirts: l.ShirtNumbers[:], players: v.g.persons}
 	out := LastLineup{
 		TeamIndex: team, Team: v.g.world.teamName(team),
 		OpponentIndex: int64(l.Opponent), Opponent: v.g.world.teamName(int64(l.Opponent)),

@@ -2402,7 +2402,8 @@ func TestDetailLevelsAreExplained(t *testing.T) {
 }
 
 // fixturesHarness serves fakeGame with a Premier League (COMP 1, key 0)
-// result and fixture for Tottenham.
+// result (match id 5, one goal by person 7, who is not a player) and
+// fixture for Tottenham.
 func fixturesHarness(t *testing.T) *harness {
 	t.Helper()
 	w := world
@@ -2411,7 +2412,8 @@ func fixturesHarness(t *testing.T) *harness {
 	w.Keys = []savefile.CompetitionKey{{Comp: 1, Stage: -1, Group: -1, Leg: -1, SecondComp: -1}}
 	fixtures := []savefile.Fixture{
 		{Key: 0, Home: 547, Away: 20739, Date: savefile.Date{Raw: 182, Year: 2025}, Season: 2024,
-			Result: &savefile.FixtureResult{Home: [4]uint8{2, 0xff, 0xff, 0xff}, Away: [4]uint8{1, 0xff, 0xff, 0xff}}},
+			Result: &savefile.FixtureResult{Home: [4]uint8{2, 0xff, 0xff, 0xff}, Away: [4]uint8{1, 0xff, 0xff, 0xff}, Decoded: true, MatchID: 5,
+				Events: []savefile.GoalEvent{{Scorer: 7, Assister: savefile.NoPerson, Kind: savefile.EventGoal, Minute: 12}}}},
 		{Key: 0, Home: 20739, Away: 547, Date: savefile.Date{Raw: 228, Year: 2025}, Season: 2025},
 	}
 	return connect(t, New(Options{DefaultSave: "/x/a.fm", Logf: func(string, ...any) {}, Load: func(path string) (*fm.Game, error) {
@@ -2432,6 +2434,72 @@ func TestGetFixturesDefaultsToManager(t *testing.T) {
 	}
 	if len(got.Upcoming) != 1 || got.Upcoming[0].HomeTeam != "Chelsea" || got.Upcoming[0].Date.Format(time.DateOnly) != "2025-08-16" {
 		t.Errorf("upcoming = %+v", got.Upcoming)
+	}
+}
+
+func TestGetMatch(t *testing.T) {
+	h := fixturesHarness(t)
+
+	for _, args := range []map[string]any{nil, {"match_id": 5}, {"team_index": 20739, "date": "2025-07-01"}} {
+		var got fm.Match
+		if res := h.call("get_match", args, &got); res.IsError {
+			t.Fatalf("get_match %v: %s", args, allText(res))
+		}
+		if got.MatchID == nil || *got.MatchID != 5 || got.MatchData != fm.MatchDataGoals || got.HomeTeam != "Tottenham Hotspur" ||
+			len(got.Events) != 1 || got.Events[0].Type != "goal" || got.Events[0].Team != "Tottenham Hotspur" || got.Events[0].Player == nil || !got.Events[0].Player.Unnamed {
+			t.Errorf("get_match %v = %+v", args, got)
+		}
+	}
+	var list fm.FixtureList
+	if res := h.call("get_fixtures", nil, &list); res.IsError {
+		t.Fatalf("get_fixtures: %s", allText(res))
+	}
+	if list.Results[0].MatchID == nil || list.Upcoming[0].MatchData != "" {
+		t.Errorf("get_fixtures: match_id %v, upcoming match_data %q", list.Results[0].MatchID, list.Upcoming[0].MatchData)
+	}
+}
+
+func TestGetMatchErrors(t *testing.T) {
+	h := fixturesHarness(t)
+
+	for _, tt := range []struct {
+		args map[string]any
+		want string
+	}{
+		{map[string]any{"match_id": 99}, "match_id 99"},
+		{map[string]any{"date": "1/7/2025"}, "date"},
+		{map[string]any{"date": "2025-08-16"}, "no result on 2025-08-16"},
+	} {
+		if res := h.call("get_match", tt.args, nil); !res.IsError || !strings.Contains(allText(res), tt.want) {
+			t.Errorf("get_match %v: %s, want an error about %q", tt.args, allText(res), tt.want)
+		}
+	}
+}
+
+func TestGetMatchIsExplained(t *testing.T) {
+	h := newHarness(t)
+
+	tools, err := h.session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	desc := map[string]string{}
+	for _, tool := range tools.Tools {
+		desc[tool.Name] = tool.Description
+	}
+	for _, want := range []string{"match_id", "goals_only", "quick_simulated", "unsupported_build", "own_goal", "missed_penalty", "shootout_scored", "unknown_", "unnamed_player", "inference"} {
+		if !strings.Contains(desc["get_match"], want) {
+			t.Errorf("get_match description lacks %q", want)
+		}
+	}
+	for _, want := range []string{"match_id", "match_data", "get_match"} {
+		if !strings.Contains(desc["get_fixtures"], want) {
+			t.Errorf("get_fixtures description lacks %q", want)
+		}
+	}
+	text := h.session.InitializeResult().Instructions
+	if !strings.Contains(text, "get_match") || !strings.Contains(text, "own_goal (the player belongs to the other side) and missed_penalty are inferences") {
+		t.Error("instructions lack get_match or its inferences")
 	}
 }
 
@@ -2559,7 +2627,7 @@ func TestFixturesAndTablesUnreadable(t *testing.T) {
 		return fakeGame(path), nil
 	}}))
 
-	for _, tool := range []string{"get_fixtures", "get_table"} {
+	for _, tool := range []string{"get_fixtures", "get_table", "get_match"} {
 		if res := h.call(tool, nil, nil); !res.IsError || !strings.Contains(allText(res), "could not be read") || !strings.Contains(allText(res), "game_overview") {
 			t.Errorf("%s: %s, want an error pointing at game_overview's warnings", tool, allText(res))
 		}

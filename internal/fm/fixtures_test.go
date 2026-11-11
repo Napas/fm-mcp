@@ -17,7 +17,7 @@ func day(year int, month time.Month, d int) savefile.Date {
 }
 
 func played(home, away uint8) *savefile.FixtureResult {
-	return &savefile.FixtureResult{Home: [4]uint8{home, 0xff, 0xff, 0xff}, Away: [4]uint8{away, 0xff, 0xff, 0xff}}
+	return &savefile.FixtureResult{Home: [4]uint8{home, 0xff, 0xff, 0xff}, Away: [4]uint8{away, 0xff, 0xff, 0xff}, MatchID: savefile.NoMatchID}
 }
 
 // fixtureWorld is labelWorld with three teams.

@@ -12,7 +12,7 @@ import (
 // testFixtureLayouts repeats the parser's layouts so tests check them.
 var testFixtureLayouts = map[byte]fixtureLayout{
 	0x1c: {size: 63, season: 38, round: 50},
-	0x1f: {size: 61, season: 34, round: 46},
+	0x1f: {size: 61, season: 34, round: 46, matchData: true},
 }
 
 // fixtureBase encodes a FIXTURE base of the given version.
@@ -31,21 +31,32 @@ func fixtureBase(version byte, f Fixture) []byte {
 }
 
 // fixtureItem encodes a list item: i32 index, u8 flag, then a
-// FIXTURE_RESULT with events when played, then the base. Both records carry
-// version.
-func fixtureItem(version byte, index int32, f Fixture, events int) []byte {
+// FIXTURE_RESULT with the result's match id and events when played, then the
+// base. Both records carry version.
+func fixtureItem(version byte, index int32, f Fixture) []byte {
 	b := binary.LittleEndian.AppendUint32(nil, uint32(index)) //nolint:gosec // signed field
 	if f.Result == nil {
 		b = append(b, 0)
 		return append(b, fixtureBase(version, f)...)
 	}
-	b = append(b, 1, version, 0, 0, 0, 0)
+	b = append(b, 1, version)
+	b = binary.LittleEndian.AppendUint32(b, uint32(f.Result.MatchID)) //nolint:gosec // signed field
 	b = append(b, f.Result.Home[:]...)
 	b = append(b, f.Result.Away[:]...)
-	b = append(b, make([]byte, 4+4+4)...)                   // attendance, u32, 3 × u8, u8
-	b = binary.LittleEndian.AppendUint32(b, uint32(events)) //nolint:gosec // small test data
-	b = append(b, make([]byte, 16*events)...)
+	b = append(b, make([]byte, 4+4+4)...)                                 // attendance, u32, 3 × u8, u8
+	b = binary.LittleEndian.AppendUint32(b, uint32(len(f.Result.Events))) //nolint:gosec // small test data
+	for _, e := range f.Result.Events {
+		b = append(b, goalEventBytes(e)...)
+	}
 	return append(b, fixtureBase(version, f)...)
+}
+
+// goalEventBytes encodes a 16-byte FIXTURE_RESULT event.
+func goalEventBytes(e GoalEvent) []byte {
+	b := binary.LittleEndian.AppendUint32(nil, uint32(e.Scorer)) //nolint:gosec // signed field
+	b = binary.LittleEndian.AppendUint32(b, uint32(e.Assister))  //nolint:gosec // signed field
+	b = binary.LittleEndian.AppendUint32(b, e.Time)
+	return append(b, e.Side, byte(e.Kind), e.Minute, e.AddedMinutes)
 }
 
 // fixtureList encodes a present list with its items and item count.
@@ -73,31 +84,68 @@ func fixtureFile(first []byte, more ...[]byte) []byte {
 
 var (
 	playedFixture = Fixture{Key: 232, Home: 547, Away: 442, Date: Date{Raw: 228, Year: 2025}, Season: 2025, Round: 0,
-		Result: &FixtureResult{Home: [4]uint8{2, 0xff, 0xff, 0xff}, Away: [4]uint8{1, 0xff, 0xff, 0xff}}}
+		Result: &FixtureResult{Home: [4]uint8{2, 0xff, 0xff, 0xff}, Away: [4]uint8{1, 0xff, 0xff, 0xff}, MatchID: NoMatchID}}
 	upcomingFixture = Fixture{Key: 2887, Home: 532, Away: 547, Date: Date{Raw: 200, Year: 2025}, Round: 255}
+	// playedFixture27 is a 27.0.0 result with a match id and two events: a
+	// goal with an assist and a penalty in added time.
+	playedFixture27 = Fixture{Key: 3543, Home: 456, Away: 16521, Date: Date{Raw: 196, Year: 2026}, Season: 2026, Round: 1,
+		Result: &FixtureResult{Home: [4]uint8{1, 0xff, 0xff, 0xff}, Away: [4]uint8{1, 0xff, 0xff, 0xff}, Decoded: true, MatchID: 1022,
+			Events: []GoalEvent{
+				{Scorer: 45145, Assister: 23569, Time: 2076, Side: 0, Kind: EventGoal, Minute: 9},
+				{Scorer: 9397, Assister: NoPerson, Time: 21800, Side: 1, Kind: EventPenalty, Minute: 90, AddedMinutes: 3},
+			}}}
 )
 
 func TestParseFixtures(t *testing.T) {
 	for _, v := range []byte{fixtureVersion26, fixtureVersion27} {
 		t.Run(fmt.Sprintf("%#x", v), func(t *testing.T) {
 			body := fixtureFile(
-				fixtureList(2025, fixtureItem(v, 0, playedFixture, 1), fixtureItem(v, 1, upcomingFixture, 0)),
-				fixtureList(2026, fixtureItem(v, 2, upcomingFixture, 0)))
+				fixtureList(2025, fixtureItem(v, 0, playedFixture), fixtureItem(v, 1, upcomingFixture)),
+				fixtureList(2026, fixtureItem(v, 2, upcomingFixture)))
 
 			got, err := parseFixtures(body)
 			if err != nil {
 				t.Fatalf("parseFixtures: %v", err)
 			}
-			if want := []Fixture{playedFixture, upcomingFixture, upcomingFixture}; !reflect.DeepEqual(got, want) {
+			played := playedFixture
+			if v == fixtureVersion27 {
+				r := *played.Result
+				r.Decoded, r.Events = true, []GoalEvent{}
+				played.Result = &r
+			}
+			if want := []Fixture{played, upcomingFixture, upcomingFixture}; !reflect.DeepEqual(got, want) {
 				t.Errorf("fixtures = %+v, want %+v", got, want)
 			}
 		})
 	}
 }
 
+func TestParseFixturesGoalEvents(t *testing.T) {
+	got, err := parseFixtures(fixtureFile(fixtureList(2026, fixtureItem(fixtureVersion27, 0, playedFixture27))))
+	if err != nil {
+		t.Fatalf("parseFixtures: %v", err)
+	}
+	if want := []Fixture{playedFixture27}; !reflect.DeepEqual(got, want) {
+		t.Errorf("fixtures = %+v, want %+v", got, want)
+	}
+}
+
+// TestParseFixturesSkips26Events checks that 26.x results keep no match id
+// or events: their layout is not verified.
+func TestParseFixturesSkips26Events(t *testing.T) {
+	got, err := parseFixtures(fixtureFile(fixtureList(2026, fixtureItem(fixtureVersion26, 0, playedFixture27))))
+	if err != nil {
+		t.Fatalf("parseFixtures: %v", err)
+	}
+	r := got[0].Result
+	if r == nil || r.Decoded || r.MatchID != NoMatchID || r.Events != nil || r.Home[0] != 1 {
+		t.Errorf("26.x result = %+v, want the score only", r)
+	}
+}
+
 func TestParseFixturesSkipsAbsentList(t *testing.T) {
 	absent := []byte{0xe9, 0x07, 0}
-	body := fixtureFile(absent, fixtureList(2025, fixtureItem(fixtureVersion26, 0, upcomingFixture, 0)))
+	body := fixtureFile(absent, fixtureList(2025, fixtureItem(fixtureVersion26, 0, upcomingFixture)))
 
 	got, err := parseFixtures(body)
 	if err != nil || len(got) != 1 {
@@ -106,7 +154,7 @@ func TestParseFixturesSkipsAbsentList(t *testing.T) {
 }
 
 func TestParseFixturesRejectsWrongCount(t *testing.T) {
-	list := fixtureList(2025, fixtureItem(fixtureVersion26, 0, upcomingFixture, 0))
+	list := fixtureList(2025, fixtureItem(fixtureVersion26, 0, upcomingFixture))
 	binary.LittleEndian.PutUint32(list[len(list)-4:], 2)
 
 	if _, err := parseFixtures(fixtureFile(list)); !errors.Is(err, ErrCorrupt) {
@@ -115,7 +163,7 @@ func TestParseFixturesRejectsWrongCount(t *testing.T) {
 }
 
 func TestParseFixturesRejectsBadFlag(t *testing.T) {
-	item := fixtureItem(fixtureVersion26, 0, upcomingFixture, 0)
+	item := fixtureItem(fixtureVersion26, 0, upcomingFixture)
 	item[4] = 2
 
 	if _, err := parseFixtures(fixtureFile(fixtureList(2025, item))); !errors.Is(err, ErrCorrupt) {
@@ -124,7 +172,7 @@ func TestParseFixturesRejectsBadFlag(t *testing.T) {
 }
 
 func TestParseFixturesRejectsUnknownVersion(t *testing.T) {
-	item := fixtureItem(fixtureVersion26, 0, upcomingFixture, 0)
+	item := fixtureItem(fixtureVersion26, 0, upcomingFixture)
 	item[5] = 0x1d
 
 	if _, err := parseFixtures(fixtureFile(fixtureList(2025, item))); !errors.Is(err, ErrCorrupt) {
@@ -133,7 +181,7 @@ func TestParseFixturesRejectsUnknownVersion(t *testing.T) {
 }
 
 func TestParseFixturesRejectsTruncatedBase(t *testing.T) {
-	item := fixtureItem(fixtureVersion27, 0, upcomingFixture, 0)
+	item := fixtureItem(fixtureVersion27, 0, upcomingFixture)
 	body := fixtureFile(fixtureList(2025, item))
 	start := 4 + 4 + 2 + 4 + 2 + 1 + 8 + 4 + 1 // header, list head, index, flag
 
@@ -145,11 +193,51 @@ func TestParseFixturesRejectsTruncatedBase(t *testing.T) {
 }
 
 func TestParseFixturesRejectsHugeEventCount(t *testing.T) {
-	item := fixtureItem(fixtureVersion26, 0, playedFixture, 0)
+	item := fixtureItem(fixtureVersion26, 0, playedFixture)
 	binary.LittleEndian.PutUint32(item[5+1+4+8+12:], maxFixtureEvents+1)
 
 	if _, err := parseFixtures(fixtureFile(fixtureList(2025, item))); !errors.Is(err, ErrCorrupt) {
 		t.Errorf("err = %v, want ErrCorrupt", err)
+	}
+}
+
+// TestTestSave27GoalEvents checks Shamrock Rovers 3–2 Kauno Žalgiris
+// (2026-07-15) against the game's match report, and the event counts of
+// data/test_save_27_homegrown.fm (game date 2026-07-16).
+func TestTestSave27GoalEvents(t *testing.T) {
+	fs, err := ReadFixtures(openTestSaveAt(t, testSave27HomegrownPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var withID, results int
+	var shamrock *FixtureResult
+	for _, f := range fs {
+		if f.Result == nil || f.Result.Home[0] == 0xff {
+			continue
+		}
+		results++
+		if f.Result.MatchID != NoMatchID {
+			withID++
+		}
+		if f.Home == 456 && f.Away == 16521 && f.Date.Time().Equal(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC)) {
+			shamrock = f.Result
+		}
+	}
+	if results != 3246 || withID != 1027 {
+		t.Errorf("%d results, %d with a match id; want 3246 and 1027", results, withID)
+	}
+	if shamrock == nil {
+		t.Fatal("no Shamrock Rovers v Kauno Žalgiris result on 2026-07-15")
+	}
+	want := []GoalEvent{
+		{Scorer: 45145, Assister: 23569, Time: 2076, Side: 0, Kind: EventGoal, Minute: 9},   // O'Reilly-O'Sullivan, Sobowale
+		{Scorer: 9397, Assister: 9149, Time: 4768, Side: 1, Kind: EventGoal, Minute: 20},    // Renan Oliveira, Benchaib
+		{Scorer: 56834, Assister: 10498, Time: 6200, Side: 0, Kind: EventGoal, Minute: 26},  // Noonan, Byrne
+		{Scorer: 9397, Assister: 8922, Time: 11853, Side: 1, Kind: EventGoal, Minute: 46},   // Renan Oliveira, Iyobosa Edokpolor
+		{Scorer: 10498, Assister: 23583, Time: 19431, Side: 0, Kind: EventGoal, Minute: 78}, // Byrne, Grant
+	}
+	if !shamrock.Decoded || shamrock.MatchID != 1022 || !reflect.DeepEqual(shamrock.Events, want) {
+		t.Errorf("result = %+v, want match id 1022 and events %+v", shamrock, want)
 	}
 }
 
@@ -203,7 +291,7 @@ func checkRealSaveFixtures(t *testing.T, a *Archive, keys int) {
 }
 
 func TestParseFixturesRejectsUnknownResultVersion(t *testing.T) {
-	item := fixtureItem(fixtureVersion26, 0, playedFixture, 0)
+	item := fixtureItem(fixtureVersion26, 0, playedFixture)
 	item[5] = 0x1d // the FIXTURE_RESULT version after the flag
 
 	if _, err := parseFixtures(fixtureFile(fixtureList(2025, item))); !errors.Is(err, ErrCorrupt) {
