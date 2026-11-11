@@ -33,4 +33,4 @@ Version 21. `u16 count` at body offset 0 (file offset 8), then the human's perso
 ## Open questions
 
 - `humans.dat` and `fog_of_war.dat` with more than one human manager.
-- The ~197 undecoded bytes in `game_info.dat`; the `*.scm` / `*.apm` files of 26.3.2 saves.
+- The ~197 undecoded bytes in `game_info.dat`; the `*.scm` / `*.apm` files of 26.3.2 saves (27.0.0 `*.scm` files: [`matches.md`](matches.md)).

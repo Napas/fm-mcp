@@ -76,7 +76,7 @@ Saves are untrusted input. Header offsets are capped at 2^48; the compressed and
 
 ## 26.3.2 saves
 
-Four real 26.3.2 saves (game dates 2035-09-20 to 2035-11-29, ~410 MB, 1 708 inner files) keep container version 8 and every layout above; `game_db.dat` is 351 MB with database version 3733 and ~140 000 players. Differences: extra root files `*.scm` and `*.apm` (not decoded) and person tags 0 and 19 (not mapped). Generated players can carry common-name refs beyond every name table (up to 646 431), which the parser leaves unresolved.
+Four real 26.3.2 saves (game dates 2035-09-20 to 2035-11-29, ~410 MB, 1 708 inner files) keep container version 8 and every layout above; `game_db.dat` is 351 MB with database version 3733 and ~140 000 players. Differences: extra root files `*.scm` and `*.apm` (not decoded; 27.0.0 `*.scm` files: [`matches.md`](matches.md)) and person tags 0 and 19 (not mapped). Generated players can carry common-name refs beyond every name table (up to 646 431), which the parser leaves unresolved.
 
 ## 27.0.0 saves
 
