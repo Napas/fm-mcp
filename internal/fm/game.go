@@ -66,6 +66,7 @@ type Game struct {
 	tables        []Table
 	tableWarnings []string                // why some tables are missing
 	permits       map[uint32][]WorkPermit // by player uid; nil when unreadable
+	shortlists    []shortlist             // the human manager's; nil when unreadable
 }
 
 // playerAux is per-player data kept outside Player to keep Player within 512
@@ -96,6 +97,8 @@ type PlayerExtras struct {
 	Tables  *savefile.LeagueTables // comp files' tables; nil when they could not be read
 	// WorkPermits are transfer_man.dat's; nil when they could not be read.
 	WorkPermits []savefile.WorkPermit
+	// Shortlists are scout_man.dat's; nil when they could not be read.
+	Shortlists []savefile.Shortlist
 	// LeagueStages is the LEAGUE_STAGE memory pool's count, which tables are
 	// counted against.
 	LeagueStages uint32
@@ -120,7 +123,7 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 		transfers[t.ID] = t
 	}
 	own := w.clubTeams(info.ManagerTeamIndex)
-	persons := referencedPersons(extras.Tactics, extras.Fixtures, extras.Matches)
+	persons := referencedPersons(extras)
 	for _, r := range raw {
 		p := newPlayer(r, info.Date, w)
 		if _, ok := persons[r.Index]; ok {
@@ -140,6 +143,9 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 		}
 	}
 	maps.DeleteFunc(persons, func(_ uint32, p *Player) bool { return p == nil })
+	if extras.Shortlists != nil {
+		g.shortlists = newShortlists(extras.Shortlists, persons)
+	}
 	g.clubLevels = clubSquadLevels(g.players, w)
 	if extras.WorkPermits != nil {
 		g.permits = workPermits(extras.WorkPermits, raw, w)
@@ -232,9 +238,9 @@ func (g *Game) indexPlayerMatches() {
 }
 
 // referencedPersons maps the person indices of the selection, every last
-// lineup, every match event and every match object record to nil, for
-// NewGame to fill in.
-func referencedPersons(t *savefile.Tactics, fixtures []savefile.Fixture, objs []savefile.MatchObject) map[uint32]*Player {
+// lineup, every match event, every match object record and every shortlist
+// to nil, for NewGame to fill in.
+func referencedPersons(extras PlayerExtras) map[uint32]*Player {
 	out := make(map[uint32]*Player)
 	add := func(persons ...int32) {
 		for _, p := range persons {
@@ -243,13 +249,13 @@ func referencedPersons(t *savefile.Tactics, fixtures []savefile.Fixture, objs []
 			}
 		}
 	}
-	if t != nil {
+	if t := extras.Tactics; t != nil {
 		add(t.Selection[:]...)
 		for _, l := range t.LastLineups {
 			add(l.Players[:]...)
 		}
 	}
-	for _, f := range fixtures {
+	for _, f := range extras.Fixtures {
 		if f.Result == nil {
 			continue
 		}
@@ -257,9 +263,14 @@ func referencedPersons(t *savefile.Tactics, fixtures []savefile.Fixture, objs []
 			add(e.Scorer, e.Assister)
 		}
 	}
-	for _, o := range objs {
+	for _, o := range extras.Matches {
 		for _, p := range o.Players {
 			add(p.Person)
+		}
+	}
+	for _, l := range extras.Shortlists {
+		for _, p := range l.Persons {
+			out[p] = nil
 		}
 	}
 	return out
@@ -385,6 +396,9 @@ type Filter struct {
 	TrainedInNationIndex *int64
 	// EUNational filters on EU status; needs the save's EU data.
 	EUNational *bool
+	// Shortlist matches the players on the human manager's shortlist of this
+	// name, ignoring case; "default" is the unnamed list.
+	Shortlist string
 }
 
 // checkRefs rejects team and nation references that match nothing, so an

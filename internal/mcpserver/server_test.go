@@ -3047,3 +3047,26 @@ func TestWorkPermitsOnProfiles(t *testing.T) {
 		t.Errorf("compare_players = %+v, want work_permits %+v", c.Players, want)
 	}
 }
+
+func TestSearchPlayersShortlist(t *testing.T) {
+	kone := raw(7, "Sékou", "Koné", 547, 120, 9)
+	kone.Index = 8334
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "s.fm"), "x", gameDate)
+	h := connect(t, New(Options{SaveDirs: []string{dir}, Load: func(path string) (*fm.Game, error) {
+		return fakeGameWith(path, fm.PlayerExtras{Shortlists: []savefile.Shortlist{{Name: "interested", Persons: []uint32{8334}}, {Persons: []uint32{}}}}, kone), nil
+	}}))
+	var rows struct {
+		Players []PlayerSummary `json:"players"`
+	}
+	if res := h.call("search_players", map[string]any{"shortlist": "interested"}, &rows); res.IsError {
+		t.Fatalf("search_players: %s", allText(res))
+	}
+	if len(rows.Players) != 1 || rows.Players[0].UID != 7 {
+		t.Errorf("got %+v, want Koné only", rows.Players)
+	}
+	res := h.call("search_players", map[string]any{"shortlist": "targets"}, nil)
+	if !res.IsError || !strings.Contains(allText(res), `"interested", "default"`) {
+		t.Errorf("unknown shortlist: %s, want an error listing the shortlists", allText(res))
+	}
+}

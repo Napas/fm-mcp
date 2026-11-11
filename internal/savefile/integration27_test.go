@@ -643,3 +643,34 @@ func TestTestSave27WorkPermits(t *testing.T) {
 		})
 	}
 }
+
+// testSave27ShortlistPath has two shortlists: (Default) of 12 and "interested"
+// of 7; see "27.0.0 shortlists".
+const testSave27ShortlistPath = "../../data/test_save_27_shortlist.fm"
+
+func TestTestSave27Shortlists(t *testing.T) {
+	for _, tt := range []struct {
+		path string
+		want []Shortlist
+	}{
+		{testSave27ShortlistPath, []Shortlist{
+			// Déblé, Rahmani, Mejía, Kanté, Juli, Toni Silva, Mlapa.
+			{Name: "interested", Persons: []uint32{8213, 9553, 40122, 26060, 6981, 10156, 31569}},
+			// Gašpuitis, Arcila, Ghrissi, Wesley, Siaulys, Adamonis, Juskevicius,
+			// Burdzilauskas, Byrne, Rizki, Kihlberg, Magdušauskas.
+			{Name: "", Persons: []uint32{20570, 46968, 56518, 44382, 18294, 20610, 27376, 110079, 104681, 105833, 109065, 20758}},
+		}},
+		{"../../data/test_save_27_interest.fm", []Shortlist{{Name: "", Persons: []uint32{20570, 109216, 46968, 56518, 44382}}}},
+		{testSave27Path, []Shortlist{{Name: "", Persons: []uint32{}}}},
+	} {
+		t.Run(tt.path, func(t *testing.T) {
+			got, err := ReadShortlists(openTestSaveAt(t, tt.path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}

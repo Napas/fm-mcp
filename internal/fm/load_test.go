@@ -977,6 +977,20 @@ func TestLoadWarnsWithoutWorkPermits(t *testing.T) {
 	}
 }
 
+func TestLoadWarnsWithoutShortlists(t *testing.T) {
+	orig := readShortlists
+	readShortlists = func(*savefile.Archive) ([]savefile.Shortlist, error) { return nil, errors.New("boom") }
+	t.Cleanup(func() { readShortlists = orig })
+
+	g := loadTestSaveAt(t, testSave27Path, LoadOptions{})
+	if want := "shortlists unavailable: boom"; !slices.Contains(g.Info.Warnings, want) {
+		t.Errorf("warnings = %q, want %q", g.Info.Warnings, want)
+	}
+	if g.shortlists != nil {
+		t.Errorf("shortlists = %v, want none", g.shortlists)
+	}
+}
+
 func TestBuildWorldSetsHasManager(t *testing.T) {
 	db := &savefile.GameDB{Teams: []savefile.Team{{Index: 0, Manager: 5, Container: -1}, {Index: 1, Manager: -1, Container: -1}}}
 	w := buildWorld(db, langNames{})
