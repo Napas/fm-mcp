@@ -66,6 +66,9 @@ type FixtureResult struct {
 // NoMatchID is the match id of a result without one.
 const NoMatchID = -1
 
+// HasMatchID reports whether r is a result with a match id; false for nil.
+func (r *FixtureResult) HasMatchID() bool { return r != nil && r.MatchID >= 0 }
+
 // NoPerson is a GoalEvent's Assister when there is none.
 const NoPerson = -1
 

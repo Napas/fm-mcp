@@ -2418,8 +2418,24 @@ func fixturesHarness(t *testing.T) *harness {
 	}
 	return connect(t, New(Options{DefaultSave: "/x/a.fm", Logf: func(string, ...any) {}, Load: func(path string) (*fm.Game, error) {
 		info := fm.Info{SaveName: filepath.Base(path), Date: gameDate, ManagerTeamIndex: 547}
-		return fm.NewGame(info, nil, w, fm.PlayerExtras{Fixtures: fixtures}), nil
+		return fm.NewGame(info, nil, w, fm.PlayerExtras{Fixtures: fixtures, Matches: []savefile.MatchObject{{MatchID: 5, Players: harnessSquads()}}}), nil
 	}}))
+}
+
+// harnessSquads are two sides of 11 starters (persons 1–11 and 21–31) and
+// one unused substitute each.
+func harnessSquads() []savefile.MatchPlayer {
+	var out []savefile.MatchPlayer
+	for side, base := range []int32{1, 21} {
+		for i := range int32(12) {
+			p := savefile.MatchPlayer{Person: base + i, Shirt: uint8(i + 1), Side: uint8(side), XG: 0.1, Rating: 700} //nolint:gosec // small test data
+			if i < 11 {
+				p.StartPositions, p.EndPositions = 0x10, 0x10
+			}
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func TestGetFixturesDefaultsToManager(t *testing.T) {
@@ -2445,7 +2461,7 @@ func TestGetMatch(t *testing.T) {
 		if res := h.call("get_match", args, &got); res.IsError {
 			t.Fatalf("get_match %v: %s", args, allText(res))
 		}
-		if got.MatchID == nil || *got.MatchID != 5 || got.MatchData != fm.MatchDataGoals || got.HomeTeam != "Tottenham Hotspur" ||
+		if got.MatchID == nil || *got.MatchID != 5 || got.MatchData != fm.MatchDataStored || got.HomeTeam != "Tottenham Hotspur" || len(got.Players) != 22 || got.Players[0].Rating != 7 || len(got.UnusedSubstitutes) != 2 ||
 			len(got.Events) != 1 || got.Events[0].Type != "goal" || got.Events[0].Team != "Tottenham Hotspur" || got.Events[0].Player == nil || !got.Events[0].Player.Unnamed {
 			t.Errorf("get_match %v = %+v", args, got)
 		}
@@ -2487,7 +2503,7 @@ func TestGetMatchIsExplained(t *testing.T) {
 	for _, tool := range tools.Tools {
 		desc[tool.Name] = tool.Description
 	}
-	for _, want := range []string{"match_id", "goals_only", "quick_simulated", "unsupported_build", "own_goal", "missed_penalty", "shootout_scored", "unknown_", "unnamed_player", "inference"} {
+	for _, want := range []string{"match_id", "stored", "pruned", "goals_only", "quick_simulated", "unsupported_build", "own_goal", "missed_penalty", "shootout_scored", "unknown_", "unnamed_player", "inference", "players", "rating", "xg", "started", "taken_off", "unused_substitutes"} {
 		if !strings.Contains(desc["get_match"], want) {
 			t.Errorf("get_match description lacks %q", want)
 		}

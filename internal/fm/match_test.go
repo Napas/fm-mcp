@@ -3,6 +3,8 @@ package fm
 import (
 	"errors"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,7 +51,7 @@ func TestFixturesCarryMatchData(t *testing.T) {
 		id     *int64
 		status MatchDataStatus
 	}{
-		"2025-08-01": {&id, MatchDataGoals},
+		"2025-08-01": {&id, MatchDataPlayersUnreadable},
 		"2025-08-08": {nil, MatchDataQuickSimulated},
 		"2025-08-15": {nil, MatchDataUnsupported},
 		"2025-08-29": {nil, ""},
@@ -68,7 +70,7 @@ func TestMatchByIDNamesEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.HomeTeam != "Home FC" || m.Score == nil || m.Score.Home != 2 || m.MatchData != MatchDataGoals {
+	if m.HomeTeam != "Home FC" || m.Score == nil || m.Score.Home != 2 || m.MatchData != MatchDataPlayersUnreadable {
 		t.Errorf("match = %+v", m.Fixture)
 	}
 	want := []MatchEvent{
@@ -136,5 +138,132 @@ func TestMatchUnknownEventKindAndSide(t *testing.T) {
 	}
 	if e := m.Events[0]; e.Type != "unknown_9" || e.TeamIndex != nil || e.Team != "" {
 		t.Errorf("event = %+v, want type unknown_9 and no team", e)
+	}
+}
+
+// squad is a side of 11 starters (persons base..base+10; the last is taken
+// off when takenOff), a substitute who came on (base+11) and an unused one
+// (base+12).
+func squad(side uint8, base int32, takenOff bool) []savefile.MatchPlayer {
+	out := make([]savefile.MatchPlayer, 0, 13)
+	for i := range int32(11) {
+		end := uint32(0x10)
+		if takenOff && i == 10 {
+			end = 0
+		}
+		out = append(out, savefile.MatchPlayer{Person: base + i, Shirt: uint8(i + 1), Side: side, StartPositions: 0x10, EndPositions: end, XG: 0.125, Rating: 690}) //nolint:gosec // small test data
+	}
+	return append(out,
+		savefile.MatchPlayer{Person: base + 11, Shirt: 12, Side: side, EndPositions: 0x4000, XG: 0.5, Rating: 819},
+		savefile.MatchPlayer{Person: base + 12, Shirt: 13, Side: side, Rating: 670})
+}
+
+// objectGame has detailedFixture (match 7), quickFixture and a result with
+// match id 9 that has no object (pruned), with objs as the stored objects.
+func objectGame(objs ...savefile.MatchObject) *Game {
+	pruned := savefile.Fixture{Key: 0, Home: 2, Away: 1, Date: day(2025, 8, 22), Result: matchResult(1, 1, 9)}
+	unreadable := savefile.Fixture{Key: 0, Home: 1, Away: 3, Date: day(2025, 8, 26), Result: matchResult(0, 0, 11)}
+	return NewGame(Info{Date: gameDate, ManagerTeamIndex: 1}, tacticPlayers(), fixtureWorld(),
+		PlayerExtras{Fixtures: []savefile.Fixture{detailedFixture, quickFixture, pruned, unreadable}, Matches: append(objs, savefile.MatchObject{MatchID: 11})})
+}
+
+func TestMatchStatusWithObjects(t *testing.T) {
+	g := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 90, true), squad(1, 200, false)...)})
+
+	got, err := g.View(false).Fixtures(FixtureFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]MatchDataStatus{"2025-08-01": MatchDataStored, "2025-08-08": MatchDataQuickSimulated, "2025-08-22": MatchDataPruned, "2025-08-26": MatchDataPlayersUnreadable}
+	for _, f := range got.Results {
+		if w := want[f.Date.Format(time.DateOnly)]; f.MatchData != w {
+			t.Errorf("%s: match_data %q, want %q", f.Date.Format(time.DateOnly), f.MatchData, w)
+		}
+	}
+	id := int64(9)
+	m, err := g.View(false).Match(MatchSelector{MatchID: &id})
+	if err != nil || m.Players != nil || m.MatchData != MatchDataPruned {
+		t.Errorf("pruned match = %+v, %v; want no players", m, err)
+	}
+}
+
+func TestMatchPlayers(t *testing.T) {
+	g := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 92, true), squad(1, 200, false)...)})
+	id := int64(7)
+	m, err := g.View(false).Match(MatchSelector{MatchID: &id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Players) != 24 || len(m.UnusedSubstitutes) != 2 {
+		t.Fatalf("%d players, %d unused; want 24 and 2", len(m.Players), len(m.UnusedSubstitutes))
+	}
+	no := false
+	// Home persons 92..104: 100 (Vicario) starts in shirt 9, 102 (Bergvall)
+	// is taken off, 103 came on, 104 unused.
+	vicario := m.Players[8]
+	if !reflect.DeepEqual(vicario, MatchPlayer{Player: TacticPlayer{UID: 1, Name: "Guglielmo Vicario", ShirtNumber: 9}, TeamIndex: 1, Team: "Home FC", Started: true, TakenOff: &no, Rating: 6.9, XG: 0.13}) {
+		t.Errorf("Vicario = %+v", vicario)
+	}
+	if b := m.Players[10]; b.Player.Name != "Lucas Bergvall" || b.TakenOff == nil || !*b.TakenOff {
+		t.Errorf("Bergvall = %+v, want taken off", b)
+	}
+	if sub := m.Players[11]; sub.Started || sub.Rating != 8.19 || sub.XG != 0.5 || !sub.Player.Unnamed || sub.TakenOff == nil || *sub.TakenOff {
+		t.Errorf("substitute = %+v", sub)
+	}
+	// The away side has a substitute but nobody with offset 13 = 0: unknown.
+	if away := m.Players[12]; away.TeamIndex != 2 || away.TakenOff != nil {
+		t.Errorf("away starter = %+v, want taken_off unknown", away)
+	}
+	if u := m.UnusedSubstitutes; !u[0].Player.Unnamed || u[0].Player.ShirtNumber != 13 || u[0].TeamIndex != 1 || u[1].TeamIndex != 2 || u[1].Team != "Away FC" {
+		t.Errorf("unused = %+v, want one per side with its team", u)
+	}
+}
+
+func TestMatchObjectWithoutFixtureWarns(t *testing.T) {
+	// Match 55 is unreadable and has no fixture: counted once, as an orphan.
+	// objectGame's own unreadable match 11 makes the "not read: 1".
+	g := objectGame(savefile.MatchObject{MatchID: 55})
+	for _, want := range []string{"match objects without a fixture: 1", "match objects not read: 1"} {
+		if !slices.ContainsFunc(g.Info.Warnings, func(w string) bool { return strings.Contains(w, want) }) {
+			t.Errorf("warnings = %q, want %q", g.Info.Warnings, want)
+		}
+	}
+	dup := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 300, false), squad(1, 320, false)...)}, savefile.MatchObject{MatchID: 7, Players: squad(0, 400, false)})
+	if !slices.ContainsFunc(dup.Info.Warnings, func(w string) bool { return strings.Contains(w, "match objects with a repeated match id: 1") }) {
+		t.Errorf("warnings = %q, want the repeated id", dup.Info.Warnings)
+	}
+	id := int64(7)
+	if m, err := dup.View(false).Match(MatchSelector{MatchID: &id}); err != nil || len(m.Players) != 24 {
+		t.Errorf("repeated id: %d players, %v; want the first object's 24", len(m.Players), err)
+	}
+}
+
+// TestReadMatchesSkipsSavesWithoutMatchIDs checks that FM26 saves, whose
+// results have no decoded match id, never read the match pack.
+func TestReadMatchesSkipsSavesWithoutMatchIDs(t *testing.T) {
+	objs, warnings := readMatches(nil, []savefile.Fixture{fm26Fixture, upcomingMatchF})
+	if objs != nil || warnings != nil {
+		t.Errorf("readMatches = %v, %v; want nothing read", objs, warnings)
+	}
+}
+
+// TestTakenOffUnknownWhenCountsDiffer covers a side with a starter not on at
+// the end but no substitute (e.g. a red card): taken_off stays unknown.
+func TestTakenOffUnknownWhenCountsDiffer(t *testing.T) {
+	home := squad(0, 92, true)[:11] // one starter off, nobody came on
+	known := takenOffKnown(append(home, squad(1, 200, false)...))
+	if known[0] || known[1] {
+		t.Errorf("takenOffKnown = %v, want unknown on both sides", known)
+	}
+}
+
+// TestMatchByIDKeepsFirstFixture guards against two results sharing a match
+// id (not seen in saves): the earlier one wins.
+func TestMatchByIDKeepsFirstFixture(t *testing.T) {
+	later := savefile.Fixture{Key: 0, Home: 3, Away: 1, Date: day(2025, 9, 1), Result: matchResult(4, 4, 7)}
+	id := int64(7)
+	m, err := matchGame(detailedFixture, later).View(false).Match(MatchSelector{MatchID: &id})
+	if err != nil || m.Date.Format(time.DateOnly) != "2025-08-01" {
+		t.Errorf("match = %v, %v; want the 2025-08-01 result", m.Date, err)
 	}
 }

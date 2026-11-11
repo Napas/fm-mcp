@@ -67,7 +67,7 @@ Consequences:
 |---|----|------|-----------|
 | 1 | Recon docs: `matches.md`, goal events in `fixtures.md`, this spec | INDEPENDENT | docs only |
 | 2 | `get_match` with goals: parse match id and events in `savefile`; tool takes `match_id`, `team_index` + `date`, or a team for its last match; `get_fixtures` rows gain `match_id` and the status | INDEPENDENT | ~400 |
-| 3 | Match objects: pack reader, player-record fixed fields decoded at load into a match/person index; `get_match` adds player lines (shirt, played, started / came on, taken off where known, rating, xG) | STACKED-ON #2 | ~450 |
+| 3 | Match objects: pack reader, player-record fixed fields decoded at load into an index by match id (the index by player lands in #4, its first user); `get_match` adds player lines (shirt, played, started / came on, taken off where known, rating, xG) | STACKED-ON #2 | ~450 |
 | 4 | `get_player_matches` from stored objects plus goal events | STACKED-ON #3 | ~350 |
 | 5 | Team totals, cards, substitution times, minutes: decode more of the object against a second in-game reference, then add to `get_match` and `get_player_matches` | STACKED-ON #4 | ~400–500 |
 | 6 | `scout_opponent` composed from #2, #3 and `get_last_lineup`; tool or MCP prompt (see below) | STACKED-ON #3 | ~300 (tool) or ~80 (prompt) |

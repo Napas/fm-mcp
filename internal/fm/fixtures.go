@@ -42,8 +42,7 @@ type Fixture struct {
 	// MatchID is the id get_match takes; nil when the result has none.
 	MatchID *int64 `json:"match_id,omitempty"`
 	// MatchData says what is stored about a played match beyond its score
-	// (MatchDataGoals, MatchDataQuickSimulated or MatchDataUnsupported);
-	// empty until played.
+	// (a MatchDataStatus value); empty until played.
 	MatchData MatchDataStatus `json:"match_data,omitempty"`
 }
 
@@ -189,7 +188,7 @@ func (g *Game) fixture(s storedFixture) Fixture {
 		Score: newScore(s.Result),
 	}
 	if f.Score != nil {
-		f.MatchID, f.MatchData = matchData(s.Result)
+		f.MatchID, f.MatchData = g.matchData(s.Result)
 	}
 	if s.label.SecondIndex >= 0 {
 		second := s.label.SecondIndex

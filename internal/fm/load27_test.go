@@ -3,6 +3,7 @@ package fm
 import (
 	"cmp"
 	"fmt"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -667,7 +668,7 @@ func TestLoadTestSave27Match(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.MatchID == nil || *m.MatchID != 1022 || m.MatchData != MatchDataGoals || m.HomeTeamIndex != 456 || m.Score == nil || m.Score.Home != 3 || m.Score.Away != 2 {
+	if m.MatchID == nil || *m.MatchID != 1022 || m.MatchData != MatchDataStored || m.HomeTeamIndex != 456 || m.Score == nil || m.Score.Home != 3 || m.Score.Away != 2 {
 		t.Errorf("match = %+v", m.Fixture)
 	}
 	var got []string
@@ -693,5 +694,59 @@ func TestLoadTestSave27Match(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("events = %q\nwant %q", got, want)
+	}
+}
+
+// TestLoadTestSave27MatchPlayers checks match statuses and the player lines
+// of Shamrock Rovers 3–2 Kauno Žalgiris (2026-07-15) against the game's
+// match report.
+func TestLoadTestSave27MatchPlayers(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27HomegrownPath, LoadOptions{GameDBDir: gameDBDir()})
+	for _, w := range g.Info.Warnings {
+		if strings.Contains(w, "match") {
+			t.Errorf("warning %q", w)
+		}
+	}
+	statuses := map[MatchDataStatus]int{}
+	for _, s := range g.fixtures {
+		if newScore(s.Result) != nil {
+			_, st := g.matchData(s.Result)
+			statuses[st]++
+		}
+	}
+	if want := map[MatchDataStatus]int{MatchDataStored: 821, MatchDataPruned: 206, MatchDataQuickSimulated: 2219}; !reflect.DeepEqual(statuses, want) {
+		t.Errorf("statuses = %v, want %v", statuses, want)
+	}
+
+	id := int64(1022)
+	m, err := g.View(false).Match(MatchSelector{MatchID: &id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Players) != 32 || len(m.UnusedSubstitutes) != 12 {
+		t.Fatalf("%d players, %d unused; want 32 and 12", len(m.Players), len(m.UnusedSubstitutes))
+	}
+	byName := map[string]MatchPlayer{}
+	var xg [2]float64
+	for _, p := range m.Players {
+		byName[p.Player.Name] = p
+		if p.TeamIndex == 456 {
+			xg[0] += p.XG
+		} else {
+			xg[1] += p.XG
+		}
+	}
+	byrne := byName["Jack Byrne"]
+	if byrne.Rating != 8.19 || byrne.Player.ShirtNumber != 29 || !byrne.Started || byrne.TakenOff != nil {
+		t.Errorf("Byrne = %+v, want 8.19, shirt 29, started, taken_off unknown (Shamrock's side)", byrne)
+	}
+	if k := byName["Lirim Kastrati"]; k.TakenOff == nil || !*k.TakenOff || k.Rating != 6.31 {
+		t.Errorf("Kastrati = %+v, want taken off, 6.31", k)
+	}
+	if l := byName["Rokas Lekiatas"]; l.Started || l.TakenOff == nil || *l.TakenOff {
+		t.Errorf("Lekiatas = %+v, want came on and stayed on", l)
+	}
+	if math.Abs(xg[0]-1.98) > 0.03 || math.Abs(xg[1]-2.18) > 0.03 {
+		t.Errorf("xG %.2f–%.2f, want about 1.98–2.18 (per-player values are rounded)", xg[0], xg[1])
 	}
 }

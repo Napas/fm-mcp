@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/Napas/fm-mcp/internal/savefile"
 )
@@ -88,6 +89,8 @@ func Load(path string, opts LoadOptions) (*Game, error) {
 			fixtures = []savefile.Fixture{} // read, but none: not the same as unreadable
 		}
 	}
+	matches, matchWarnings := readMatches(a, fixtures)
+	info.Warnings = append(info.Warnings, matchWarnings...)
 	var tables *savefile.LeagueTables
 	if t, err := savefile.ReadLeagueTables(a, len(db.StageUIDs)); err != nil {
 		info.Warnings = append(info.Warnings, fmt.Sprintf("league tables unavailable: %v", err))
@@ -97,7 +100,7 @@ func Load(path string, opts LoadOptions) (*Game, error) {
 	raw, err := savefile.ReadTactics(a)
 	tactics, warnings := checkTactics(raw, err, info.ManagerTeamIndex)
 	info.Warnings = append(info.Warnings, warnings...)
-	return NewGame(info, db.Players, w, PlayerExtras{Scouted: scouted, Season: records, Tactics: tactics, Transfers: transfers, WorkPermits: permits, Fixtures: fixtures, Tables: tables, LeagueStages: db.LeagueStageCount}), nil
+	return NewGame(info, db.Players, w, PlayerExtras{Scouted: scouted, Season: records, Tactics: tactics, Transfers: transfers, WorkPermits: permits, Fixtures: fixtures, Matches: matches, Tables: tables, LeagueStages: db.LeagueStageCount}), nil
 }
 
 // readTransfers and readWorkPermits are swapped in tests.
@@ -375,4 +378,17 @@ func buildWarning(dbVersion uint16) string {
 		return ""
 	}
 	return fmt.Sprintf("database version %d has not been checked; player values may be decoded wrongly", dbVersion)
+}
+
+// readMatches reads the match objects when some result has a match id (FM27
+// saves), with warnings about objects it could not read.
+func readMatches(a *savefile.Archive, fixtures []savefile.Fixture) ([]savefile.MatchObject, []string) {
+	if !slices.ContainsFunc(fixtures, func(f savefile.Fixture) bool { return f.Result.HasMatchID() }) {
+		return nil, nil
+	}
+	objs, err := savefile.ReadMatchObjects(a)
+	if err != nil {
+		return nil, []string{fmt.Sprintf("match player data unavailable (get_match shows goals only): %v", err)}
+	}
+	return objs, nil
 }
