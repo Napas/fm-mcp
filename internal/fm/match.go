@@ -52,6 +52,34 @@ type Match struct {
 	// MatchDataStored.
 	Players           []MatchPlayer      `json:"players,omitempty"`
 	UnusedSubstitutes []UnusedSubstitute `json:"unused_substitutes,omitempty"`
+	// TeamStats are the home and away totals when stored.
+	TeamStats []TeamMatchStats `json:"team_stats,omitempty"`
+}
+
+// TeamMatchStats is a side's totals in a match.
+type TeamMatchStats struct {
+	TeamIndex       int64  `json:"team_index"`
+	Team            string `json:"team,omitempty"`
+	Passes          int    `json:"passes"` // attempted
+	PassesCompleted int    `json:"passes_completed"`
+	// PassesCompletedByThird is nil when the save does not split them.
+	PassesCompletedByThird *ThirdPasses `json:"passes_completed_by_third,omitempty"`
+	Tackles                int          `json:"tackles"` // attempted
+	TacklesWon             int          `json:"tackles_won"`
+	Headers                int          `json:"headers"` // attempted
+	HeadersWon             int          `json:"headers_won"`
+	ShotsBlocked           int          `json:"shots_blocked"` // the side's own shots that were blocked
+	ClearCutChances        int          `json:"clear_cut_chances"`
+	Corners                int          `json:"corners"`
+	Fouls                  int          `json:"fouls"`
+	YellowCards            int          `json:"yellow_cards"`
+}
+
+// ThirdPasses splits completed passes by the third they were played in.
+type ThirdPasses struct {
+	Own    int `json:"own_third"`
+	Middle int `json:"middle_third"`
+	Final  int `json:"final_third"`
 }
 
 // UnusedSubstitute is a squad member who did not play.
@@ -162,12 +190,13 @@ func (g *Game) match(s storedFixture) Match {
 	}
 	if m.MatchData == MatchDataStored {
 		m.Players, m.UnusedSubstitutes = g.matchPlayerLines(s)
+		m.TeamStats = g.teamStats(s)
 	}
 	return m
 }
 
 func (g *Game) matchPlayerLines(s storedFixture) ([]MatchPlayer, []UnusedSubstitute) {
-	records := g.matchPlayers[int64(s.Result.MatchID)]
+	records := g.matchObjects[int64(s.Result.MatchID)].Players
 	known := takenOffKnown(records)
 	var played []MatchPlayer
 	var unused []UnusedSubstitute
@@ -214,14 +243,14 @@ func (g *Game) matchData(r *savefile.FixtureResult) (*int64, MatchDataStatus) {
 		return nil, MatchDataQuickSimulated
 	}
 	id := int64(r.MatchID)
-	if g.matchPlayers == nil {
+	if g.matchObjects == nil {
 		return &id, MatchDataPlayersUnreadable
 	}
-	players, ok := g.matchPlayers[id]
+	obj, ok := g.matchObjects[id]
 	switch {
 	case !ok:
 		return &id, MatchDataPruned
-	case players == nil:
+	case obj.Players == nil:
 		return &id, MatchDataPlayersUnreadable
 	}
 	return &id, MatchDataStored
@@ -237,4 +266,29 @@ func (s storedFixture) sideTeam(side uint8) (int64, bool) {
 		return int64(s.Away), true
 	}
 	return 0, false
+}
+
+// teamStats returns the home and away totals of stored match s; nil when
+// they were not read.
+func (g *Game) teamStats(s storedFixture) []TeamMatchStats {
+	teams := g.matchObjects[int64(s.Result.MatchID)].TeamStats
+	if teams == nil {
+		return nil
+	}
+	out := make([]TeamMatchStats, len(teams))
+	for side := range uint8(len(teams)) {
+		t := teams[side]
+		team, _ := s.sideTeam(side)
+		out[side] = TeamMatchStats{
+			TeamIndex: team, Team: g.world.teamName(team),
+			Passes: int(t.Passes), PassesCompleted: int(t.PassesCompleted),
+			Tackles: int(t.Tackles), TacklesWon: int(t.TacklesWon), Headers: int(t.Headers), HeadersWon: int(t.HeadersWon),
+			ShotsBlocked: int(t.ShotsBlocked), ClearCutChances: int(t.ClearCutChances), Corners: int(t.Corners),
+			Fouls: int(t.Fouls), YellowCards: int(t.YellowCards),
+		}
+		if th := t.PassesCompletedByThird; th != nil {
+			out[side].PassesCompletedByThird = &ThirdPasses{Own: int(th[0]), Middle: int(th[1]), Final: int(th[2])}
+		}
+	}
+	return out
 }

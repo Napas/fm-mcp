@@ -272,3 +272,32 @@ func TestMatchByIDKeepsFirstFixture(t *testing.T) {
 		t.Errorf("match = %v, %v; want the 2025-08-01 result", m.Date, err)
 	}
 }
+
+func TestMatchTeamStats(t *testing.T) {
+	teams := [2]savefile.TeamStats{
+		{Passes: 468, PassesCompleted: 402, PassesCompletedByThird: &[3]uint16{118, 215, 69}, Tackles: 6, TacklesWon: 4, Headers: 26, HeadersWon: 16, ShotsBlocked: 1, ClearCutChances: 5, Corners: 6, Fouls: 13, YellowCards: 3},
+		{Passes: 500, PassesCompleted: 435, Tackles: 12, TacklesWon: 7, Headers: 25, HeadersWon: 8, ShotsBlocked: 4, ClearCutChances: 3, Corners: 4, Fouls: 7, YellowCards: 2},
+	}
+	g := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 92, true), squad(1, 200, false)...), TeamStats: &teams})
+	id := int64(7)
+	m, err := g.View(false).Match(MatchSelector{MatchID: &id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []TeamMatchStats{
+		{TeamIndex: 1, Team: "Home FC", Passes: 468, PassesCompleted: 402, PassesCompletedByThird: &ThirdPasses{Own: 118, Middle: 215, Final: 69},
+			Tackles: 6, TacklesWon: 4, Headers: 26, HeadersWon: 16, ShotsBlocked: 1, ClearCutChances: 5, Corners: 6, Fouls: 13, YellowCards: 3},
+		{TeamIndex: 2, Team: "Away FC", Passes: 500, PassesCompleted: 435, // no split: left out
+			Tackles: 12, TacklesWon: 7, Headers: 25, HeadersWon: 8, ShotsBlocked: 4, ClearCutChances: 3, Corners: 4, Fouls: 7, YellowCards: 2},
+	}
+	if !reflect.DeepEqual(m.TeamStats, want) {
+		t.Errorf("team stats = %+v\nwant %+v", m.TeamStats, want)
+	}
+	noTeams := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 92, true), squad(1, 200, false)...)})
+	if m, _ := noTeams.View(false).Match(MatchSelector{MatchID: &id}); m.TeamStats != nil || len(m.Players) == 0 {
+		t.Errorf("without team stats: %+v, want players and no team_stats", m.TeamStats)
+	}
+	if !slices.Contains(noTeams.Info.Warnings, "match team stats not read: 1") {
+		t.Errorf("warnings = %q, want the missing team stats counted", noTeams.Info.Warnings)
+	}
+}

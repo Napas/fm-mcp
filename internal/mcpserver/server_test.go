@@ -2420,7 +2420,8 @@ func fixturesHarness(t *testing.T) *harness {
 		info := fm.Info{SaveName: filepath.Base(path), Date: gameDate, ManagerTeamIndex: 547}
 		vicario := raw(1, "Guglielmo", "Vicario", 547, 144, 0)
 		vicario.Index = 1 // a home starter in match 5
-		return fm.NewGame(info, []savefile.Player{vicario}, w, fm.PlayerExtras{Fixtures: fixtures, Matches: []savefile.MatchObject{{MatchID: 5, Players: harnessSquads()}}}), nil
+		teams := [2]savefile.TeamStats{{Passes: 468, PassesCompleted: 402, PassesCompletedByThird: &[3]uint16{118, 215, 69}, Corners: 6}, {Passes: 500, PassesCompleted: 435, Corners: 4}}
+		return fm.NewGame(info, []savefile.Player{vicario}, w, fm.PlayerExtras{Fixtures: fixtures, Matches: []savefile.MatchObject{{MatchID: 5, Players: harnessSquads(), TeamStats: &teams}}}), nil
 	}}))
 }
 
@@ -2531,6 +2532,20 @@ func TestGetPlayerMatchesIsExplained(t *testing.T) {
 	}
 }
 
+func TestGetMatchTeamStats(t *testing.T) {
+	h := fixturesHarness(t)
+
+	text := h.rawJSON("get_match", map[string]any{"match_id": 5})
+	for _, want := range []string{`"team_stats"`, `"passes_completed_by_third":{"final_third":69,"middle_third":215,"own_third":118}`, `"corners":4`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("get_match output lacks %s: %s", want, text)
+		}
+	}
+	if strings.Count(text, "passes_completed_by_third") != 1 {
+		t.Errorf("the away side has no split, so only one passes_completed_by_third: %s", text)
+	}
+}
+
 func TestGetMatchErrors(t *testing.T) {
 	h := fixturesHarness(t)
 
@@ -2559,7 +2574,7 @@ func TestGetMatchIsExplained(t *testing.T) {
 	for _, tool := range tools.Tools {
 		desc[tool.Name] = tool.Description
 	}
-	for _, want := range []string{"match_id", "stored", "pruned", "goals_only", "quick_simulated", "unsupported_build", "own_goal", "missed_penalty", "shootout_scored", "unknown_", "unnamed_player", "inference", "players", "rating", "xg", "started", "taken_off", "unused_substitutes"} {
+	for _, want := range []string{"match_id", "stored", "pruned", "goals_only", "quick_simulated", "unsupported_build", "own_goal", "missed_penalty", "shootout_scored", "unknown_", "unnamed_player", "inference", "players", "rating", "xg", "started", "taken_off", "unused_substitutes", "team_stats", "passes_completed_by_third", "clear_cut_chances", "shots_blocked", "yellow_cards"} {
 		if !strings.Contains(desc["get_match"], want) {
 			t.Errorf("get_match description lacks %q", want)
 		}
