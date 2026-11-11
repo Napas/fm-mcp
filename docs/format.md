@@ -37,4 +37,5 @@ Unset dates are saved in 1900. Seen: joined dates of 1900-01-01 on loanees and f
 | [`matches.md`](format/matches.md) | 27.0.0 match objects: match_stats_cfg.dat packs and retention, match object section map, player record (rating, xG, who played), .scm files | match_stats_cfg.dat; Match object; .scm files |
 | [`competitions.md`](format/competitions.md) | competition keys (ACTUAL_COMP_ID), stage names, league tables in comp files, 27.0.0 row tail | Competition keys (ACTUAL_COMP_ID); Stage names (STAGE_NAME); League tables (LEAGUE_STAGE rows); 27.0.0 league tables |
 | [`rules.md`](format/rules.md) | tagged-tree format, nations' rule groups and squad rules, competitions' rule groups | 27.0.0 tagged trees; 27.0.0 competition rules |
+| [`scouting.md`](format/scouting.md) | scout_man.dat player list objects, 27.0.0 shortlists | 27.0.0 shortlists |
 | [`language-db.md`](format/language-db.md) | lang_db.dat container, nation/injury/competition names by uid rank | Language database (names) |

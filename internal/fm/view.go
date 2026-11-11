@@ -508,6 +508,7 @@ type query struct {
 	interest       InterestKind       // "" without the interest option
 	minPer90       func(*Player) bool // nil without MinPer90
 	homegrown      func(*Player) bool // nil without TrainedAtTeamIndex and TrainedInNationIndex
+	shortlist      map[*Player]bool   // nil without Shortlist
 	minMinutes     int                // MinSeasonMinutes, else per90DefaultMinutes in a per-90 search
 	// per90 lists the per-90 stats rows carry: the sort's, then MinPer90's.
 	per90                []string
@@ -543,6 +544,9 @@ func (g *Game) compile(f Filter) (query, error) {
 		return query{}, fmt.Errorf("%w: interest %q; valid values: %s, %s, %s", ErrInvalidFilter, f.Interest, InterestTransfer, InterestLoan, InterestTransferOrLoan)
 	}
 	q.homegrown = g.homegrownFilter(f)
+	if q.shortlist, err = g.shortlistFilter(f.Shortlist); err != nil {
+		return query{}, err
+	}
 	if q.women, err = genderFilter(f.Gender); err != nil {
 		return query{}, err
 	}
@@ -559,7 +563,7 @@ func (g *Game) compile(f Filter) (query, error) {
 			return query{}, fmt.Errorf("%w: no club team matches %q; use find_clubs, or team_index for a national team%s", ErrInvalidFilter, f.Club, exampleTeams(q.national))
 		}
 	}
-	if f.Gender == "" && f.TeamIndex == nil && f.ContractedTeamIndex == nil && f.Club == "" && f.TrainedAtTeamIndex == nil {
+	if f.Gender == "" && f.TeamIndex == nil && f.ContractedTeamIndex == nil && f.Club == "" && f.TrainedAtTeamIndex == nil && f.Shortlist == "" {
 		q.women = g.managerWomen()
 	}
 	if f.ContractExpiresBy != "" {
@@ -902,7 +906,8 @@ func (q query) judge(x seen) verdict {
 		!q.joinedBy.IsZero() && (p.JoinedClub == nil || p.JoinedClub.After(q.joinedBy)),
 		q.minMinutes > 0 && (p.Season == nil || p.Season.Minutes < q.minMinutes),
 		q.minPer90 != nil && !q.minPer90(p),
-		q.homegrown != nil && !q.homegrown(p):
+		q.homegrown != nil && !q.homegrown(p),
+		q.shortlist != nil && !q.shortlist[p]:
 		return rejected
 	}
 	var j judgement
