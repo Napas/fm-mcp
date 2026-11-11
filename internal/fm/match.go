@@ -66,11 +66,26 @@ type MatchPlayer struct {
 	Player    TacticPlayer `json:"player"` // with the shirt number worn
 	TeamIndex int64        `json:"team_index"`
 	Team      string       `json:"team,omitempty"`
-	Started   bool         `json:"started"` // false: came on as a substitute
+	Performance
+}
+
+// Performance is how a player who played did in a match.
+type Performance struct {
+	Started bool `json:"started"` // false: came on as a substitute
 	// TakenOff is nil when the records do not tell (see takenOffKnown).
 	TakenOff *bool   `json:"taken_off,omitempty"`
 	Rating   float64 `json:"rating"` // e.g. 8.19
 	XG       float64 `json:"xg"`     // expected goals, to 2 decimals
+}
+
+// performance reads a played record; known says whether its side's records
+// show who was taken off.
+func performance(r savefile.MatchPlayer, known bool) Performance {
+	p := Performance{Started: r.Started(), Rating: float64(r.Rating) / 100, XG: math.Round(float64(r.XG)*100) / 100}
+	if known {
+		p.TakenOff = ptr(r.EndPositions == 0)
+	}
+	return p
 }
 
 // MatchEvent is a goal, a missed penalty or a shoot-out kick.
@@ -167,14 +182,7 @@ func (g *Game) matchPlayerLines(s storedFixture) ([]MatchPlayer, []UnusedSubstit
 			unused = append(unused, UnusedSubstitute{Player: person, TeamIndex: team, Team: g.world.teamName(team)})
 			continue
 		}
-		line := MatchPlayer{
-			Player: person, TeamIndex: team, Team: g.world.teamName(team), Started: r.Started(),
-			Rating: float64(r.Rating) / 100, XG: math.Round(float64(r.XG)*100) / 100,
-		}
-		if known[r.Side] {
-			line.TakenOff = ptr(r.EndPositions == 0)
-		}
-		played = append(played, line)
+		played = append(played, MatchPlayer{Player: person, TeamIndex: team, Team: g.world.teamName(team), Performance: performance(r, known[r.Side])})
 	}
 	return played, unused
 }

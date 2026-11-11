@@ -201,7 +201,7 @@ func TestMatchPlayers(t *testing.T) {
 	// Home persons 92..104: 100 (Vicario) starts in shirt 9, 102 (Bergvall)
 	// is taken off, 103 came on, 104 unused.
 	vicario := m.Players[8]
-	if !reflect.DeepEqual(vicario, MatchPlayer{Player: TacticPlayer{UID: 1, Name: "Guglielmo Vicario", ShirtNumber: 9}, TeamIndex: 1, Team: "Home FC", Started: true, TakenOff: &no, Rating: 6.9, XG: 0.13}) {
+	if !reflect.DeepEqual(vicario, MatchPlayer{Player: TacticPlayer{UID: 1, Name: "Guglielmo Vicario", ShirtNumber: 9}, TeamIndex: 1, Team: "Home FC", Performance: Performance{Started: true, TakenOff: &no, Rating: 6.9, XG: 0.13}}) {
 		t.Errorf("Vicario = %+v", vicario)
 	}
 	if b := m.Players[10]; b.Player.Name != "Lucas Bergvall" || b.TakenOff == nil || !*b.TakenOff {
@@ -244,6 +244,11 @@ func TestReadMatchesSkipsSavesWithoutMatchIDs(t *testing.T) {
 	objs, warnings := readMatches(nil, []savefile.Fixture{fm26Fixture, upcomingMatchF})
 	if objs != nil || warnings != nil {
 		t.Errorf("readMatches = %v, %v; want nothing read", objs, warnings)
+	}
+	// An FM27 save before any match played in detail: read, and empty.
+	objs, warnings = readMatches(nil, []savefile.Fixture{quickFixture, upcomingMatchF})
+	if objs == nil || len(objs) != 0 || warnings != nil {
+		t.Errorf("readMatches = %v, %v; want an empty, non-nil list", objs, warnings)
 	}
 }
 
