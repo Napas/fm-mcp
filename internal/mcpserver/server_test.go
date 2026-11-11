@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -467,7 +468,7 @@ func TestPrompts(t *testing.T) {
 		names = append(names, p.Name)
 	}
 	slices.Sort(names)
-	if !slices.Equal(names, []string{"contract_review", "scout_position", "squad_review"}) {
+	if !slices.Equal(names, []string{"contract_review", "scout_opponent", "scout_position", "squad_review"}) {
 		t.Errorf("prompts = %v", names)
 	}
 
@@ -482,6 +483,86 @@ func TestPrompts(t *testing.T) {
 
 	if _, err := h.session.GetPrompt(ctx, &mcp.GetPromptParams{Name: "scout_position"}); err == nil {
 		t.Error("scout_position without a position did not fail")
+	}
+}
+
+func TestScoutOpponentPrompt(t *testing.T) {
+	h := newHarness(t)
+	everyCase := []string{"game_overview", "status played and limit 5", "get_match with the match_id of each result that has one", "get_last_lineup", "get_player_matches with their uid", "unnamed", "get_tactic", "not stored",
+		string(fm.MatchDataStored), string(fm.MatchDataPruned), string(fm.MatchDataPlayersUnreadable), string(fm.MatchDataQuickSimulated)}
+	for _, tt := range []struct {
+		name     string
+		opponent string
+		want     []string
+		not      []string
+	}{
+		{"next opponent", "", []string{"status upcoming", "limit 1", "ask me for the opponent"}, []string{"find_clubs"}},
+		{"blank is the next opponent", "  ", []string{"status upcoming"}, []string{"find_clubs"}},
+		{"team index", " 42 ", []string{"team_index 42"}, []string{"find_clubs", "status upcoming"}},
+		{"signed index is normalised", "+042", []string{"team_index 42."}, []string{"find_clubs", "+042"}},
+		{"negative number is a name", "-1", []string{`find_clubs with name "-1"`}, []string{"team_index -1"}},
+		{"club name", "FK Banga", []string{`find_clubs with name "FK Banga"`, "first team"}, []string{"status upcoming"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			args := map[string]string{}
+			if tt.opponent != "" {
+				args["opponent"] = tt.opponent
+			}
+			res, err := h.session.GetPrompt(context.Background(), &mcp.GetPromptParams{Name: "scout_opponent", Arguments: args})
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := res.Messages[0].Content.(*mcp.TextContent).Text
+			for _, w := range append(tt.want, everyCase...) {
+				if !strings.Contains(text, w) {
+					t.Errorf("text lacks %q: %q", w, text)
+				}
+			}
+			for _, n := range tt.not {
+				if strings.Contains(text, n) {
+					t.Errorf("text has %q: %q", n, text)
+				}
+			}
+		})
+	}
+}
+
+// TestPromptsNameRegisteredTools fails when a prompt names an unregistered tool.
+func TestPromptsNameRegisteredTools(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	tools, err := h.session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registered := map[string]bool{}
+	for _, tool := range tools.Tools {
+		registered[tool.Name] = true
+	}
+	prompts, err := h.session.ListPrompts(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	toolName := regexp.MustCompile(`\b(?:get|find|search|squad|compare|game|best|set|load|list)_[a-z_]+\b`)
+	// Each set reaches a different branch.
+	argSets := []map[string]string{
+		{"position": "DL"},
+		{"position": "DL", "opponent": "FK Banga"},
+		{"position": "DL", "opponent": "42"},
+	}
+	for _, p := range prompts.Prompts {
+		for _, args := range argSets {
+			res, err := h.session.GetPrompt(ctx, &mcp.GetPromptParams{Name: p.Name, Arguments: args})
+			if err != nil {
+				t.Fatalf("%s %v: %v", p.Name, args, err)
+			}
+			text := res.Messages[0].Content.(*mcp.TextContent).Text
+			for _, name := range toolName.FindAllString(text, -1) {
+				if !registered[name] {
+					t.Errorf("%s %v names %q, which is not a tool", p.Name, args, name)
+				}
+			}
+		}
 	}
 }
 

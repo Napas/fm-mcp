@@ -54,7 +54,7 @@ Knowledge is the larger of the level stored in the save and a reputation baselin
 
 ## Tools
 
-Prompts `squad_review`, `scout_position` and `contract_review` give ready-made assistant-manager requests.
+Prompts `squad_review`, `scout_position`, `contract_review` and `scout_opponent` give ready-made assistant-manager requests.
 
 | Tool | What it does |
 |------|--------------|
