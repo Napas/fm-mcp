@@ -380,10 +380,14 @@ func buildWarning(dbVersion uint16) string {
 	return fmt.Sprintf("database version %d has not been checked; player values may be decoded wrongly", dbVersion)
 }
 
-// readMatches reads the match objects when some result has a match id (FM27
-// saves), with warnings about objects it could not read.
+// readMatches reads the match objects when some result has a match id, with
+// warnings when it cannot. It returns an empty list for FM27 results without
+// match ids (none to read) and nil for FM26 saves (none decoded).
 func readMatches(a *savefile.Archive, fixtures []savefile.Fixture) ([]savefile.MatchObject, []string) {
 	if !slices.ContainsFunc(fixtures, func(f savefile.Fixture) bool { return f.Result.HasMatchID() }) {
+		if slices.ContainsFunc(fixtures, func(f savefile.Fixture) bool { return f.Result != nil && f.Result.Decoded }) {
+			return []savefile.MatchObject{}, nil // FM27, no match played in detail yet: none to read
+		}
 		return nil, nil
 	}
 	objs, err := savefile.ReadMatchObjects(a)

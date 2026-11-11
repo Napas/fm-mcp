@@ -750,3 +750,37 @@ func TestLoadTestSave27MatchPlayers(t *testing.T) {
 		t.Errorf("xG %.2f–%.2f, want about 1.98–2.18 (per-player values are rounded)", xg[0], xg[1])
 	}
 }
+
+// TestLoadTestSave27PlayerMatches checks Renan Oliveira's match log on
+// 2026-07-16 against the 07-15 match report and his TOPLYGA season totals.
+func TestLoadTestSave27PlayerMatches(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27HomegrownPath, LoadOptions{GameDBDir: gameDBDir()})
+	const renan = 19320257
+	l, err := g.View(false).PlayerMatches(renan, PlayerMatchFilter{Limit: 200})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Player.Name != "Renan Oliveira" || l.Total != 26 {
+		t.Fatalf("player %+v, %d matches; want Renan Oliveira and 26", l.Player, l.Total)
+	}
+	if m := l.Matches[0]; m.MatchID != 1022 || m.Opponent != "Shamrock Rovers" || m.Home || !m.Started || m.Rating != 7.93 || m.Goals != 2 {
+		t.Errorf("newest = %+v, want the 07-15 match at Shamrock: started, 7.93, 2 goals", m)
+	}
+	var starts, subs, goals int
+	for _, m := range l.Matches {
+		if m.Competition != "TOPLYGA" {
+			continue
+		}
+		if m.Started {
+			starts++
+		} else {
+			subs++
+		}
+		goals += m.Goals
+	}
+	p := g.byUID[renan]
+	league := g.auxOf(p).season.League
+	if league == nil || starts != int(league.Starts) || subs != int(league.SubApps) || goals != int(league.Goals) {
+		t.Errorf("TOPLYGA from matches: %d starts, %d subs, %d goals; season totals %+v", starts, subs, goals, league)
+	}
+}

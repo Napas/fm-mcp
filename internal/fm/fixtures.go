@@ -126,8 +126,8 @@ func (v View) Fixtures(f FixtureFilter) (FixtureList, error) {
 	if f.Status != "" && f.Status != statusPlayed && f.Status != statusUpcoming {
 		return FixtureList{}, fmt.Errorf("%w: status %q; use played or upcoming", ErrInvalidFilter, f.Status)
 	}
-	if !f.From.IsZero() && !f.To.IsZero() && f.From.After(f.To) {
-		return FixtureList{}, fmt.Errorf("%w: from %s is after to %s", ErrInvalidFilter, f.From.Format(time.DateOnly), f.To.Format(time.DateOnly))
+	if err := checkDateRange(f.From, f.To); err != nil {
+		return FixtureList{}, err
 	}
 	team, err := v.g.queryTeam(f.Team, f.Competition)
 	if err != nil {
@@ -136,11 +136,7 @@ func (v View) Fixtures(f FixtureFilter) (FixtureList, error) {
 	if !v.g.hasFixtures {
 		return FixtureList{}, ErrFixturesUnavailable
 	}
-	limit := f.Limit
-	if limit <= 0 {
-		limit = defaultFixtureLimit
-	}
-	limit = min(limit, maxLimit)
+	limit := listLimit(f.Limit)
 	var results, upcoming []storedFixture
 	for _, s := range v.g.fixtures {
 		if !f.matches(s, team) {
@@ -169,6 +165,28 @@ func (g *Game) renderFixtures(ss []storedFixture) []Fixture {
 	return out
 }
 
+// checkDateRange rejects a from date after a to date; zero dates are open.
+func checkDateRange(from, to time.Time) error {
+	if !from.IsZero() && !to.IsZero() && from.After(to) {
+		return fmt.Errorf("%w: from %s is after to %s", ErrInvalidFilter, from.Format(time.DateOnly), to.Format(time.DateOnly))
+	}
+	return nil
+}
+
+// inDateRange reports whether t is within from and to, both inclusive; zero
+// dates are open.
+func inDateRange(t, from, to time.Time) bool {
+	return (from.IsZero() || !t.Before(from)) && (to.IsZero() || !t.After(to))
+}
+
+// listLimit is a list limit: 10 when unset, at most maxLimit.
+func listLimit(n int) int {
+	if n <= 0 {
+		return defaultFixtureLimit
+	}
+	return min(n, maxLimit)
+}
+
 func (f FixtureFilter) matches(s storedFixture, team *int64) bool {
 	if team != nil && int64(s.Home) != *team && int64(s.Away) != *team {
 		return false
@@ -176,7 +194,7 @@ func (f FixtureFilter) matches(s storedFixture, team *int64) bool {
 	if c := f.Competition; c != nil && s.label.Index != *c && (s.label.SecondIndex < 0 || s.label.SecondIndex != *c) {
 		return false
 	}
-	return (f.From.IsZero() || !s.date.Before(f.From)) && (f.To.IsZero() || !s.date.After(f.To))
+	return inDateRange(s.date, f.From, f.To)
 }
 
 func (g *Game) fixture(s storedFixture) Fixture {

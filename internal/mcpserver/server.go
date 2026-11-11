@@ -82,6 +82,7 @@ func New(opts Options) *mcp.Server {
 	addTool(srv, &mcp.Tool{Name: "get_last_lineup", Description: "A team's lineup, formation and roles in its most recent match, and who it played: opponent, mentality (checked in game for the manager's team only), the shape in and out of possession (e.g. 4-2-3-1), the 11 slots with in- and out-of-possession position and role and the player in each with his shirt_number, and the bench. Use it to scout an opponent; get_fixtures gives the next one. Roles have no duty and the match date is not known (get_fixtures has it). Out-of-possession positions are paired as the game's match report shows (checked in game for one FM27 match); get_tactic shows the current tactic's pairing, which may differ. A player marked unnamed_player is a person the save does not decode as a player, so it has no name: 58% of filled XI places on the 12-09 save, mostly in women's teams and clubs outside Europe; big European men's clubs are complete. Fog of war does not hide it. Defaults to the human manager's first team. Names of roles FM26 renamed are guesses; the server instructions list them."}, withGame(s, getLastLineup))
 	addTool(srv, &mcp.Tool{Name: "get_fixtures", Description: fixturesDescription}, withGame(s, getFixtures))
 	addTool(srv, &mcp.Tool{Name: "get_match", Description: matchDescription}, withGame(s, getMatch))
+	addTool(srv, &mcp.Tool{Name: "get_player_matches", Description: playerMatchesDescription}, withGame(s, getPlayerMatches))
 	addTool(srv, &mcp.Tool{Name: "get_table", Description: tableDescription}, withGame(s, getTable))
 	addTool(srv, &mcp.Tool{Name: "get_competition_rules", Description: rulesDescription}, withGame(s, getCompetitionRules))
 	addTool(srv, &mcp.Tool{Name: "search_players", Description: "Scout players with filters: position (or several in positions; min_position_rating replaces the default 15; with position or positions, rows carry position_ratings at them), age, current/potential ability, reputation (min_reputation, max_reputation), team or club, contracted team, nation, EU status (eu_national), gender, value, wage, release clause, expiring contract, months at the current club, injuries, height, traits, personality, transfer_status (transfer_listed, loan_listed, unavailable_for_loan; rows carry it, never hidden by fog of war) and exclude_transfer_status, homegrown status (trained_at_team_index, trained_in_nation_index; rows carry trained_at_clubs and trained_in_nations then), minimum attribute values (preferred foot: e.g. {\"LeftFoot\": 15}) and max_attributes. Returns the total number of matches. Sorted by current ability unless sort_by is set; sort_by also takes this season's club stats (season_goals, season_average_rating…) and club stats per 90 minutes (per90_progressive_passes…), with min_season_minutes to leave out players with few minutes; min_per90 filters on them, and rows carry the values in per90. With role (an in-possession role offered at the position, with position), rows carry role_ability and are ranked by it unless sort_by is set; min_role_ability sets a floor. out_of_possession_role does the same for an out-of-possession role (out_of_possession_role_ability, min_out_of_possession_role_ability); with both roles, rows rank by role_ability. Without a team, club or trained_at_team_index filter, gender defaults to that of the manager's team. With fog of war on, filters match only values your scouts know, and players whose sort value is hidden or missing come last; needs_scouting counts players who pass every filter you can see but whose value for another filter is hidden; they may match once scouted. With interest (transfer, loan or transfer_or_loan), players who certainly won't join the manager's club are left out and counted in interest_dropped; kept rows carry interest."}, withGame(s, searchPlayers))
@@ -89,6 +90,8 @@ func New(opts Options) *mcp.Server {
 }
 
 const fixturesDescription = "Fixtures and results for a team or a competition. Without team_index or a competition, the human manager's first team. results are played matches, most recent first; upcoming are the rest, soonest first; each list holds up to limit (default 10, max 200), totals count all. Each fixture has the date, competition, stage (e.g. \"Playoffs – Semi Final – First Leg\"), home and away team with team_index, and for played matches the score after 90 minutes plus after_extra_time, penalties and aggregate when they apply. competition takes a name (an exact name wins; otherwise the error lists matches with competition_index). Fog of war does not hide fixtures. Played matches carry match_data: stored (goals and player ratings; FM27 saves), pruned (goals only: the game deleted the player records), goals_only (goals only: the player records could not be read), quick_simulated (score only) or unsupported_build (FM26 saves); match_id, when present, is get_match's key."
+
+const playerMatchesDescription = "One player's match log (FM27 saves): every stored match he played in, for any team (club, B or youth team, loan club, national team, friendlies), newest first; limit (default 10, max 200) and from/to dates (YYYY-MM-DD) narrow it, total counts all that fit. Each row: match_id (for get_match), date, competition, stage, team he played for, opponent, home, score (home side first), shirt_number, started (false: came on), taken_off (only when the save tells), rating (e.g. 8.19; FM shows one decimal), xg, goals (penalties included; shoot-out kicks are not goals), assists and own_goals (inference). Only matches whose player records are stored appear: the game deletes older records of minor matches (pruned in get_fixtures), and quick-simulated matches have none, so this is not a full career record; season totals are in get_player. A substitute who played only briefly may have a rating the game does not show (inference). Fog of war does not hide matches."
 
 const matchDescription = "One played match: score, competition, stage, date, home and away team, match_data, and its events (FM27 saves). Pick it by match_id (from get_fixtures), else by team_index and date (YYYY-MM-DD), else a team's last result; the human manager's first team by default. A match with a match_id lists in events, in match order, its goals and penalties with minute, added_minutes (e.g. 3 for 90+3), type, team_index and team (the side the event counts for), player (scorer or taker) and assist; no events means no goals. Types: goal, penalty (scored), own_goal (the player belongs to the other side; inference), missed_penalty (in play; inference), shootout_scored, shootout_missed; other types appear as unknown_N. With match_data stored, players lists everyone who played, home side first: player (with shirt_number), team_index, team, started (false: came on as a substitute), taken_off (only when the save tells: in some of the human's matches, and false throughout on a side that made no substitutions), rating (e.g. 8.19; FM shows one decimal) and xg; unused_substitutes lists the rest of each squad with team_index and team. A substitute who played only briefly may have a rating the game does not show (inference). pruned: the game has deleted the player records, so only goals remain (it deletes older records of minor matches; which ones and when is not known); goals_only: the player records could not be read; quick_simulated means the game simulated the match without detail, so only the score is stored; unsupported_build means the save's build (FM26) is not decoded. A player marked unnamed_player is a person the save does not decode as a player. Minutes, substitution times, cards and team stats are not available yet. Fog of war does not hide matches."
 
@@ -112,6 +115,7 @@ squad_roles ranks a team's players in every role, in and out of possession, at t
 get_last_lineup returns a team's most recent match (team_index; the manager's first team by default): opponent and opponent_team_index, mentality (checked in game for the manager's team only), in_possession_shape and out_of_possession_shape (players per row from defence to attack without the goalkeeper; wing-backs count with defensive midfielders), per slot the player and the in_possession and out_of_possession position and role, and the bench. Players carry shirt_number, the number worn, when the save has one. unnamed_player (here and in get_tactic) marks a person the save does not decode as a player: 58% of filled XI places on the 12-09 save, mostly in women's teams and clubs outside Europe. Use it to scout an opponent; get_fixtures names the next one. Roles have no duty, and the match date is not known. Out-of-possession positions are paired as the game's match report shows (checked in game for one FM27 match); get_tactic shows the current tactic's pairing, which may differ. Fog of war does not hide it.
 get_fixtures lists a team's or a competition's fixtures: results (most recent first) and upcoming (soonest first). stage labels knockout and playoff rounds as the game names them, e.g. "Playoffs – Semi Final – First Leg"; a two-division playoff also has second_competition. score is after 90 minutes; after_extra_time, penalties and aggregate appear when they apply. Competition names come from fixtures, a team's division, or the list an ambiguous name returns; pass competition_index to pick one. Played matches carry match_data: stored (goals and player ratings; FM27 saves), pruned (goals only: the game deleted the player records), goals_only (goals only: the player records could not be read), quick_simulated (score only) or unsupported_build (FM26 saves); match_id, when present, is what get_match takes.
 get_match returns one played match (match_id from get_fixtures, or team_index and date, or a team's last result; the manager's first team by default) with its goals, penalties and shoot-out kicks in match order: minute, added_minutes, type, the team it counts for, player and assist. own_goal (the player belongs to the other side) and missed_penalty are inferences; say so when you use them. Other types appear as unknown_N. A match with a match_id and no events had no goals. With match_data stored it also lists players who played (started or came on, taken_off when known, rating, xg) and unused_substitutes. For pruned and goals_only matches there are goals but no ratings; for quick_simulated matches only the score exists; do not guess scorers or ratings. Minutes, substitution times, cards and team stats are not available yet.
+get_player_matches returns one player's match log: every stored match he played in, any team, newest first (limit, from/to), with rating, xg, goals, assists, started and taken_off; own_goals are an inference, as in get_match. It covers only matches whose player records the game keeps, so it is not a full career record: use get_player for season totals. Use it for form and rotation questions.
 get_competition_rules returns a competition's squad rules (FM 27 saves only; default the manager's league), e.g. max_squad_size 30. Minimum or maximum is not stored; infer it from the rule's name and say so.
 get_table returns the stored tables of a competition or a team (by default the manager's league table), with stage names such as "Group A". Points are as the game stores them; never compute a table from results, and when get_table says none is stored, say so.
 not_for_sale means the club will not sell the player; the save then has no value for him.
@@ -945,10 +949,25 @@ func (in tableIn) competition(v fm.View) (*int64, error) {
 	return &i, nil
 }
 
+// dateRangeIn is an inclusive date range input; empty ends leave it open.
+type dateRangeIn struct {
+	From string `json:"from,omitempty" jsonschema:"first date, YYYY-MM-DD"`
+	To   string `json:"to,omitempty" jsonschema:"last date, YYYY-MM-DD"`
+}
+
+func (in dateRangeIn) parse() (from, to time.Time, err error) {
+	if from, err = parseDay("from", in.From); err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	if to, err = parseDay("to", in.To); err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return from, to, nil
+}
+
 type fixturesIn struct {
 	tableIn
-	From   string `json:"from,omitempty" jsonschema:"first date, YYYY-MM-DD"`
-	To     string `json:"to,omitempty" jsonschema:"last date, YYYY-MM-DD"`
+	dateRangeIn
 	Status string `json:"status,omitempty" jsonschema:"played or upcoming; both when empty"`
 	Limit  int    `json:"limit,omitempty" jsonschema:"per list; default 10, max 200"`
 }
@@ -967,11 +986,7 @@ func getFixtures(v fm.View, in fixturesIn) (fixturesOut, error) {
 	if err != nil {
 		return fixturesOut{}, err
 	}
-	from, err := parseDay("from", in.From)
-	if err != nil {
-		return fixturesOut{}, err
-	}
-	to, err := parseDay("to", in.To)
+	from, to, err := in.parse()
 	if err != nil {
 		return fixturesOut{}, err
 	}
@@ -1009,6 +1024,32 @@ func getMatch(v fm.View, in matchIn) (matchOut, error) {
 		return matchOut{}, err
 	}
 	return matchOut{Match: m}, nil
+}
+
+type playerMatchesIn struct {
+	UID uint32 `json:"uid" jsonschema:"the player's uid from find_players, search_players or get_squad"`
+	dateRangeIn
+	Limit int `json:"limit,omitempty" jsonschema:"default 10, max 200"`
+}
+
+type playerMatchesOut struct {
+	saveNotes
+	fm.PlayerMatchList
+}
+
+func getPlayerMatches(v fm.View, in playerMatchesIn) (playerMatchesOut, error) {
+	from, to, err := in.parse()
+	if err != nil {
+		return playerMatchesOut{}, err
+	}
+	l, err := v.PlayerMatches(in.UID, fm.PlayerMatchFilter{From: from, To: to, Limit: in.Limit})
+	if errors.Is(err, fm.ErrMatchPlayersUnavailable) {
+		return playerMatchesOut{}, errors.New("the save has no readable match player records: FM26 saves have none, a new FM27 career has none until its first match is played, and game_overview's warnings say why when they could not be read")
+	}
+	if err != nil {
+		return playerMatchesOut{}, err
+	}
+	return playerMatchesOut{PlayerMatchList: l}, nil
 }
 
 // parseDay parses a YYYY-MM-DD input named field; zero when empty.

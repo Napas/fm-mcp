@@ -2418,7 +2418,9 @@ func fixturesHarness(t *testing.T) *harness {
 	}
 	return connect(t, New(Options{DefaultSave: "/x/a.fm", Logf: func(string, ...any) {}, Load: func(path string) (*fm.Game, error) {
 		info := fm.Info{SaveName: filepath.Base(path), Date: gameDate, ManagerTeamIndex: 547}
-		return fm.NewGame(info, nil, w, fm.PlayerExtras{Fixtures: fixtures, Matches: []savefile.MatchObject{{MatchID: 5, Players: harnessSquads()}}}), nil
+		vicario := raw(1, "Guglielmo", "Vicario", 547, 144, 0)
+		vicario.Index = 1 // a home starter in match 5
+		return fm.NewGame(info, []savefile.Player{vicario}, w, fm.PlayerExtras{Fixtures: fixtures, Matches: []savefile.MatchObject{{MatchID: 5, Players: harnessSquads()}}}), nil
 	}}))
 }
 
@@ -2472,6 +2474,60 @@ func TestGetMatch(t *testing.T) {
 	}
 	if list.Results[0].MatchID == nil || list.Upcoming[0].MatchData != "" {
 		t.Errorf("get_fixtures: match_id %v, upcoming match_data %q", list.Results[0].MatchID, list.Upcoming[0].MatchData)
+	}
+}
+
+func TestGetPlayerMatches(t *testing.T) {
+	h := fixturesHarness(t)
+
+	var got fm.PlayerMatchList
+	if res := h.call("get_player_matches", map[string]any{"uid": 1}, &got); res.IsError {
+		t.Fatalf("get_player_matches: %s", allText(res))
+	}
+	if got.Player.Name != "Guglielmo Vicario" || got.Total != 1 || len(got.Matches) != 1 {
+		t.Fatalf("got %+v, want Vicario's one match", got)
+	}
+	if m := got.Matches[0]; m.MatchID != 5 || !m.Home || m.Opponent != "Chelsea" || m.Rating != 7 || !m.Started || m.ShirtNumber != 1 {
+		t.Errorf("match = %+v", m)
+	}
+	for _, tt := range []struct {
+		args map[string]any
+		want string
+	}{
+		{map[string]any{"uid": 999}, "no player with uid 999"},
+		{map[string]any{"uid": 1, "from": "2025-08-02", "to": "2025-08-01"}, "after"},
+		{map[string]any{"uid": 1, "to": "1/8/2025"}, "YYYY-MM-DD"},
+	} {
+		if res := h.call("get_player_matches", tt.args, nil); !res.IsError || !strings.Contains(allText(res), tt.want) {
+			t.Errorf("get_player_matches %v: %s, want an error about %q", tt.args, allText(res), tt.want)
+		}
+	}
+	unread := connect(t, New(Options{DefaultSave: "/x/a.fm", Logf: func(string, ...any) {}, Load: func(path string) (*fm.Game, error) {
+		return fakeGame(path), nil
+	}}))
+	if res := unread.call("get_player_matches", map[string]any{"uid": 1}, nil); !res.IsError || !strings.Contains(allText(res), "FM27") {
+		t.Errorf("no match records: %s, want an error naming FM27 saves", allText(res))
+	}
+}
+
+func TestGetPlayerMatchesIsExplained(t *testing.T) {
+	h := newHarness(t)
+
+	tools, err := h.session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(tools.Tools, func(tool *mcp.Tool) bool { return tool.Name == "get_player_matches" })
+	if i < 0 {
+		t.Fatal("no get_player_matches tool")
+	}
+	for _, want := range []string{"newest first", "any team", "pruned", "rating", "xg", "goals", "assists", "own_goals (inference)", "shoot-out", "started", "taken_off", "limit", "Fog of war"} {
+		if !strings.Contains(tools.Tools[i].Description, want) {
+			t.Errorf("get_player_matches description lacks %q", want)
+		}
+	}
+	if text := h.session.InitializeResult().Instructions; !strings.Contains(text, "get_player_matches") || !strings.Contains(text, "own_goals are an inference") {
+		t.Error("instructions lack get_player_matches or its own_goals inference")
 	}
 }
 
