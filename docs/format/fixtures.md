@@ -73,10 +73,11 @@ Not checked in game. Not checked in code: the FM27 FIXTURE loader was not traced
 ## FIXTURE_RESULT — verified 26.2.0, 26.3.2 and 27.0.0 (bytes)
 
 ```
-u8 version 0x1c (26.x) or 0x1f (27.0.0), u32
+u8 version 0x1c (26.x) or 0x1f (27.0.0)
+u32 match id                             0xffffffff = none (27.0.0, see below)
 4 bytes home score, 4 bytes away score   [0] 90 minutes, [1] after extra time, [2] penalties, [3] aggregate; 0xff = none
 u32 attendance (guess: values like 62 500), u32, 4 × u8
-u32 n, n × 16-byte events                not decoded
+u32 n, n × 16-byte goal events           decoded for 27.0.0, see below
 ```
 
 27.0.0 keeps the layout (29 bytes before the events). All 209 results in the FM27 test save parse, and each is followed by a `0x1f` base. The first is a 2026-01-03 friendly (key 2895) between teams 16654 and 16587, `00 ff ff ff` / `01 ff ff ff`: 0–1.
@@ -85,9 +86,40 @@ Byte 3 is the aggregate after a second leg (KŽ, 4 second legs checked). Leeds 0
 
 Ground truth (in game, KŽ save of 2036-02-24, 26.3.2): FC Metz's Calendar → Fixtures screen matches `get_fixtures` for every match shown: 27 Jan to 24 Feb (7 results, including the French Cup Eleventh Round 1–1 shown as "p 1-1", stored as penalties 5–4) and 2 Mar to 23 Mar (7 fixtures). Dates, opponents (the screen shows short names such as "LOSC" and "Paris SG"; the server gives full names), home/away and stage labels match; the screen shows "UEFA Europa League League Phase", "French Cup Eleventh Round", "French Cup Quarter Final", "UEFA Europa League Round of 16 First Leg" / "Second Leg", as the server labels them. The Ligue 1 side panel's 23–24 Feb results and the unplayed Reims v Nice match too. Kick-off times are shown but not decoded.
 
+### 27.0.0 match id and goal events — verified 27.0.0 (bytes + in game)
+
+Verified on `data/test_save_27_homegrown.fm` (game date 2026-07-16), whose 3 246 results all parse. The in-game reference is the match report of Shamrock Rovers 3–2 Kauno Žalgiris (2026-07-15), viewed on 2026-11-11.
+
+**Match id.** The u32 after the version byte is the id of the match's object in `match_stats_cfg.dat` (see [`matches.md`](matches.md)). 1 027 results carry one. The other 2 219 hold `ff ff ff ff` and have no events, whatever the score: 2 016 of them have goals. Inference: results with an id are the matches the game played in full detail (the human's nation, friendlies, the European competitions KŽ entered). The rest were quick-simulated.
+
+**Goal events.** 16 bytes each, in match order:
+
+| Offset | Size | Field | Evidence |
+|--------|------|-------|----------|
+| 0 | i32 | person index of the scorer (game_db) | all 8 people in the 07-15 events resolve, through the last-lineup person table, to the scorers and assisters the report shows: Renan Oliveira 9397 (20', 46'), O'Reilly-O'Sullivan, Noonan, Byrne |
+| 4 | i32 | assister; −1 = none | Sobowale, Benchaib, Byrne, Iyobosa Edokpolor, Grant as in the report; −1 on every own goal, missed penalty and shootout kick |
+| 8 | u32 | time; inference: elapsed match time in quarter seconds, including first-half stoppage time | 9' = 2 076, 20' = 4 768, 26' = 6 200, 46' = 11 853, 78' = 19 431: the second-half values run 3.0–3.4 minutes ahead |
+| 12 | u8 | side: 0 home, 1 away | the 07-15 goals; all 3 goals of KŽ 0–3 FK Banga (2026-01-20) are 1 |
+| 13 | u8 | type, see below | |
+| 14 | u8 | minute the game shows | 9, 20, 26, 46, 78 on 07-15; up to 120 |
+| 15 | u8 | added minutes | `5a 03` = 90+3 |
+
+| Type | Meaning | Evidence |
+|------|---------|----------|
+| 0 | goal | 2 710 events |
+| 1 | own goal (inference); counted for the side at offset 12 | 15 events, none with an assister, all counted in the score of that side (FK Medžiai 0–6 KŽ has one, on KŽ's side) |
+| 2 | penalty goal | 217 events, none with an assister; KŽ 1–0 FK Panevėžys (Super Cup) is one type-2 event |
+| 3 | not a goal; inference: a missed penalty in play | 53 events, minutes 5–90, none with an assister, never counted in a score (Lechia Gdańsk 0–0 KŽ has one) |
+| 4 | penalty scored in a shootout | minute 120; both shootouts' type-4 events per side equal the penalty score (4–3 and 4–3) |
+| 5 | penalty missed in a shootout | minute 120; 2 and 3 events in those shootouts |
+
+Types 0–2 per side equal the score in 995 of the 999 results that have events. The other 4 have extra-time goals after minute 90 (98', 109', 115', 120+1), counted in the after-extra-time score. 28 results with a match id have no events: all 0–0.
+
 ## Open questions
 
 - What the 14.5 MB after the last list in KŽ holds (5 993 bytes in the test save). A scan for FIXTURE bases (version `0x1c`, key in range, two distinct teams, a 2030–2037 date) finds none there.
-- The second date, the unknown base bytes and the 16-byte events.
+- The second date and the unknown base bytes.
+- Goal events: types 1 and 3 in game; the time unit; whether the 26.x u32 is a match id and 26.x events use the same layout (not checked).
+- Which matches get a match id (the "full detail" rule is an inference).
 - Byte 3 outside second legs.
 - The 27.0.0 base: the 2 added bytes, and whether versions `0x1d` and `0x1e` exist (no save has them; the parser rejects them).
