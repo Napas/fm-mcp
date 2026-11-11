@@ -51,12 +51,16 @@ type Game struct {
 	persons map[uint32]*Player
 	aux     []playerAux // by Player.auxIdx
 	// clubLevels is clubSquadLevels by club index (true current ability; interest only).
-	clubLevels    map[int64]int
-	roleRules     roleRules
-	hasSeason     bool            // false when the save's season stats could not be read
-	hasFixtures   bool            // false when fix_man.dat could not be read
-	hasTables     bool            // false when the comp files could not be read
-	fixtures      []storedFixture // in date order
+	clubLevels     map[int64]int
+	roleRules      roleRules
+	hasSeason      bool            // false when the save's season stats could not be read
+	hasFixtures    bool            // false when fix_man.dat could not be read
+	hasTables      bool            // false when the comp files could not be read
+	fixtures       []storedFixture // in date order
+	fixtureByMatch map[int64]int
+	// matchPlayers holds match objects' player records by match id; nil
+	// when the objects were not read.
+	matchPlayers  map[int64][]savefile.MatchPlayer
 	tables        []Table
 	tableWarnings []string                // why some tables are missing
 	permits       map[uint32][]WorkPermit // by player uid; nil when unreadable
@@ -85,7 +89,9 @@ type PlayerExtras struct {
 	Tactics   *savefile.Tactics                // the human manager's tactics and lineups (tactics_man.dat)
 	Transfers []savefile.Transfer              // transfer_man.dat; nil when it could not be read
 	Fixtures  []savefile.Fixture               // fix_man.dat; nil when it could not be read
-	Tables    *savefile.LeagueTables           // comp files' tables; nil when they could not be read
+	// Matches are match_stats_cfg.dat's match objects; nil when not read.
+	Matches []savefile.MatchObject
+	Tables  *savefile.LeagueTables // comp files' tables; nil when they could not be read
 	// WorkPermits are transfer_man.dat's; nil when they could not be read.
 	WorkPermits []savefile.WorkPermit
 	// LeagueStages is the LEAGUE_STAGE memory pool's count, which tables are
@@ -112,7 +118,7 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 		transfers[t.ID] = t
 	}
 	own := w.clubTeams(info.ManagerTeamIndex)
-	persons := referencedPersons(extras.Tactics, extras.Fixtures)
+	persons := referencedPersons(extras.Tactics, extras.Fixtures, extras.Matches)
 	for _, r := range raw {
 		p := newPlayer(r, info.Date, w)
 		if _, ok := persons[r.Index]; ok {
@@ -151,12 +157,57 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 		g.Info.Warnings = append(g.Info.Warnings, fmt.Sprintf("fixtures left out because their competition key does not resolve: %d", unresolved))
 	}
 	relabel(g.tables, g.fixtures, w)
+	g.indexMatches(extras.Matches)
 	return g
 }
 
+// indexMatches indexes fixtures by match id and keeps the player records of
+// objects whose match id has a fixture, warning about the rest.
+func (g *Game) indexMatches(objs []savefile.MatchObject) {
+	g.fixtureByMatch = make(map[int64]int)
+	for i, s := range g.fixtures {
+		if !s.Result.HasMatchID() {
+			continue
+		}
+		if _, dup := g.fixtureByMatch[int64(s.Result.MatchID)]; !dup {
+			g.fixtureByMatch[int64(s.Result.MatchID)] = i
+		}
+	}
+	if objs == nil {
+		return
+	}
+	g.matchPlayers = make(map[int64][]savefile.MatchPlayer, len(objs))
+	var orphans, unread, repeated int
+	for _, o := range objs {
+		id := int64(o.MatchID)
+		_, seen := g.matchPlayers[id]
+		_, hasFixture := g.fixtureByMatch[id]
+		switch {
+		case seen:
+			repeated++
+			continue
+		case !hasFixture:
+			orphans++
+			continue
+		case o.Players == nil:
+			unread++
+		}
+		g.matchPlayers[id] = o.Players
+	}
+	for _, w := range []struct {
+		what string
+		n    int
+	}{{"match objects not read", unread}, {"match objects with a repeated match id", repeated}, {"match objects without a fixture", orphans}} {
+		if w.n > 0 {
+			g.Info.Warnings = append(g.Info.Warnings, fmt.Sprintf("%s: %d", w.what, w.n))
+		}
+	}
+}
+
 // referencedPersons maps the person indices of the selection, every last
-// lineup and every match event to nil, for NewGame to fill in.
-func referencedPersons(t *savefile.Tactics, fixtures []savefile.Fixture) map[uint32]*Player {
+// lineup, every match event and every match object record to nil, for
+// NewGame to fill in.
+func referencedPersons(t *savefile.Tactics, fixtures []savefile.Fixture, objs []savefile.MatchObject) map[uint32]*Player {
 	out := make(map[uint32]*Player)
 	add := func(persons ...int32) {
 		for _, p := range persons {
@@ -177,6 +228,11 @@ func referencedPersons(t *savefile.Tactics, fixtures []savefile.Fixture) map[uin
 		}
 		for _, e := range f.Result.Events {
 			add(e.Scorer, e.Assister)
+		}
+	}
+	for _, o := range objs {
+		for _, p := range o.Players {
+			add(p.Person)
 		}
 	}
 	return out

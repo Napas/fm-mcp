@@ -163,3 +163,18 @@ func FuzzReadRules(f *testing.F) {
 		_, _ = readRules(all, bounds, ns, []Record{{UID: 2300046, Start: len(body), End: len(all)}})
 	})
 }
+
+func FuzzParseMatchPack(f *testing.F) {
+	obj := matchObjectBytes(testSides(100, 200))
+	f.Add(matchPackBody([]testPackEntry{{1, zstdFrame(f, obj)}}))
+	f.Fuzz(func(t *testing.T, body []byte) {
+		_, _ = parseMatchPack(body, maxMatchPackDecoded)
+	})
+}
+
+func FuzzScanMatchPlayers(f *testing.F) {
+	f.Add(matchObjectBytes(testSides(100, 200)))
+	f.Fuzz(func(t *testing.T, obj []byte) {
+		_, _ = scanMatchPlayers(obj)
+	})
+}

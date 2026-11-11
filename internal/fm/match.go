@@ -3,7 +3,7 @@ package fm
 import (
 	"errors"
 	"fmt"
-	"slices"
+	"math"
 	"time"
 
 	"github.com/Napas/fm-mcp/internal/savefile"
@@ -17,8 +17,14 @@ type MatchDataStatus string
 
 // MatchDataStatus values.
 const (
-	// MatchDataGoals: the goals, missed penalties and shoot-out kicks.
-	MatchDataGoals MatchDataStatus = "goals_only"
+	// MatchDataStored: the goals and the players' match records.
+	MatchDataStored MatchDataStatus = "stored"
+	// MatchDataPruned: the goals only; the game has deleted the players'
+	// match records.
+	MatchDataPruned MatchDataStatus = "pruned"
+	// MatchDataPlayersUnreadable: the goals only; the players' match records
+	// could not be read.
+	MatchDataPlayersUnreadable MatchDataStatus = "goals_only"
 	// MatchDataQuickSimulated: the game simulated the match without detail,
 	// so only the score is stored.
 	MatchDataQuickSimulated MatchDataStatus = "quick_simulated"
@@ -36,12 +42,35 @@ var eventTypes = map[savefile.EventKind]string{
 	savefile.EventShootoutMissed: "shootout_missed",
 }
 
-// Match is one played match with its events.
+// Match is one played match with its events and, when stored, its players.
 type Match struct {
 	Fixture
 	// Events in match order when the match has a MatchID; none then means
 	// no goals.
 	Events []MatchEvent `json:"events,omitempty"`
+	// Players who played, home side first, when MatchData is
+	// MatchDataStored.
+	Players           []MatchPlayer      `json:"players,omitempty"`
+	UnusedSubstitutes []UnusedSubstitute `json:"unused_substitutes,omitempty"`
+}
+
+// UnusedSubstitute is a squad member who did not play.
+type UnusedSubstitute struct {
+	Player    TacticPlayer `json:"player"` // with the shirt number
+	TeamIndex int64        `json:"team_index"`
+	Team      string       `json:"team,omitempty"`
+}
+
+// MatchPlayer is one player's line in a match.
+type MatchPlayer struct {
+	Player    TacticPlayer `json:"player"` // with the shirt number worn
+	TeamIndex int64        `json:"team_index"`
+	Team      string       `json:"team,omitempty"`
+	Started   bool         `json:"started"` // false: came on as a substitute
+	// TakenOff is nil when the records do not tell (see takenOffKnown).
+	TakenOff *bool   `json:"taken_off,omitempty"`
+	Rating   float64 `json:"rating"` // e.g. 8.19
+	XG       float64 `json:"xg"`     // expected goals, to 2 decimals
 }
 
 // MatchEvent is a goal, a missed penalty or a shoot-out kick.
@@ -71,10 +100,8 @@ func (v View) Match(sel MatchSelector) (Match, error) {
 		return Match{}, ErrFixturesUnavailable
 	}
 	if sel.MatchID != nil {
-		i := slices.IndexFunc(v.g.fixtures, func(s storedFixture) bool {
-			return newScore(s.Result) != nil && s.Result.MatchID != savefile.NoMatchID && int64(s.Result.MatchID) == *sel.MatchID
-		})
-		if i < 0 {
+		i, ok := v.g.fixtureByMatch[*sel.MatchID]
+		if !ok || newScore(v.g.fixtures[i].Result) == nil {
 			return Match{}, fmt.Errorf("%w: no match with match_id %d; get_fixtures gives match ids (FM27 saves only)", ErrNoMatch, *sel.MatchID)
 		}
 		return v.g.match(v.g.fixtures[i]), nil
@@ -106,38 +133,100 @@ func (g *Game) match(s storedFixture) Match {
 	}
 	m.Events = make([]MatchEvent, len(s.Result.Events))
 	for i, e := range s.Result.Events {
-		var team *int64
-		switch e.Side {
-		case 0:
-			team = ptr(int64(s.Home))
-		case 1:
-			team = ptr(int64(s.Away))
-		}
 		typ, ok := eventTypes[e.Kind]
 		if !ok {
 			typ = fmt.Sprintf("unknown_%d", e.Kind)
 		}
 		m.Events[i] = MatchEvent{
 			Minute: int(e.Minute), AddedMinutes: int(e.AddedMinutes), Type: typ,
-			TeamIndex: team,
-			Player:    tacticPlayer(g.persons, e.Scorer), Assist: tacticPlayer(g.persons, e.Assister),
+			Player: tacticPlayer(g.persons, e.Scorer), Assist: tacticPlayer(g.persons, e.Assister),
 		}
-		if team != nil {
-			m.Events[i].Team = g.world.teamName(*team)
+		if team, ok := s.sideTeam(e.Side); ok {
+			m.Events[i].TeamIndex, m.Events[i].Team = &team, g.world.teamName(team)
 		}
+	}
+	if m.MatchData == MatchDataStored {
+		m.Players, m.UnusedSubstitutes = g.matchPlayerLines(s)
 	}
 	return m
 }
 
-// matchData returns a played result's match id (nil when none) and what its
-// stored match data holds.
-func matchData(r *savefile.FixtureResult) (*int64, MatchDataStatus) {
+func (g *Game) matchPlayerLines(s storedFixture) ([]MatchPlayer, []UnusedSubstitute) {
+	records := g.matchPlayers[int64(s.Result.MatchID)]
+	known := takenOffKnown(records)
+	var played []MatchPlayer
+	var unused []UnusedSubstitute
+	for _, r := range records {
+		person := TacticPlayer{Unnamed: true}
+		if p := tacticPlayer(g.persons, r.Person); p != nil {
+			person = *p
+		}
+		person.ShirtNumber = int(r.Shirt)
+		team, _ := s.sideTeam(r.Side) // records have side 0 or 1
+		if !r.Played() {
+			unused = append(unused, UnusedSubstitute{Player: person, TeamIndex: team, Team: g.world.teamName(team)})
+			continue
+		}
+		line := MatchPlayer{
+			Player: person, TeamIndex: team, Team: g.world.teamName(team), Started: r.Started(),
+			Rating: float64(r.Rating) / 100, XG: math.Round(float64(r.XG)*100) / 100,
+		}
+		if known[r.Side] {
+			line.TakenOff = ptr(r.EndPositions == 0)
+		}
+		played = append(played, line)
+	}
+	return played, unused
+}
+
+// takenOffKnown reports per side whether the records show who was taken
+// off: as many starters with no end position as substitutes who came on.
+// The game keeps end positions only in some of the human's matches.
+func takenOffKnown(records []savefile.MatchPlayer) [2]bool {
+	var off, on [2]int
+	for _, r := range records {
+		switch {
+		case r.Side > 1: // savefile reads sides 0 and 1 only
+		case r.Started() && r.EndPositions == 0:
+			off[r.Side]++
+		case !r.Started() && r.EndPositions != 0:
+			on[r.Side]++
+		}
+	}
+	return [2]bool{off[0] == on[0], off[1] == on[1]}
+}
+
+// matchData returns a played result's match id (nil when none) and what is
+// stored about it.
+func (g *Game) matchData(r *savefile.FixtureResult) (*int64, MatchDataStatus) {
 	switch {
 	case !r.Decoded:
 		return nil, MatchDataUnsupported
-	case r.MatchID == savefile.NoMatchID:
+	case !r.HasMatchID():
 		return nil, MatchDataQuickSimulated
 	}
 	id := int64(r.MatchID)
-	return &id, MatchDataGoals
+	if g.matchPlayers == nil {
+		return &id, MatchDataPlayersUnreadable
+	}
+	players, ok := g.matchPlayers[id]
+	switch {
+	case !ok:
+		return &id, MatchDataPruned
+	case players == nil:
+		return &id, MatchDataPlayersUnreadable
+	}
+	return &id, MatchDataStored
+}
+
+// sideTeam returns the team index of side 0 (home) or 1 (away); false for
+// any other side byte.
+func (s storedFixture) sideTeam(side uint8) (int64, bool) {
+	switch side {
+	case 0:
+		return int64(s.Home), true
+	case 1:
+		return int64(s.Away), true
+	}
+	return 0, false
 }
