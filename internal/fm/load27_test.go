@@ -784,3 +784,34 @@ func TestLoadTestSave27PlayerMatches(t *testing.T) {
 		t.Errorf("TOPLYGA from matches: %d starts, %d subs, %d goals; season totals %+v", starts, subs, goals, league)
 	}
 }
+
+// testSave27ShortlistPath has the shortlists (Default) of 12 and "interested"
+// of 7; see "27.0.0 shortlists". Every "interested" player needs scouting.
+const testSave27ShortlistPath = "../../data/test_save_27_shortlist.fm"
+
+func TestLoadTestSave27Shortlists(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27ShortlistPath, LoadOptions{GameDBDir: gameDBDir()})
+	for _, w := range g.Info.Warnings {
+		if strings.Contains(w, "shortlist") {
+			t.Errorf("warning %q", w)
+		}
+	}
+	v := g.View(true)
+	for name, want := range map[string][]uint32{
+		// Juli, Déblé, Rahmani, Toni Silva, Kanté, Mlapa, Mejía.
+		"interested": {7443807, 12013140, 23055744, 28042870, 67179381, 91012819, 2000125121},
+		// Siaulys, Gašpuitis, Adamonis, Magdušauskas, Juskevicius, Wesley, Arcila,
+		// Ghrissi, Rizki, Byrne, Burdzilauskas, Kihlberg.
+		"default": {43300840, 47040734, 47055920, 47096358, 67241025, 2000204253, 2000246075, 2000407867, 2002075298, 2002095569, 2002095583, 2002095715},
+	} {
+		res, err := v.Search(Filter{Shortlist: name})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		got := uids(res.Players)
+		slices.Sort(got)
+		if !slices.Equal(got, want) || res.Total != len(want) || res.NeedsScouting != 0 {
+			t.Errorf("%s: got %v (total %d, needs scouting %d), want %v", name, got, res.Total, res.NeedsScouting, want)
+		}
+	}
+}
