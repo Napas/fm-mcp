@@ -674,3 +674,21 @@ func TestTestSave27Shortlists(t *testing.T) {
 		})
 	}
 }
+
+// testSave27TrailerPath: person record 65 535 holds a false trailer for
+// record 65 536 (docs/format/game-db.md "Person table").
+const testSave27TrailerPath = "../../data/test_save_27_trailer.fm"
+
+func TestTestSave27FalseNextTrailer(t *testing.T) {
+	db, err := ReadGameDB(openTestSaveAt(t, testSave27TrailerPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if db.SkippedPlayers != 0 {
+		t.Errorf("%d players skipped", db.SkippedPlayers)
+	}
+	// 2000531332 is person record 65 535.
+	if !slices.ContainsFunc(db.Players, func(p Player) bool { return p.UID == 2000531332 }) {
+		t.Errorf("player 2000531332 not read")
+	}
+}

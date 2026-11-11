@@ -35,7 +35,7 @@ type Record struct {
 
 // splitTable splits the table whose u32 count is at start and returns the
 // offset past the last record. It serves tables whose record bodies are not
-// fully decoded (persons, competitions).
+// fully decoded (persons, competitions, continents, nations).
 //
 // Record bodies are not decoded, so boundaries come from the trailer each
 // record ends with:
@@ -45,7 +45,8 @@ type Record struct {
 // The flags' upper three bytes and uid are never zero. Attribute bytes can
 // still mimic a trailer, so a trailer whose last two words match is
 // preferred; one whose words differ is used only when no matching one
-// appears before the next record's trailer.
+// appears before the next record's trailer. That trailer can be false too;
+// recordTrailer then searches past it.
 func splitTable(body []byte, start int, valid trailerCheck) ([]Record, int, error) {
 	budget := scanBudgetFactor*max(len(body)-start, 0) + scanBudgetSlack
 	var scanned int
@@ -62,16 +63,7 @@ func splitTable(body []byte, start int, valid trailerCheck) ([]Record, int, erro
 	recs := make([]Record, 0, capacity(n, len(body)-r.off, databaseRecordSize))
 	pos := r.off
 	for k := range n {
-		limit := len(body)
-		if k+1 < n {
-			if j, ok := findTrailer(body, pos, limit, k+1, true, valid, &scanned); ok {
-				limit = j
-			}
-		}
-		j, ok := findTrailer(body, pos, limit, k, true, valid, &scanned)
-		if !ok {
-			j, ok = findTrailer(body, pos, limit, k, false, valid, &scanned)
-		}
+		j, ok := recordTrailer(body, pos, k, n, valid, &scanned, budget)
 		if scanned > budget {
 			return nil, 0, fmt.Errorf("%w: trailer search for record %d exceeds its scan budget", ErrCorrupt, k)
 		}
@@ -88,6 +80,32 @@ func splitTable(body []byte, start int, valid trailerCheck) ([]Record, int, erro
 		pos = end
 	}
 	return recs, pos, nil
+}
+
+// recordTrailer returns the offset of the trailer of record k, which starts
+// at pos. The search stops at record k+1's trailer. If k has no trailer
+// before it, that match was false (record 65 535 of a 27.0.0 save) and the
+// search resumes past it. It gives up once *scanned exceeds budget.
+func recordTrailer(body []byte, pos int, k, n uint32, valid trailerCheck, scanned *int, budget int) (int, bool) {
+	for from := pos; *scanned <= budget; {
+		limit := len(body)
+		if k+1 < n {
+			if next, ok := findTrailer(body, from, limit, k+1, true, valid, scanned); ok {
+				limit = next
+			}
+		}
+		if j, ok := findTrailer(body, pos, limit, k, true, valid, scanned); ok {
+			return j, true
+		}
+		if j, ok := findTrailer(body, pos, limit, k, false, valid, scanned); ok {
+			return j, true
+		}
+		if limit == len(body) {
+			return 0, false
+		}
+		from = limit + 1
+	}
+	return 0, false
 }
 
 // trailerCheck tells whether the index word at j can start the trailer of
