@@ -206,27 +206,6 @@ func current(t *savefile.Tactics) *savefile.Tactic {
 	return &t.Tactics[0]
 }
 
-// lineupPersons maps the person indices of the selection and every last
-// lineup to nil, for NewGame to fill in.
-func lineupPersons(t *savefile.Tactics) map[uint32]*Player {
-	if t == nil {
-		return nil
-	}
-	out := make(map[uint32]*Player)
-	add := func(persons []int32) {
-		for _, p := range persons {
-			if p >= 0 {
-				out[uint32(p)] = nil
-			}
-		}
-	}
-	add(t.Selection[:])
-	for _, l := range t.LastLineups {
-		add(l.Players[:])
-	}
-	return out
-}
-
 // newTactic builds the current tactic from the lineup's players by person
 // index and the players' per-player data. Nil when the save has no tactic.
 func newTactic(t *savefile.Tactics, w World, players map[uint32]*Player, aux []playerAux, rules roleRules) *Tactic {
@@ -304,17 +283,26 @@ func (l lineupPeople) bench() []TacticPlayer {
 
 // at returns the person in place i; nil for an empty place.
 func (l lineupPeople) at(i int) *TacticPlayer {
-	if i >= len(l.persons) || l.persons[i] < 0 {
+	if i >= len(l.persons) {
 		return nil
 	}
-	out := &TacticPlayer{Unnamed: true}
-	if p := l.player(i); p != nil {
-		out = &TacticPlayer{UID: p.UID, Name: p.Name}
-	}
-	if i < len(l.shirts) && l.shirts[i] != noShirtNumber {
+	out := tacticPlayer(l.players, l.persons[i])
+	if out != nil && i < len(l.shirts) && l.shirts[i] != noShirtNumber {
 		out.ShirtNumber = int(l.shirts[i])
 	}
 	return out
+}
+
+// tacticPlayer returns the person with index i, marked unnamed when players
+// does not hold i; nil for no person (negative i).
+func tacticPlayer(players map[uint32]*Player, i int32) *TacticPlayer {
+	if i < 0 {
+		return nil
+	}
+	if p := players[uint32(i)]; p != nil {
+		return &TacticPlayer{UID: p.UID, Name: p.Name}
+	}
+	return &TacticPlayer{Unnamed: true}
 }
 
 // player returns the player in place i; nil for an empty place or a person

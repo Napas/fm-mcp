@@ -10,6 +10,9 @@ import (
 const (
 	testSave27Path  = "../../data/test_save_27.fm"
 	testSave27bPath = "../../data/test_save_27b.fm" // after Kauno Žalgiris's first match
+	// testSave27HomegrownPath is game date 2026-07-16, a day after Shamrock
+	// Rovers 3–2 Kauno Žalgiris, the match whose report was checked in game.
+	testSave27HomegrownPath = "../../data/test_save_27_homegrown.fm"
 	// testSave27InstructionsPath is the KŽ save of 2026-11-07 20:40 (game date
 	// 2026-05-04), whose tactic has team instructions set in game.
 	testSave27InstructionsPath = "../../data/test_save_27_instructions.fm"
@@ -607,8 +610,7 @@ func TestTestSave27Transfers(t *testing.T) {
 }
 
 func TestTestSave27WorkPermits(t *testing.T) {
-	const homegrownPath = "../../data/test_save_27_homegrown.fm" // game date 2026-07-16
-	for path, records := range map[string]int{testSave27Path: 896, testSave27bPath: 896, homegrownPath: 949} {
+	for path, records := range map[string]int{testSave27Path: 896, testSave27bPath: 896, testSave27HomegrownPath: 949} {
 		t.Run(path, func(t *testing.T) {
 			a := openTestSaveAt(t, path)
 			pools, err := readPoolCounts(a)

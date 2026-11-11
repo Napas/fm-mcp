@@ -657,3 +657,41 @@ func TestLoadTestSave27WorkPermits(t *testing.T) {
 		}
 	}
 }
+
+// TestLoadTestSave27Match checks Shamrock Rovers 3–2 Kauno Žalgiris
+// (2026-07-15) against the game's match report.
+func TestLoadTestSave27Match(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27HomegrownPath, LoadOptions{GameDBDir: gameDBDir()})
+	kz := int64(16521)
+	m, err := g.View(false).Match(MatchSelector{Team: &kz, Date: time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.MatchID == nil || *m.MatchID != 1022 || m.MatchData != MatchDataGoals || m.HomeTeamIndex != 456 || m.Score == nil || m.Score.Home != 3 || m.Score.Away != 2 {
+		t.Errorf("match = %+v", m.Fixture)
+	}
+	var got []string
+	name := func(p *TacticPlayer) string {
+		if p == nil {
+			return "-"
+		}
+		return p.Name
+	}
+	for _, e := range m.Events {
+		team := int64(-1)
+		if e.TeamIndex != nil {
+			team = *e.TeamIndex
+		}
+		got = append(got, fmt.Sprintf("%d' %s %s (%s) for %d", e.Minute, e.Type, name(e.Player), name(e.Assist), team))
+	}
+	want := []string{
+		"9' goal John O'Reilly-O'Sullivan (Tunmise Sobowale) for 456",
+		"20' goal Renan Oliveira (Amine Benchaib) for 16521",
+		"26' goal Michael Noonan (Jack Byrne) for 456",
+		"46' goal Renan Oliveira (Nosa Iyobosa Edokpolor) for 16521",
+		"78' goal Jack Byrne (Danny Grant) for 456",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("events = %q\nwant %q", got, want)
+	}
+}

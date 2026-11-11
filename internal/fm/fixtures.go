@@ -39,6 +39,12 @@ type Fixture struct {
 	AwayTeamIndex          int64  `json:"away_team_index"`
 	AwayTeam               string `json:"away_team,omitempty"`
 	Score                  *Score `json:"score,omitempty"` // nil until played
+	// MatchID is the id get_match takes; nil when the result has none.
+	MatchID *int64 `json:"match_id,omitempty"`
+	// MatchData says what is stored about a played match beyond its score
+	// (MatchDataGoals, MatchDataQuickSimulated or MatchDataUnsupported);
+	// empty until played.
+	MatchData MatchDataStatus `json:"match_data,omitempty"`
 }
 
 // Score is a played fixture's score after 90 minutes, with the score after
@@ -181,6 +187,9 @@ func (g *Game) fixture(s storedFixture) Fixture {
 		HomeTeamIndex: int64(s.Home), HomeTeam: g.world.teamName(int64(s.Home)),
 		AwayTeamIndex: int64(s.Away), AwayTeam: g.world.teamName(int64(s.Away)),
 		Score: newScore(s.Result),
+	}
+	if f.Score != nil {
+		f.MatchID, f.MatchData = matchData(s.Result)
 	}
 	if s.label.SecondIndex >= 0 {
 		second := s.label.SecondIndex

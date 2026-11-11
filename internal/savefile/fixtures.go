@@ -16,7 +16,7 @@ const (
 	fixtureHomeOff = 12
 	fixtureAwayOff = 19
 	fixtureDateOff = 25
-	// fixtureEventSize is a FIXTURE_RESULT event (not decoded).
+	// fixtureEventSize is a FIXTURE_RESULT event.
 	fixtureEventSize = 16
 
 	maxFixtureLists    = 64      // 4 test, 6 KŽ
@@ -24,15 +24,17 @@ const (
 	maxFixtureEvents   = 1024    // 28 seen
 )
 
-// fixtureLayout is the size of a FIXTURE base and its season and round offsets.
+// fixtureLayout is the size of a FIXTURE base and its season and round
+// offsets, and whether its FIXTURE_RESULT match id and events are decoded.
 type fixtureLayout struct {
 	size, season, round int
+	matchData           bool
 }
 
 // fixtureLayouts by version. Its keys are also the accepted FIXTURE_RESULT versions.
 var fixtureLayouts = map[byte]fixtureLayout{
 	fixtureVersion26: {size: 63, season: 38, round: 50},
-	fixtureVersion27: {size: 61, season: 34, round: 46},
+	fixtureVersion27: {size: 61, season: 34, round: 46, matchData: true},
 }
 
 // Fixture is a FIXTURE record (vtable 0x54e6c20, load 0x3e5c748).
@@ -51,7 +53,47 @@ type Fixture struct {
 // second leg; 0xff = none.
 type FixtureResult struct {
 	Home, Away [4]uint8
+	// Decoded is true when MatchID and Events are decoded: 27.0.0 results
+	// only, as the 26.x layout is not verified.
+	Decoded bool
+	// MatchID links the result to its match object; NoMatchID for matches
+	// the game simulated without detail, which have no events, and when not
+	// Decoded.
+	MatchID int32
+	Events  []GoalEvent // in match order
 }
+
+// NoMatchID is the match id of a result without one.
+const NoMatchID = -1
+
+// NoPerson is a GoalEvent's Assister when there is none.
+const NoPerson = -1
+
+// GoalEvent is a 16-byte FIXTURE_RESULT event: a goal, a missed penalty or
+// a shoot-out kick.
+type GoalEvent struct {
+	Scorer   int32  // person index; the taker of a penalty or shoot-out kick
+	Assister int32  // person index; NoPerson when none
+	Time     uint32 // inference: elapsed match time in quarter seconds
+	Side     uint8  // 0 home, 1 away; for an own goal, the side it counts for
+	Kind     EventKind
+	Minute   uint8 // the minute the game shows
+	// AddedMinutes is the stoppage-time minute, e.g. 3 for 90+3.
+	AddedMinutes uint8
+}
+
+// EventKind is a GoalEvent's type byte.
+type EventKind uint8
+
+// Event kinds; any other value is kept as read.
+const (
+	EventGoal           EventKind = 0
+	EventOwnGoal        EventKind = 1 // inference: no assister, counted for the other side
+	EventPenalty        EventKind = 2
+	EventMissedPenalty  EventKind = 3 // inference: never counted in a score
+	EventShootoutScored EventKind = 4
+	EventShootoutMissed EventKind = 5
+)
 
 // ReadFixtures decodes the fixtures of the save's rgman/fix_man.dat.
 func ReadFixtures(a *Archive) ([]Fixture, error) {
@@ -123,12 +165,13 @@ func readFixtureList(r *reader, out []Fixture) []Fixture {
 	return out
 }
 
-// readFixtureResult reads u8 version, u32, 4 bytes home, 4 bytes away,
-// u32 attendance (guess), u32, 4 × u8, u32 n, n × 16-byte events.
+// readFixtureResult reads u8 version, u32 match id, 4 bytes home, 4 bytes
+// away, u32 attendance (guess), u32, 4 × u8, u32 n, n × 16-byte events. The
+// match id and events are kept for version 0x1f only.
 func readFixtureResult(r *reader) *FixtureResult {
-	readFixtureVersion(r, "fixture result")
-	r.u32()
-	var res FixtureResult
+	l, _ := readFixtureVersion(r, "fixture result")
+	res := FixtureResult{Decoded: l.matchData, MatchID: NoMatchID}
+	id := r.i32()
 	copy(res.Home[:], r.take(4))
 	copy(res.Away[:], r.take(4))
 	r.take(4 + 4 + 4)
@@ -137,7 +180,21 @@ func readFixtureResult(r *reader) *FixtureResult {
 		r.fail("%d fixture events", n)
 		return nil
 	}
-	r.take(fixtureEventSize * int(n))
+	b := r.take(fixtureEventSize * int(n))
+	if !res.Decoded || b == nil {
+		return &res
+	}
+	res.MatchID = id
+	res.Events = make([]GoalEvent, n)
+	for i := range res.Events {
+		e := b[i*fixtureEventSize:]
+		res.Events[i] = GoalEvent{
+			Scorer:   int32(binary.LittleEndian.Uint32(e)),     //nolint:gosec // signed field
+			Assister: int32(binary.LittleEndian.Uint32(e[4:])), //nolint:gosec // signed field
+			Time:     binary.LittleEndian.Uint32(e[8:]),
+			Side:     e[12], Kind: EventKind(e[13]), Minute: e[14], AddedMinutes: e[15],
+		}
+	}
 	return &res
 }
 

@@ -46,9 +46,10 @@ type Game struct {
 	tactic    *Tactic        // the human manager's current tactic; nil when none
 	// lastLineups: every team's last match by team index; nil when unreadable.
 	lastLineups map[int32]savefile.LastLineup
-	// lineupPlayers: players of the selection and last lineups by person index.
-	lineupPlayers map[uint32]*Player
-	aux           []playerAux // by Player.auxIdx
+	// persons: players by person index, for the people that the selection,
+	// last lineups and match events refer to.
+	persons map[uint32]*Player
+	aux     []playerAux // by Player.auxIdx
 	// clubLevels is clubSquadLevels by club index (true current ability; interest only).
 	clubLevels    map[int64]int
 	roleRules     roleRules
@@ -111,11 +112,11 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 		transfers[t.ID] = t
 	}
 	own := w.clubTeams(info.ManagerTeamIndex)
-	inLineup := lineupPersons(extras.Tactics)
+	persons := referencedPersons(extras.Tactics, extras.Fixtures)
 	for _, r := range raw {
 		p := newPlayer(r, info.Date, w)
-		if _, ok := inLineup[r.Index]; ok {
-			inLineup[r.Index] = p
+		if _, ok := persons[r.Index]; ok {
+			persons[r.Index] = p
 		}
 		p.knowledge = uint8(knowledgeOf(p, own, extras.Scouted[r.Index])) //nolint:gosec // 0..100
 		rec := extras.Season[r.Index]
@@ -130,13 +131,13 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 			g.calledUp[*p.NationalTeamIndex] = true
 		}
 	}
-	maps.DeleteFunc(inLineup, func(_ uint32, p *Player) bool { return p == nil })
+	maps.DeleteFunc(persons, func(_ uint32, p *Player) bool { return p == nil })
 	g.clubLevels = clubSquadLevels(g.players, w)
 	if extras.WorkPermits != nil {
 		g.permits = workPermits(extras.WorkPermits, raw, w)
 	}
-	g.tactic = newTactic(extras.Tactics, w, inLineup, g.aux, g.roleRules)
-	g.lineupPlayers = inLineup
+	g.tactic = newTactic(extras.Tactics, w, persons, g.aux, g.roleRules)
+	g.persons = persons
 	if extras.Tactics != nil {
 		g.lastLineups = extras.Tactics.LastLineups
 	}
@@ -151,6 +152,34 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 	}
 	relabel(g.tables, g.fixtures, w)
 	return g
+}
+
+// referencedPersons maps the person indices of the selection, every last
+// lineup and every match event to nil, for NewGame to fill in.
+func referencedPersons(t *savefile.Tactics, fixtures []savefile.Fixture) map[uint32]*Player {
+	out := make(map[uint32]*Player)
+	add := func(persons ...int32) {
+		for _, p := range persons {
+			if p >= 0 {
+				out[uint32(p)] = nil
+			}
+		}
+	}
+	if t != nil {
+		add(t.Selection[:]...)
+		for _, l := range t.LastLineups {
+			add(l.Players[:]...)
+		}
+	}
+	for _, f := range fixtures {
+		if f.Result == nil {
+			continue
+		}
+		for _, e := range f.Result.Events {
+			add(e.Scorer, e.Assister)
+		}
+	}
+	return out
 }
 
 // PlayerCount is the number of players in the save.
