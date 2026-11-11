@@ -58,9 +58,8 @@ type Game struct {
 	hasTables      bool            // false when the comp files could not be read
 	fixtures       []storedFixture // in date order
 	fixtureByMatch map[int64]int
-	// matchPlayers holds match objects' player records by match id; nil
-	// when the objects were not read.
-	matchPlayers map[int64][]savefile.MatchPlayer
+	// matchObjects maps match id to its object; nil when not read.
+	matchObjects map[int64]savefile.MatchObject
 	// playerMatches locates the stored matches each player played in, by
 	// UID, in date order.
 	playerMatches map[uint32][]playedMatch
@@ -170,8 +169,8 @@ func NewGame(info Info, raw []savefile.Player, w World, extras PlayerExtras) *Ga
 	return g
 }
 
-// indexMatches indexes fixtures by match id and keeps the player records of
-// objects whose match id has a fixture, warning about the rest.
+// indexMatches indexes fixtures by match id and keeps the match objects
+// whose match id has a fixture, warning about the rest.
 func (g *Game) indexMatches(objs []savefile.MatchObject) {
 	g.fixtureByMatch = make(map[int64]int)
 	for i, s := range g.fixtures {
@@ -185,11 +184,11 @@ func (g *Game) indexMatches(objs []savefile.MatchObject) {
 	if objs == nil {
 		return
 	}
-	g.matchPlayers = make(map[int64][]savefile.MatchPlayer, len(objs))
-	var orphans, unread, repeated int
+	g.matchObjects = make(map[int64]savefile.MatchObject, len(objs))
+	var orphans, unread, noTeamStats, repeated int
 	for _, o := range objs {
 		id := int64(o.MatchID)
-		_, seen := g.matchPlayers[id]
+		_, seen := g.matchObjects[id]
 		_, hasFixture := g.fixtureByMatch[id]
 		switch {
 		case seen:
@@ -200,13 +199,15 @@ func (g *Game) indexMatches(objs []savefile.MatchObject) {
 			continue
 		case o.Players == nil:
 			unread++
+		case o.TeamStats == nil:
+			noTeamStats++
 		}
-		g.matchPlayers[id] = o.Players
+		g.matchObjects[id] = o
 	}
 	for _, w := range []struct {
 		what string
 		n    int
-	}{{"match objects not read", unread}, {"match objects with a repeated match id", repeated}, {"match objects without a fixture", orphans}} {
+	}{{"match objects not read", unread}, {"match team stats not read", noTeamStats}, {"match objects with a repeated match id", repeated}, {"match objects without a fixture", orphans}} {
 		if w.n > 0 {
 			g.Info.Warnings = append(g.Info.Warnings, fmt.Sprintf("%s: %d", w.what, w.n))
 		}
@@ -214,8 +215,8 @@ func (g *Game) indexMatches(objs []savefile.MatchObject) {
 	g.indexPlayerMatches()
 }
 
-// playedMatch locates a player's record: g.fixtures[fixture] and its match
-// id's g.matchPlayers[record].
+// playedMatch locates a player's record: g.fixtures[fixture] and
+// Players[record] of its match object.
 type playedMatch struct{ fixture, record int }
 
 func (g *Game) indexPlayerMatches() {
@@ -228,7 +229,7 @@ func (g *Game) indexPlayerMatches() {
 		if g.fixtureByMatch[id] != i { // a repeated id counts once, for its first fixture
 			continue
 		}
-		for j, r := range g.matchPlayers[id] {
+		for j, r := range g.matchObjects[id].Players {
 			if p := g.persons[uint32(r.Person)]; p != nil && r.Played() { //nolint:gosec // records have non-negative persons
 				g.playerMatches[p.UID] = append(g.playerMatches[p.UID], playedMatch{fixture: i, record: j})
 			}

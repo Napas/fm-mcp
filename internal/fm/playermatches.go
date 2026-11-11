@@ -57,7 +57,7 @@ func (v View) PlayerMatches(uid uint32, f PlayerMatchFilter) (PlayerMatchList, e
 	if !ok {
 		return PlayerMatchList{}, fmt.Errorf("%w: no player with uid %d", ErrInvalidFilter, uid)
 	}
-	if v.g.matchPlayers == nil {
+	if v.g.matchObjects == nil {
 		return PlayerMatchList{}, ErrMatchPlayersUnavailable
 	}
 	limit := listLimit(f.Limit)
@@ -76,7 +76,7 @@ func (v View) PlayerMatches(uid uint32, f PlayerMatchFilter) (PlayerMatchList, e
 
 func (g *Game) playerMatch(at playedMatch) PlayerMatch {
 	s := g.fixtures[at.fixture]
-	records := g.matchPlayers[int64(s.Result.MatchID)]
+	records := g.matchObjects[int64(s.Result.MatchID)].Players
 	r := records[at.record]
 	team, _ := s.sideTeam(r.Side) // records have side 0 or 1
 	opponent, _ := s.sideTeam(1 - r.Side)

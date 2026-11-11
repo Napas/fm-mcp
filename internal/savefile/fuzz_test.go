@@ -172,9 +172,9 @@ func FuzzParseMatchPack(f *testing.F) {
 	})
 }
 
-func FuzzScanMatchPlayers(f *testing.F) {
+func FuzzReadMatchObject(f *testing.F) {
 	f.Add(matchObjectBytes(testSides(100, 200)))
 	f.Fuzz(func(t *testing.T, obj []byte) {
-		_, _ = scanMatchPlayers(obj)
+		_, _, _ = readMatchObject(obj)
 	})
 }

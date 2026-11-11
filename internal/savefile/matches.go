@@ -34,6 +34,45 @@ const (
 	maxMatchPerson = 1 << 24
 )
 
+// Team stats sit at fixed offsets before each side's first player record
+// (docs/format/matches.md "Team stats").
+const (
+	teamBlockSize       = 296
+	teamShotsBlocked    = -296 // u8
+	teamClearCutChances = -295 // u8
+	teamCorners         = -283 // u8
+	teamFouls           = -280 // u8
+	teamYellowCards     = -278 // u8
+	teamPasses          = -264 // u16, attempted
+	teamPassesCompleted = -262 // u16
+	teamTackles         = -258 // u16, attempted
+	teamTacklesWon      = -256 // u16
+	teamHeaders         = -254 // u16, attempted
+	teamHeadersWon      = -252 // u16
+	teamThirdsCompleted = -166 // u16 own third; middle +4, final +8
+
+	// Plausibility caps: 07-16's 1 642 sides stay within 961 passes, 66
+	// headers, 20 tackles and 20 of any count.
+	maxTeamPasses = 2000
+	maxTeamDuels  = 200
+	maxTeamCount  = 40
+)
+
+// TeamStats is a side's totals in a match.
+type TeamStats struct {
+	Passes, PassesCompleted uint16
+	// PassesCompletedByThird is own, middle and final third; nil unless it
+	// adds up to PassesCompleted (objects without a setup section hold 0s).
+	PassesCompletedByThird *[3]uint16
+	Tackles, TacklesWon    uint16
+	Headers, HeadersWon    uint16
+	ShotsBlocked           uint8 // the side's own shots that were blocked
+	ClearCutChances        uint8
+	Corners                uint8
+	Fouls                  uint8
+	YellowCards            uint8
+}
+
 // MatchObject is a match stored in match_stats_cfg.dat: its match id (the
 // FIXTURE_RESULT's) and its player records, home side first. Players is nil
 // when the object does not decompress or its records do not read as two
@@ -41,6 +80,9 @@ const (
 type MatchObject struct {
 	MatchID int32
 	Players []MatchPlayer
+	// TeamStats are the home and away totals; nil when the players or the
+	// totals do not read.
+	TeamStats *[2]TeamStats
 }
 
 // MatchPlayer is a player record's fixed fields. Every squad member has one;
@@ -135,11 +177,11 @@ func parseMatchPack(body []byte, budget int) ([]MatchObject, error) {
 				r.fail("match objects decompress to more than %d bytes", budget)
 				break
 			}
-			var players []MatchPlayer
+			o := MatchObject{MatchID: id}
 			if err == nil {
-				players, _ = scanMatchPlayers(obj)
+				o.Players, o.TeamStats, _ = readMatchObject(obj)
 			}
-			out = append(out, MatchObject{MatchID: id, Players: players})
+			out = append(out, o)
 		}
 	}
 	if r.err != nil {
@@ -154,10 +196,11 @@ func parseMatchPack(body []byte, budget int) ([]MatchObject, error) {
 // finite xG at 25 and 29 and a rating of 300–1000 at 136. After a record it
 // resumes past the record's fixed part: bytes inside longer records can look
 // like a record. Each side must have 11 starters and no person may repeat.
-func scanMatchPlayers(obj []byte) ([]MatchPlayer, error) {
+func scanMatchPlayers(obj []byte) ([]MatchPlayer, [2]recordSpan, error) {
 	var out []MatchPlayer
 	seen := make(map[int32]bool)
 	var starters [2]int
+	spans := [2]recordSpan{{first: -1}, {first: -1}}
 	for i := 0; i+matchPlayerSize <= len(obj); {
 		p, ok := matchRecord(obj[i:])
 		if !ok {
@@ -165,9 +208,13 @@ func scanMatchPlayers(obj []byte) ([]MatchPlayer, error) {
 			continue
 		}
 		if seen[p.Person] {
-			return nil, fmt.Errorf("%w: person %d appears twice in a match", ErrCorrupt, p.Person)
+			return nil, spans, fmt.Errorf("%w: person %d appears twice in a match", ErrCorrupt, p.Person)
 		}
 		seen[p.Person] = true
+		if spans[p.Side].first < 0 {
+			spans[p.Side].first = i
+		}
+		spans[p.Side].end = i + matchPlayerSize
 		if p.Started() {
 			starters[p.Side]++
 		}
@@ -175,9 +222,58 @@ func scanMatchPlayers(obj []byte) ([]MatchPlayer, error) {
 		i += matchPlayerSize
 	}
 	if starters != [2]int{startersPerSide, startersPerSide} {
-		return nil, fmt.Errorf("%w: %d and %d starters in a match", ErrCorrupt, starters[0], starters[1])
+		return nil, spans, fmt.Errorf("%w: %d and %d starters in a match", ErrCorrupt, starters[0], starters[1])
 	}
-	return out, nil
+	return out, spans, nil
+}
+
+// recordSpan is where a side's player records start and where the fixed
+// part of its last one ends.
+type recordSpan struct{ first, end int }
+
+// readMatchObject reads an object's player records and, when they read,
+// its team stats. The away block must start after the home records.
+func readMatchObject(obj []byte) ([]MatchPlayer, *[2]TeamStats, error) {
+	players, spans, err := scanMatchPlayers(obj)
+	if err != nil {
+		return nil, nil, err
+	}
+	if spans[1].first-teamBlockSize < spans[0].end {
+		return players, nil, nil
+	}
+	var teams [2]TeamStats
+	for side, s := range spans {
+		var ok bool
+		if teams[side], ok = readTeamStats(obj, s.first); !ok {
+			return players, nil, nil
+		}
+	}
+	return players, &teams, nil
+}
+
+// readTeamStats reads the team stats before the player record at first;
+// false when they do not fit, more were completed than attempted or a
+// value is above its plausibility cap.
+func readTeamStats(obj []byte, first int) (TeamStats, bool) {
+	if first < teamBlockSize {
+		return TeamStats{}, false
+	}
+	u8 := func(rel int) uint8 { return obj[first+rel] }
+	u16 := func(rel int) uint16 { return binary.LittleEndian.Uint16(obj[first+rel:]) }
+	s := TeamStats{
+		Passes: u16(teamPasses), PassesCompleted: u16(teamPassesCompleted),
+		Tackles: u16(teamTackles), TacklesWon: u16(teamTacklesWon),
+		Headers: u16(teamHeaders), HeadersWon: u16(teamHeadersWon),
+		ShotsBlocked: u8(teamShotsBlocked), ClearCutChances: u8(teamClearCutChances), Corners: u8(teamCorners),
+		Fouls: u8(teamFouls), YellowCards: u8(teamYellowCards),
+	}
+	if th := [3]uint16{u16(teamThirdsCompleted), u16(teamThirdsCompleted + 4), u16(teamThirdsCompleted + 8)}; s.PassesCompleted > 0 && int(th[0])+int(th[1])+int(th[2]) == int(s.PassesCompleted) {
+		s.PassesCompletedByThird = &th
+	}
+	ok := s.PassesCompleted <= s.Passes && s.TacklesWon <= s.Tackles && s.HeadersWon <= s.Headers &&
+		s.Passes <= maxTeamPasses && s.Tackles <= maxTeamDuels && s.Headers <= maxTeamDuels &&
+		max(s.ShotsBlocked, s.ClearCutChances, s.Corners, s.Fouls, s.YellowCards) <= maxTeamCount
+	return s, ok
 }
 
 // matchRecord reads a player record at the start of b; false when b does not

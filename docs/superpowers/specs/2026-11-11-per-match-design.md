@@ -19,7 +19,8 @@ The in-game references are four FM27 screens: match report stats, a player's mat
 | goals: scorer, assister, minute, added time, side, type (goal, own goal, penalty, shootout kick, missed penalty in play: inference) | `FIXTURE_RESULT` events in `rgman/fix_man.dat` | every result with a match id: 1 027 of 3 246 on the 07-16 save. Quick-simulated matches have a score only |
 | match id | `FIXTURE_RESULT` u32 after the version | same 1 027 |
 | match object: per-player rating (×100), xG, shirt number, side, played / started / came on (two position bitmasks; "taken off" only in some of the human's matches) for every squad member; team xG and passes by third (anchors in one object only) | `match_stats_cfg.dat`, four zstd packs keyed by match id | 821 objects on 07-16. pack roles are an inference: `pks_0` (the manager's club's teams), `pks_1` (mostly league rivals) and `pks_2` (mostly continental) kept everything this season; `pks_3` (the rest) lost 206 matches of days 45–97 between the 05-09 and 07-16 saves. 570 objects (all of `pks_3`, 26 others) are small (8.6–14 KB) and have no match setup section; player records are in all |
-| not located yet | match object | team totals (shots, possession, passes, fouls, corners, cards), substitution times, minutes played |
+| team totals: passes (and completed by third), tackles, headers, blocked shots, clear-cut chances, corners, fouls, yellow cards | match object, fixed offsets before each side's first player record (found in #5) | every stored object whose stats pass the parser's checks (all 821 on 07-16) |
+| not located yet | match object | shots, shots on target, possession, distance, progressive passes, OPPDA, red cards, which player was booked, substitution times, minutes played |
 
 Consequences:
 
@@ -69,7 +70,7 @@ Consequences:
 | 2 | `get_match` with goals: parse match id and events in `savefile`; tool takes `match_id`, `team_index` + `date`, or a team for its last match; `get_fixtures` rows gain `match_id` and the status | INDEPENDENT | ~400 |
 | 3 | Match objects: pack reader, player-record fixed fields decoded at load into an index by match id (the index by player lands in #4, its first user); `get_match` adds player lines (shirt, played, started / came on, taken off where known, rating, xG) | STACKED-ON #2 | ~450 |
 | 4 | `get_player_matches` from stored objects plus goal events | STACKED-ON #3 | ~350 |
-| 5 | Team totals, cards, substitution times, minutes: decode more of the object against a second in-game reference, then add to `get_match` and `get_player_matches` | STACKED-ON #4 | ~400–500 |
+| 5 | Team totals verified on the 07-15 report (see the decision below) in `get_match`; the rest of the team block, per-player cards, substitution times and minutes in a later PR against a second in-game reference | INDEPENDENT (after #4 merged) | ~300 |
 | 6 | `scout_opponent` composed from #2, #3 and `get_last_lineup`; tool or MCP prompt (see below) | STACKED-ON #3 | ~300 (tool) or ~80 (prompt) |
 
 Changes from the approved plan:
@@ -77,9 +78,11 @@ Changes from the approved plan:
 - Goals ship first, on their own, from `fix_man.dat`.
 - Player lines come from match objects, not the 16-match list.
 - Who played, started and came on ships in #3 (taken off only where known); cards and substitution times move to #5 with the team totals.
-- #5 stacks on #4 (it extends `get_player_matches`); #6 needs only #2 and #3.
+- #5 ships only team totals in `get_match`, so it no longer needs `get_player_matches`; #6 needs only #2 and #3.
 
-Open for the user: `scout_opponent` as a tool, as approved, or as an MCP prompt like `squad_review` and `scout_position` that tells the model to combine `get_fixtures`, `get_match` and `get_last_lineup`. A prompt needs no new fm API.
+Decided by the user (2026-11-11): `scout_opponent` is an MCP prompt like `squad_review` and `scout_position`, telling the model to combine `get_fixtures`, `get_match`, `get_player_matches` and `get_last_lineup`; no new fm API.
+
+Decided by the user (2026-11-11): #5 first ships the 8 team totals matched against the 07-15 match report (passes attempted/completed and completed by third, tackles, headers, blocked shots, clear-cut chances, corners, fouls, yellow cards); shots, possession, distance, progressive passes, OPPDA, per-player cards, substitution times and minutes follow in a later PR once a fresh save and Advanced Stats / player stats screenshots are available.
 
 ## Left to the builder
 

@@ -749,6 +749,17 @@ func TestLoadTestSave27MatchPlayers(t *testing.T) {
 	if math.Abs(xg[0]-1.98) > 0.03 || math.Abs(xg[1]-2.18) > 0.03 {
 		t.Errorf("xG %.2f–%.2f, want about 1.98–2.18 (per-player values are rounded)", xg[0], xg[1])
 	}
+	if len(m.TeamStats) != 2 {
+		t.Fatalf("team stats = %+v, want home and away", m.TeamStats)
+	}
+	home, away := m.TeamStats[0], m.TeamStats[1]
+	if home.TeamIndex != 456 || home.PassesCompleted != 402 || home.PassesCompletedByThird == nil || *home.PassesCompletedByThird != (ThirdPasses{118, 215, 69}) ||
+		home.Corners != 6 || home.Fouls != 13 || home.YellowCards != 3 || home.HeadersWon != 16 || home.Headers != 26 || home.TacklesWon != 4 || home.Tackles != 6 || home.ClearCutChances != 5 || home.ShotsBlocked != 1 {
+		t.Errorf("Shamrock = %+v, want the report's totals", home)
+	}
+	if away.PassesCompleted != 435 || away.Corners != 4 || away.Fouls != 7 || away.YellowCards != 2 || away.HeadersWon != 8 || away.TacklesWon != 7 || away.Tackles != 12 || away.ShotsBlocked != 4 {
+		t.Errorf("KŽ = %+v, want the report's totals", away)
+	}
 }
 
 // TestLoadTestSave27PlayerMatches checks Renan Oliveira's match log on

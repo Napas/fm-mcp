@@ -78,16 +78,32 @@ Section map of the 07-15 object (inference from strings and the anchors below):
 | 26 807 | match setup: build string `FM27.fm27-rel-03-launch-freepreview.2493426`, teams, players with names, tactics |
 | about 59 000 to the end | not mapped; refers to players many times (candidates: event stream, positions for the 2D view) |
 
-**Team block anchors** (07-15, in game: Key Stats and Advanced Stats):
+**Team stats** (verified 27.0.0, bytes + in game; `savefile.TeamStats`). Each side's totals sit before its first player record (07-15: home records start at 1 149, away at 14 535). Offsets are relative to that record:
 
-| Value | Offset | Encoding |
-|-------|--------|----------|
-| home xG 1.98 | 705 | float32 |
-| home passes by third 118, 215, 69 (own, middle, final) | 983 | u16 run 118, 245, 215, 78, 69: own third at +0, middle at +4, final at +8 (inference for +8: 118 + 215 + 69 = 402, the shown total); +2 and +6 unknown |
-| away xG 2.18 | 14 085 | float32 |
-| away passes by third 156, 223, 56 | 14 369 | u16 run 156, 261, 223, 69, 56 (156 + 223 + 56 = 435, the shown total) |
+| Offset | Size | Field | 07-15 home / away (report) |
+|--------|------|-------|----------------------------|
+| −296 | u8 | the side's own shots that were blocked | 1 / 4 (shot maps: Shots Blocked) |
+| −295 | u8 | clear-cut chances | 5 / 3 |
+| −283 | u8 | corners | 6 / 4 |
+| −280 | u8 | fouls | 13 / 7 |
+| −278 | u8 | yellow cards | 3 / 2 |
+| −264 | u16 | passes attempted | 468 / 500 (inference: 402 / 468 = 86 %, shown 85 %; 435 / 500 = 87 %) |
+| −262 | u16 | passes completed | 402 / 435 (pass maps: Total Passes) |
+| −258, −256 | u16, u16 | tackles attempted, won | 6, 4 / 12, 7 (Tackles Won 4/6, 7/12) |
+| −254, −252 | u16, u16 | headers attempted, won | 26, 16 / 25, 8 |
+| −168 … −158 | 6 × u16 | passes attempted and completed in the own, middle and final third, in pairs | completed 118, 215, 69 / 156, 223, 56 (pass maps); attempted 144, 245, 78 / 170, 261, 69 (inference) |
 
-Not located: shots 19/17, shots on target 10/5, possession 48/52, headers 16/26 and 8/25, distance 117/115 km, OPPDA 15.39/14.41, fouls, corners, cards, substitutions.
+Home xG 1.98 is a float32 at 705 and away xG 2.18 at 14 085, before these blocks (−444 and −450 from the first records, so not at one fixed offset). Not decoded: the players' xG sums give the same values.
+
+Parser rules (`savefile.readTeamStats`): a side's block is read only when its first record is at least 296 bytes in and, for the away side, the block starts after the home records end; completed must not exceed attempted for passes, tackles and headers; passes are capped at 2 000, tackles and headers at 200 and the u8 counts at 40. A block that fails gives no team stats for the match (the players still read) and is counted in the load warning "match team stats not read". Completed passes by third are kept only when they add up to the completed total.
+
+Checks on the 07-16 save (bytes):
+
+- All 821 objects, all 1 642 sides: completed ≤ attempted for passes, tackles and headers; values in plausible ranges (fouls 1–20, yellow cards 0–7, corners 0–19, passes 197–961).
+- In the 251 objects with a setup section, completed passes by third sum to the completed total on every side. In the 570 objects without one, completed by third are all 0, so the parser leaves the split out. In objects with a setup section, attempted passes minus attempted by third is 0 on 470 sides and 1–2 on 32; in the others it is 4–156 on every side and the by-third values often repeat, so they are not attempted passes there (meaning unknown).
+- Against `player_stats.dat`: KŽ's 19 stored TOPLYGA matches give 43 yellow cards, the sum of the league yellow cards of the players who played for KŽ in them (43); fouls 204 vs 209, completed/attempted passes 11 100 / 12 356 vs 11 090 / 12 388, tackles 120 / 160 vs 128 / 173, headers 284 / 511 vs 304 / 529. Players' league totals also count games for other clubs, and keepers' slots mean other things, so close but not equal is expected (inference). FK Žalgiris and FK Sūduva show the same pattern.
+
+Not located: shots 19/17, shots on target 10/5, possession 48/52, distance 117/115 km, progressive passes 54/43, OPPDA 15.39/14.41, crosses completed 25 %/22 %, red cards, which player was booked, substitution times.
 
 **Player record** (07-15: all 44 records; the ratings of all 32 players who played checked against the match report, xG against both team totals):
 
@@ -127,7 +143,7 @@ Counts: none on 01-19, 01-22 and 02-11; 17 on 05-04; 26 on 05-09; 30 on 07-16. O
 ## Open questions
 
 - `match_stats_cfg.dat`: the undecoded header and pack bytes; what decides pack membership; the `pks_3` pruning rule; whether packs are pruned at a season change; the `pks_3` gap.
-- Match object: the header grammar; what decides an object's kind (with or without setup); team block fields beyond the anchors; the u16 values between the thirds; shots, possession, cards, substitution times, minutes played; the position bit meanings at offsets 8 and 13 and why offset 13 differs by side; record length; offsets 20 (goals?) and 21 (non-zero on keepers only and equal to the goals each conceded on 07-15: McGinty 2, Mikelionis 3); the sections after 26 807.
+- Match object: the header grammar; what decides an object's kind (with or without setup); the rest of the team block (shots, shots on target, possession, distance, progressive passes, OPPDA, crosses, red cards); which player was booked; substitution times, minutes played; the position bit meanings at offsets 8 and 13 and why offset 13 differs by side; record length; offsets 20 (goals?) and 21 (non-zero on keepers only and equal to the goals each conceded on 07-15: McGinty 2, Mikelionis 3); the sections after 26 807.
 - Player records: which substitute appearances the game leaves unrated; Kazlauskas's 3 extra starts.
 - `.scm` files: why they exist and when the game deletes them.
 - 26.x: whether `match_stats_cfg.dat` (a root file of the 26.2.0 test save) and the `*.scm` files of 26.3.2 saves use the same layout (see [`container.md`](container.md)).
