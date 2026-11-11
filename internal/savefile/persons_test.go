@@ -3,6 +3,7 @@ package savefile
 import (
 	"encoding/binary"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -78,13 +79,61 @@ func TestSplitPersonTablePrefersTrailerWithRepeatedUID(t *testing.T) {
 	}
 }
 
+// Record 0 holds a strict match for record 1's trailer before its own
+// trailer, like record 65 535 in a 27.0.0 save (docs/format/game-db.md
+// "Person table").
+func TestSplitPersonTableSkipsFalseNextTrailer(t *testing.T) {
+	fake := encodePersonTrailer(0xc00000000, 1, 256) // the bytes in record 65 535
+	rec0 := append(append([]byte{2}, fake...), encodePersonTrailer(0x100400000, 0, 2000531332)...)
+	rec1 := append([]byte{2}, encodePersonTrailer(0x100400000, 1, 2000531333)...)
+
+	recs, _, err := splitTable(personTable(rec0, rec1), 0, personTrailer)
+	if err != nil {
+		t.Fatalf("splitTable: %v", err)
+	}
+
+	if len(recs) != 2 || recs[0].UID != 2000531332 || recs[0].End-recs[0].Start != len(rec0) || recs[1].UID != 2000531333 {
+		t.Errorf("records = %+v, want uids 2000531332 (%d bytes) and 2000531333", recs, len(rec0))
+	}
+}
+
+// Record 5 has no trailer but many false trailers for record 6, each
+// forcing another search.
+func TestRecordTrailerStopsAtScanBudget(t *testing.T) {
+	rec5 := []byte{1}
+	for range 1000 {
+		rec5 = append(rec5, encodePersonTrailer(0, 6, 1<<20)...)
+	}
+	body := personTable(rec5, strictRecord(6))
+	// start: after the 5-byte table header; recordTrailer ignores the table count.
+	const start, k, n = 5, 5, 7
+	budget := len(body)
+	var scanned int
+
+	_, ok := recordTrailer(body, start, k, n, personTrailer, &scanned, budget)
+
+	if ok || scanned <= budget || scanned > budget+3*len(body) {
+		t.Errorf("ok = %v, scanned = %d, want a miss stopped by the %d-byte budget", ok, scanned, budget)
+	}
+}
+
 func TestSplitPersonTableReportsMissingTrailer(t *testing.T) {
-	body := personTable([]byte{2, 1, 2, 3})
+	// In the second case, record 0 has a false trailer for record 1 and none
+	// of its own, so the search past it ends in a missing trailer.
+	falseNext := append([]byte{2}, encodePersonTrailer(0xc00000000, 1, 256)...)
+	rec1 := append([]byte{2}, encodePersonTrailer(0x100400000, 1, 2000531333)...)
+	tests := map[string][]byte{
+		"no trailers":             personTable([]byte{2, 1, 2, 3}),
+		"false next trailer only": personTable(falseNext, rec1),
+	}
+	for name, body := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := splitTable(body, 0, personTrailer)
 
-	_, _, err := splitTable(body, 0, personTrailer)
-
-	if !errors.Is(err, ErrCorrupt) {
-		t.Errorf("err = %v, want ErrCorrupt", err)
+			if !errors.Is(err, ErrCorrupt) || !strings.Contains(err.Error(), "no trailer for record 0") {
+				t.Errorf("err = %v, want ErrCorrupt naming record 0's missing trailer", err)
+			}
+		})
 	}
 }
 
