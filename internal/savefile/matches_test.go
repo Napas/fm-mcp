@@ -19,7 +19,7 @@ func matchRecordBytes(p MatchPlayer) []byte {
 	binary.LittleEndian.PutUint32(b[25:], math.Float32bits(p.XG))
 	binary.LittleEndian.PutUint16(b[136:], p.Rating)
 	st := p.Stats
-	b[41], b[42], b[45], b[60], b[63], b[64] = st.Shots, st.ShotsOnTarget, st.ClearCutChances, st.Fouls, st.YellowCards, st.RedCards
+	b[41], b[42], b[44], b[45], b[60], b[62], b[63], b[64] = st.Shots, st.ShotsOnTarget, st.LongShots, st.ClearCutChances, st.Fouls, st.Offsides, st.YellowCards, st.RedCards
 	b[67], b[71] = st.SubbedOffMinute, st.SubbedOnMinute
 	b[86], b[87], b[88], b[89], b[90] = st.Passes, st.PassesCompleted, st.KeyPasses, st.Crosses, st.CrossesCompleted
 	b[92], b[93], b[94], b[98] = st.Tackles, st.TacklesWon, st.KeyTackles, st.Interceptions
@@ -277,7 +277,11 @@ func TestTestSave27MatchObjects(t *testing.T) {
 	if m.TeamStats == nil {
 		t.Fatal("match 1022 has no team stats")
 	}
-	if got := *m.TeamStats; !reflect.DeepEqual(got, want) {
+	got := *m.TeamStats
+	for side := range got { // not checked in game on this match
+		got[side].FinalThirdPasses, got[side].Offsides = nil, 0
+	}
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("team stats = %+v, want the report's %+v", got, want)
 	}
 	for _, o := range objs {
@@ -310,7 +314,7 @@ func teamBlockBytes(s TeamStats) []byte {
 	b := make([]byte, teamBlockSize)
 	at := func(rel int) int { return teamBlockSize + rel }
 	b[at(teamShotsBlocked)], b[at(teamClearCutChances)], b[at(teamCorners)] = s.ShotsBlocked, s.ClearCutChances, s.Corners
-	b[at(teamFouls)], b[at(teamYellowCards)] = s.Fouls, s.YellowCards
+	b[at(teamFouls)], b[at(teamOffsides)], b[at(teamYellowCards)] = s.Fouls, s.Offsides, s.YellowCards
 	for rel, v := range map[int]uint16{
 		teamPasses: s.Passes, teamPassesCompleted: s.PassesCompleted, teamTackles: s.Tackles, teamTacklesWon: s.TacklesWon,
 		teamHeaders: s.Headers, teamHeadersWon: s.HeadersWon,
@@ -321,6 +325,9 @@ func teamBlockBytes(s TeamStats) []byte {
 		for i, v := range th {
 			binary.LittleEndian.PutUint16(b[at(teamThirdsCompleted+4*i):], v)
 		}
+	}
+	if s.FinalThirdPasses != nil {
+		binary.LittleEndian.PutUint16(b[at(teamFinalThirdPasses):], *s.FinalThirdPasses)
 	}
 	return b
 }
@@ -338,9 +345,11 @@ func sidesObjectBytes(home, away []MatchPlayer, teams [2]TeamStats) []byte {
 }
 
 var testTeams = [2]TeamStats{
-	{Passes: 468, PassesCompleted: 402, PassesCompletedByThird: &[3]uint16{118, 215, 69}, Tackles: 6, TacklesWon: 4, Headers: 26, HeadersWon: 16, ShotsBlocked: 1, ClearCutChances: 5, Corners: 6, Fouls: 13, YellowCards: 3},
-	{Passes: 500, PassesCompleted: 435, Tackles: 12, TacklesWon: 7, Headers: 25, HeadersWon: 8, ShotsBlocked: 4, ClearCutChances: 3, Corners: 4, Fouls: 7, YellowCards: 2},
+	{Passes: 468, PassesCompleted: 402, PassesCompletedByThird: &[3]uint16{118, 215, 69}, FinalThirdPasses: ptr(uint16(78)), Tackles: 6, TacklesWon: 4, Headers: 26, HeadersWon: 16, ShotsBlocked: 1, ClearCutChances: 5, Corners: 6, Fouls: 13, Offsides: 2, YellowCards: 3},
+	{Passes: 500, PassesCompleted: 435, Tackles: 12, TacklesWon: 7, Headers: 25, HeadersWon: 8, ShotsBlocked: 4, ClearCutChances: 3, Corners: 4, Fouls: 7, Offsides: 5, YellowCards: 2},
 }
+
+func ptr[T any](v T) *T { return &v }
 
 func TestReadMatchObjectTeamStats(t *testing.T) {
 	home, away := testSquad(0, 100), testSquad(1, 200)
@@ -365,6 +374,7 @@ func TestReadMatchObjectRejectsBadTeamStats(t *testing.T) {
 		"yellow cards out of range":  func(s *TeamStats) { s.YellowCards = 41 },
 		"more passes completed":      func(s *TeamStats) { s.PassesCompleted = 501 },
 		"fouls out of range":         func(s *TeamStats) { s.Fouls = 200 },
+		"offsides out of range":      func(s *TeamStats) { s.Offsides = 41 },
 		"corners out of range":       func(s *TeamStats) { s.Corners = 41 },
 		"passes out of range":        func(s *TeamStats) { s.Passes, s.PassesCompleted = 9000, 9000 },
 		"tackles out of range":       func(s *TeamStats) { s.Tackles, s.TacklesWon = 201, 0 },
@@ -385,11 +395,27 @@ func TestReadMatchObjectRejectsBadTeamStats(t *testing.T) {
 func TestReadMatchObjectThirdsOnlyWhenSplit(t *testing.T) {
 	teams := testTeams
 	zeros := [3]uint16{}
-	teams[0].PassesCompletedByThird = &zeros
+	teams[0].PassesCompletedByThird = &zeros         // the final-third passes (78) are left out with the split
 	teams[1].Passes, teams[1].PassesCompleted = 0, 0 // a side with no passes: zeros add up, but there is no split
 	_, got, err := readMatchObject(sidesObjectBytes(testSquad(0, 100), testSquad(1, 200), teams))
-	if err != nil || got == nil || got[0].PassesCompletedByThird != nil || got[0].PassesCompleted != 402 || got[1].PassesCompletedByThird != nil {
+	if err != nil || got == nil || got[0].PassesCompletedByThird != nil || got[0].FinalThirdPasses != nil || got[0].PassesCompleted != 402 || got[1].PassesCompletedByThird != nil {
 		t.Errorf("teams = %+v, %v; want both sides without the split", got, err)
+	}
+}
+
+// TestReadMatchObjectFinalThirdPlausible checks that final-third passes are
+// dropped, and the rest of the block kept, outside 69 (completed) to 468 (all).
+func TestReadMatchObjectFinalThirdPlausible(t *testing.T) {
+	for final, kept := range map[uint16]bool{68: false, 69: true, 468: true, 469: false} {
+		teams := testTeams
+		teams[0].FinalThirdPasses = ptr(final)
+		_, got, err := readMatchObject(sidesObjectBytes(testSquad(0, 100), testSquad(1, 200), teams))
+		if err != nil || got == nil || got[0].PassesCompletedByThird == nil || got[0].Passes != 468 {
+			t.Fatalf("final %d: teams = %+v, %v; want the block read", final, got, err)
+		}
+		if gotKept := got[0].FinalThirdPasses != nil; gotKept != kept {
+			t.Errorf("final %d: kept = %v, want %v", final, gotKept, kept)
+		}
 	}
 }
 
@@ -427,7 +453,7 @@ func TestReadMatchObjectTeamStatsNeedRoom(t *testing.T) {
 
 func TestMatchRecordReadsStats(t *testing.T) {
 	want := MatchPlayer{Person: 7, Shirt: 23, Side: 1, StartPositions: 0x10, EndPositions: 0x10, XG: 0.4, Rating: 711, Stats: MatchPlayerStats{
-		Shots: 1, ShotsOnTarget: 2, ClearCutChances: 3, Fouls: 4, YellowCards: 5, RedCards: 6, SubbedOffMinute: 7, SubbedOnMinute: 8,
+		Shots: 1, ShotsOnTarget: 2, LongShots: 20, Offsides: 21, ClearCutChances: 3, Fouls: 4, YellowCards: 5, RedCards: 6, SubbedOffMinute: 7, SubbedOnMinute: 8,
 		Passes: 73, PassesCompleted: 65, KeyPasses: 9, Crosses: 10, CrossesCompleted: 11, Tackles: 12, TacklesWon: 13, KeyTackles: 14,
 		Interceptions: 15, DistanceMetres: 9183.5, PossessionWon: 16, Clearances: 17, ProgressivePasses: 18, Sprints: 19,
 	}}
@@ -486,7 +512,11 @@ func TestTestSave27MatchPlayerStats(t *testing.T) {
 				{shots: 6, onTarget: 3, progressive: 33, fouls: 8, yellow: 1, tackles: 10, tacklesWon: 5, clearCut: 0, metres: 114_900},
 				{shots: 12, onTarget: 7, progressive: 55, fouls: 12, yellow: 1, tackles: 12, tacklesWon: 10, clearCut: 2, metres: 117_200},
 			}
-			if got := matchSums(o.Players); got != want {
+			got := matchSums(o.Players)
+			for side := range got { // not checked in game on this match
+				got[side].longShots, got[side].offsides = 0, 0
+			}
+			if got != want {
 				t.Errorf("match 12438 sums = %+v, want the report's %+v", got, want)
 			}
 		}
@@ -510,15 +540,48 @@ func TestTestSave27MatchPlayerStats(t *testing.T) {
 		km := math.Round(float64(got.DistanceMetres)/100) / 10
 		got.DistanceMetres = 0
 		got.Shots, got.ShotsOnTarget, got.ProgressivePasses = 0, 0, 0 // checked as team sums above
+		got.LongShots, got.Offsides = 0, 0                            // checked on match 11123
 		if !reflect.DeepEqual(got, tc.want) || km != tc.km {
 			t.Errorf("%s = %+v, %.1f km; want %+v, %.1f km", name, got, km, tc.want, tc.km)
 		}
 	}
 }
 
+// TestTestSave27SecondMatchStats checks match 11123 (Kauno Žalgiris 2–2
+// FK Žalgiris, 2026-10-25) against the in-game Key and Advanced Stats.
+func TestTestSave27SecondMatchStats(t *testing.T) {
+	objs, err := ReadMatchObjects(openTestSaveAt(t, testSave27MatchesPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range objs {
+		if o.MatchID != 11123 {
+			continue
+		}
+		want := [2]sideSums{
+			{shots: 11, onTarget: 5, longShots: 4, offsides: 3, progressive: 48, fouls: 17, yellow: 3, tackles: 7, tacklesWon: 4, clearCut: 2, metres: 115_300},
+			{shots: 14, onTarget: 11, longShots: 7, offsides: 3, progressive: 38, fouls: 11, yellow: 2, tackles: 17, tacklesWon: 10, clearCut: 2, metres: 115_100},
+		}
+		if got := matchSums(o.Players); got != want {
+			t.Errorf("sums = %+v, want the report's %+v", got, want)
+		}
+		if o.TeamStats == nil {
+			t.Fatal("no team stats")
+		}
+		for side, want := range [2]struct{ passes, completed, finalThird, offsides int }{{557, 486, 100, 3}, {432, 368, 55, 3}} {
+			ts := o.TeamStats[side]
+			if ts.FinalThirdPasses == nil || int(*ts.FinalThirdPasses) != want.finalThird || int(ts.Passes) != want.passes || int(ts.PassesCompleted) != want.completed || int(ts.Offsides) != want.offsides {
+				t.Errorf("side %d team stats %+v, want %+v", side, ts, want)
+			}
+		}
+		return
+	}
+	t.Fatal("match 11123 not stored")
+}
+
 type sideSums struct {
-	shots, onTarget, progressive, fouls, yellow, tackles, tacklesWon, clearCut int
-	metres                                                                     int // to the nearest 100
+	shots, onTarget, longShots, offsides, progressive, fouls, yellow, tackles, tacklesWon, clearCut int
+	metres                                                                                          int // to the nearest 100
 }
 
 func matchSums(ps []MatchPlayer) [2]sideSums {
@@ -528,6 +591,8 @@ func matchSums(ps []MatchPlayer) [2]sideSums {
 		s, st := &out[p.Side], p.Stats
 		s.shots += int(st.Shots)
 		s.onTarget += int(st.ShotsOnTarget)
+		s.longShots += int(st.LongShots)
+		s.offsides += int(st.Offsides)
 		s.progressive += int(st.ProgressivePasses)
 		s.fouls += int(st.Fouls)
 		s.yellow += int(st.YellowCards)
@@ -551,8 +616,11 @@ func checkTeamSums(t *testing.T, o MatchObject) {
 	sums := matchSums(o.Players)
 	for side, ts := range o.TeamStats {
 		s := sums[side]
-		if s.fouls != int(ts.Fouls) || s.yellow != int(ts.YellowCards) || s.tackles != int(ts.Tackles) || s.tacklesWon != int(ts.TacklesWon) || s.clearCut != int(ts.ClearCutChances) {
+		if s.fouls != int(ts.Fouls) || s.yellow != int(ts.YellowCards) || s.tackles != int(ts.Tackles) || s.tacklesWon != int(ts.TacklesWon) || s.clearCut != int(ts.ClearCutChances) || s.offsides != int(ts.Offsides) {
 			t.Errorf("match %d side %d: player sums %+v, team %+v", o.MatchID, side, s, ts)
+		}
+		if s.longShots > s.shots {
+			t.Errorf("match %d side %d: %d long shots of %d shots", o.MatchID, side, s.longShots, s.shots)
 		}
 		if s.metres < 50_000 || s.metres > 200_000 {
 			t.Errorf("match %d side %d: players ran %d metres", o.MatchID, side, s.metres)

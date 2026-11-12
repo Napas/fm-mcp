@@ -86,12 +86,14 @@ Section map of the 07-15 object (inference from strings and the anchors below):
 | −295 | u8 | clear-cut chances | 5 / 3 |
 | −283 | u8 | corners | 6 / 4 |
 | −280 | u8 | fouls | 13 / 7 |
+| −279 | u8 | offsides | 10-25: 3 / 3 (Advanced Stats); the players' offsides (record offset 62) add up to it on all 7 744 sides of 11-12 |
 | −278 | u8 | yellow cards | 3 / 2 |
 | −264 | u16 | passes attempted (without a setup section, not always the total: inference, see checks) | 468 / 500 (inference: 402 / 468 = 86 %, shown 85 %; 435 / 500 = 87 %) |
 | −262 | u16 | passes completed | 402 / 435 (pass maps: Total Passes) |
 | −258, −256 | u16, u16 | tackles attempted, won | 6, 4 / 12, 7 (Tackles Won 4/6, 7/12) |
 | −254, −252 | u16, u16 | headers attempted, won | 26, 16 / 25, 8 |
 | −168 … −158 | 6 × u16 | passes attempted and completed in the own, middle and final third, in pairs | completed 118, 215, 69 / 156, 223, 56 (pass maps); attempted 144, 245, 78 / 170, 261, 69 (inference) |
+| −160 | u16 | passes attempted in the final third (FM's Final Third Passes) | 10-25: 100 / 55 (Advanced Stats). Kept only with the completed split and when between the completed final-third passes and all passes (always so on the saves checked). The players' offset 207 adds up to it on that match but on only 784 of 1 378 sides of 11-12 (off by 1–11) |
 
 Home xG 1.98 is a float32 at 705 and away xG 2.18 at 14 085, before these blocks (−444 and −450 from the first records, so not at one fixed offset). Not decoded: the players' xG sums give the same values.
 
@@ -106,7 +108,13 @@ Checks (bytes; on the 07-16 save unless another is named):
 
 The players' records add up to fouls, yellow cards, blocked shots, clear-cut chances and tackles in this block on every side (all 7 744 sides of `data/test_save_27_matches.fm` and the 1 642 of 07-16). Passes add up only in objects with a setup section (all 1 378 sides of 11-12); on the 6 366 sides without one they never do, which supports the doubt about −264 there (inference: the player sums are right, since every other total agrees).
 
-Shots, shots on target, distance, progressive passes and crosses are not in this block at one fixed offset (07-15's −421/−420 hold other values than 11-08's), but the players' records add up to the report's values (see "Player record"). Not located: possession (07-15 48/52, 11-08 44/56) and OPPDA (15.39/14.41, 27.29/15.81). On both matches the completed-pass share rounds to the possession shown (402/837 = 48.0 %, 423/953 = 44.4 %); two matches do not show that the game computes it that way (inference).
+Shots, shots on target, long shots, distance, progressive passes and crosses are not in this block at one fixed offset (07-15's −421/−420 hold other values than 11-08's), but the players' records add up to the report's values (see "Player record").
+
+**Third match** (10-25): Kauno Žalgiris 2–2 FK Žalgiris on 2026-10-25, match 11123 of `data/test_save_27_matches.fm` (`pks_0`, with a setup section), checked against the in-game Key and Advanced Stats. Every total above and every player sum below matches: shots 11/14, on target 5/11, blocked 4/1, clear-cut chances 2/2, corners 8/10, headers won 22 of 38 and 15 of 38, tackles won 4 of 7 and 10 of 17, fouls 17/11, yellow cards 3/2, passes 486 of 557 and 368 of 432, crosses 5 of 20 and 6 of 26, progressive passes 48/38, distance 115.3/115.1 km (shown 115/115).
+
+**Possession** (inference; `fm` computes it): a side's share of both sides' completed passes, rounded, the other side taking the rest of 100. It matches all three reports: 402/837 = 48.0 % (07-15, shown 48/52), 423/953 = 44.4 % (11-08, 44/56), 486/854 = 56.9 % (10-25, 57/43). The share of attempted passes does not (11-08: 44.9 %; 10-25: 56.3 %). Not stored there as a number: on 10-25 and 11-08 no u8, u16, u32 or float32 in the 1 100 bytes before each side's first record holds the two sides' values (as percent or fraction), and no player record offset sums to them.
+
+Not located: OPPDA (07-15 15.39/14.41, 11-08 27.29/15.81, 10-25 13.46/14.74) and Ball Share (10-25 55/45, a separate stat from possession). OPPDA is not a float32 or float64 anywhere in the three objects. As a u16 × 100 it is missing from the 07-15 object (no 1441) and the 11-08 one (no 2729); the 10-25 one holds 1346 and 1474 once each, 3.6 KB apart in the unmapped tail (inference: chance). Ball Share is not a float32 pair in the 10-25 object (one 45.0, no 55.0). No ratio of the opponent's passes (total, completed, or by third) to the side's tackles, interceptions, fouls, possession won, clearances or blocks, in any combination of up to 4 of them, gives OPPDA on all three matches.
 
 **Player record** (07-15: all 44 records; the ratings of all 32 players who played checked against the match report, xG against both team totals. Offsets 41–190: match 12438 of `data/test_save_27_matches.fm` (11-12 below), FK TransINVEST 1–1 Kauno Žalgiris on 2026-11-08 (11-08), all 31 players who played checked against the in-game Key Statistics tables of both sides):
 
@@ -125,9 +133,11 @@ Shots, shots on target, distance, progressive passes and crosses are not in this
 | 41 | u8 | shots | team sums 6/12 (11-08) and 19/17 (07-15), as the reports |
 | 42 | u8 | shots on target | team sums 3/7 and 10/5 |
 | 43 | u8 | shots blocked | team sums equal the team block's −296 |
+| 44 | u8 | long shots | 10-25: team sums 4/7 (Advanced Stats); not above the player's shots on any played record of 11-12 |
 | 45 | u8 | clear-cut chances | Kalik, Baldassarra 1; team sums equal −295 on every side |
 | 56 | u8 | inference: assists | Milošević 1 (he assisted the 85th-minute goal) |
 | 60 | u8 | fouls | Lekiatas 3, Šluta 2; team sums equal −280 on every side |
+| 62 | u8 | offsides | 10-25: team sums 3/3 (Advanced Stats); team sums equal −279 on every side of 11-12 |
 | 63 | u8 | yellow cards | Šluta, Konatar 1 (the report: 1 a side); team sums equal −278 on every side |
 | 64 | u8 | red cards | bytes only: 1 on all 157 players of 11-12 with two yellow cards, and on 297 with none (straight reds); no red card checked in game |
 | 67 | u8 | minute taken off; 0 otherwise | all 9 starters replaced on 11-08, both sides (33, 57, 65, 74, 83, 85). Never set for a player sent off |
@@ -169,7 +179,7 @@ Counts: none on 01-19, 01-22 and 02-11; 17 on 05-04; 26 on 05-09; 30 on 07-16. O
 ## Open questions
 
 - `match_stats_cfg.dat`: the undecoded header and pack bytes; what decides pack membership; the `pks_3` pruning rule; whether packs are pruned at a season change; the `pks_3` gap.
-- Match object: the header grammar; what decides an object's kind (with or without setup); possession and OPPDA; whether 73 and 74 are card minutes; the position bit meanings at offsets 8 and 13 and why offset 13 differs by side; record length; offsets 20 (goals?), 21 (non-zero on keepers only and equal to the goals each conceded on 07-15: McGinty 2, Mikelionis 3), 56 (assists?), 61, 62, 65, 66 (card reasons?), 68–70, 72 (non-zero on 575 of 116 116 played records of 11-12, e.g. Kloniūnas 33, taken off in minute 33) and 75–85; the sections after 26 807; what the attempted-passes field (−264) counts in objects without a setup section (below completed in match 8736).
-- Player records: what offsets 89 and 90 hold on unused substitutes' records in objects without a setup section; which substitute appearances the game leaves unrated; Kazlauskas's 3 extra starts.
+- Match object: the header grammar; what decides an object's kind (with or without setup); OPPDA and Ball Share; how the game computes possession; whether 73 and 74 are card minutes; the position bit meanings at offsets 8 and 13 and why offset 13 differs by side; record length; offsets 20 (goals?), 21 (non-zero on keepers only and equal to the goals each conceded on 07-15: McGinty 2, Mikelionis 3), 56 (assists?), 61, 65, 66 (card reasons?), 68–70, 72 (non-zero on 575 of 116 116 played records of 11-12, e.g. Kloniūnas 33, taken off in minute 33) and 75–85; the sections after 26 807; what the attempted-passes field (−264) counts in objects without a setup section (below completed in match 8736).
+- Player records: offset 207, which adds up to the final-third passes (−160) on only some sides; what offsets 89 and 90 hold on unused substitutes' records in objects without a setup section; which substitute appearances the game leaves unrated; Kazlauskas's 3 extra starts.
 - `.scm` files: why they exist and when the game deletes them.
 - 26.x: whether `match_stats_cfg.dat` (a root file of the 26.2.0 test save) and the `*.scm` files of 26.3.2 saves use the same layout (see [`container.md`](container.md)).

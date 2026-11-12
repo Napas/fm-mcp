@@ -864,15 +864,7 @@ func TestLoadTestSave27MatchPlayerStats(t *testing.T) {
 }
 
 func TestLoadTestSave27MatchTeamTotals(t *testing.T) {
-	g := loadTestSaveAt(t, testSave27MatchesPath, LoadOptions{})
-	id := int64(12438)
-	m, err := g.View(false).Match(MatchSelector{MatchID: &id})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(m.TeamStats) != 2 {
-		t.Fatalf("team stats = %+v, want home and away", m.TeamStats)
-	}
+	teams := testSave27TeamStats(t, 12438)
 	// Report: shots 6/12, on target 3/7, progressive passes 33/55,
 	// crosses 4 of 34 and 5 of 27, red cards 0/0, distance 114/117 km
 	// (shown truncated; the sums are 114.9/117.2).
@@ -881,11 +873,39 @@ func TestLoadTestSave27MatchTeamTotals(t *testing.T) {
 		km                                                           float64
 	}
 	for side, want := range []totals{{6, 3, 33, 34, 4, 0, 114.9}, {12, 7, 55, 27, 5, 0, 117.2}} {
-		s := m.TeamStats[side]
+		s := teams[side]
 		if got := (totals{s.Shots, s.ShotsOnTarget, s.ProgressivePasses, s.Crosses, s.CrossesCompleted, s.RedCards, s.DistanceKm}); got != want {
 			t.Errorf("side %d = %+v, want %+v", side, got, want)
 		}
 	}
+}
+
+// TestLoadTestSave27SecondMatchTotals checks match 11123 (Kauno Žalgiris
+// 2–2 FK Žalgiris, 2026-10-25) against the in-game Key and Advanced Stats.
+func TestLoadTestSave27SecondMatchTotals(t *testing.T) {
+	teams := testSave27TeamStats(t, 11123)
+	type totals struct{ possession, longShots, offsides, finalThird int }
+	for side, want := range []totals{{57, 4, 3, 100}, {43, 7, 3, 55}} {
+		s := teams[side]
+		if got := (totals{deref(s.Possession), s.LongShots, s.Offsides, deref(s.FinalThirdPasses)}); got != want {
+			t.Errorf("side %d = %+v, want %+v", side, got, want)
+		}
+	}
+}
+
+// testSave27TeamStats returns the home and away team stats of a match in
+// the matches test save.
+func testSave27TeamStats(t *testing.T, id int64) []TeamMatchStats {
+	t.Helper()
+	g := loadTestSaveAt(t, testSave27MatchesPath, LoadOptions{})
+	m, err := g.View(false).Match(MatchSelector{MatchID: &id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.TeamStats) != 2 {
+		t.Fatalf("match %d team stats = %+v, want home and away", id, m.TeamStats)
+	}
+	return m.TeamStats
 }
 
 func deref(p *int) int {

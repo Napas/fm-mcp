@@ -2622,17 +2622,9 @@ func TestGetPlayerMatchesIsExplained(t *testing.T) {
 // TestPerformanceFieldsAreExplained checks that both tools returning
 // fm.Performance describe every one of its fields.
 func TestPerformanceFieldsAreExplained(t *testing.T) {
-	typ := reflect.TypeFor[fm.Performance]()
-	for i := range typ.NumField() {
-		name, _, _ := strings.Cut(typ.Field(i).Tag.Get("json"), ",")
-		if name == "" || name == "-" {
-			t.Errorf("field %s has no JSON name", typ.Field(i).Name)
-			continue
-		}
-		if name == "started" { // described by each tool before the list
-			continue
-		}
-		if !regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `\b`).MatchString(performanceDescription) {
+	for _, name := range jsonFieldNames[fm.Performance](t) {
+		// started is described by each tool before the list.
+		if name != "started" && !namesWord(performanceDescription, name) {
 			t.Errorf("performanceDescription lacks %q", name)
 		}
 	}
@@ -2641,6 +2633,39 @@ func TestPerformanceFieldsAreExplained(t *testing.T) {
 			t.Errorf("%s description lacks the performance fields or their caveat", tool)
 		}
 	}
+}
+
+// TestTeamStatsFieldsAreExplained checks that the team_stats text names every field.
+func TestTeamStatsFieldsAreExplained(t *testing.T) {
+	for _, name := range jsonFieldNames[fm.TeamMatchStats](t) {
+		if !namesWord(teamStatsDescription, name) {
+			t.Errorf("teamStatsDescription lacks %q", name)
+		}
+	}
+	if !strings.Contains(matchDescription, teamStatsDescription) {
+		t.Error("get_match description lacks teamStatsDescription")
+	}
+}
+
+// jsonFieldNames returns the JSON names of T's fields.
+func jsonFieldNames[T any](t *testing.T) []string {
+	t.Helper()
+	typ := reflect.TypeFor[T]()
+	names := make([]string, 0, typ.NumField())
+	for i := range typ.NumField() {
+		name, _, _ := strings.Cut(typ.Field(i).Tag.Get("json"), ",")
+		if name == "" || name == "-" {
+			t.Errorf("%s.%s has no JSON name", typ.Name(), typ.Field(i).Name)
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
+// namesWord reports whether text has name as a whole word.
+func namesWord(text, name string) bool {
+	return regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `\b`).MatchString(text)
 }
 
 func TestGetMatchTeamStats(t *testing.T) {

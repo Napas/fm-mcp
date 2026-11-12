@@ -45,19 +45,21 @@ const (
 // Team stats sit at fixed offsets before each side's first player record
 // (docs/format/matches.md "Team stats").
 const (
-	teamBlockSize       = 296
-	teamShotsBlocked    = -296 // u8
-	teamClearCutChances = -295 // u8
-	teamCorners         = -283 // u8
-	teamFouls           = -280 // u8
-	teamYellowCards     = -278 // u8
-	teamPasses          = -264 // u16, attempted
-	teamPassesCompleted = -262 // u16
-	teamTackles         = -258 // u16, attempted
-	teamTacklesWon      = -256 // u16
-	teamHeaders         = -254 // u16, attempted
-	teamHeadersWon      = -252 // u16
-	teamThirdsCompleted = -166 // u16 own third; middle +4, final +8
+	teamBlockSize        = 296
+	teamShotsBlocked     = -296 // u8
+	teamClearCutChances  = -295 // u8
+	teamCorners          = -283 // u8
+	teamFouls            = -280 // u8
+	teamOffsides         = -279 // u8
+	teamYellowCards      = -278 // u8
+	teamPasses           = -264 // u16, attempted
+	teamPassesCompleted  = -262 // u16
+	teamTackles          = -258 // u16, attempted
+	teamTacklesWon       = -256 // u16
+	teamHeaders          = -254 // u16, attempted
+	teamHeadersWon       = -252 // u16
+	teamThirdsCompleted  = -166 // u16 own third; middle +4, final +8
+	teamFinalThirdPasses = -160 // u16, attempted
 
 	// Plausibility caps: 07-16's 1 642 sides stay within 961 passes, 66
 	// headers, 20 tackles and 20 of any count.
@@ -72,13 +74,17 @@ type TeamStats struct {
 	// PassesCompletedByThird is own, middle and final third; nil unless it
 	// adds up to PassesCompleted (objects without a setup section hold 0s).
 	PassesCompletedByThird *[3]uint16
-	Tackles, TacklesWon    uint16
-	Headers, HeadersWon    uint16
-	ShotsBlocked           uint8 // the side's own shots that were blocked
-	ClearCutChances        uint8
-	Corners                uint8
-	Fouls                  uint8
-	YellowCards            uint8
+	// FinalThirdPasses (attempted) is nil without PassesCompletedByThird, or
+	// when below the completed final-third passes or above Passes.
+	FinalThirdPasses    *uint16
+	Tackles, TacklesWon uint16
+	Headers, HeadersWon uint16
+	ShotsBlocked        uint8 // the side's own shots that were blocked
+	ClearCutChances     uint8
+	Corners             uint8
+	Fouls               uint8
+	Offsides            uint8
+	YellowCards         uint8
 }
 
 // MatchObject is a match stored in match_stats_cfg.dat: its match id (the
@@ -115,7 +121,9 @@ type MatchPlayer struct {
 // did not play.
 type MatchPlayerStats struct {
 	Shots, ShotsOnTarget    uint8
+	LongShots               uint8
 	ClearCutChances         uint8
+	Offsides                uint8
 	Fouls                   uint8
 	YellowCards, RedCards   uint8
 	SubbedOffMinute         uint8 // 0 unless taken off; a player sent off has 0
@@ -302,14 +310,17 @@ func readTeamStats(obj []byte, first int) (TeamStats, bool) {
 		Tackles: u16(teamTackles), TacklesWon: u16(teamTacklesWon),
 		Headers: u16(teamHeaders), HeadersWon: u16(teamHeadersWon),
 		ShotsBlocked: u8(teamShotsBlocked), ClearCutChances: u8(teamClearCutChances), Corners: u8(teamCorners),
-		Fouls: u8(teamFouls), YellowCards: u8(teamYellowCards),
+		Fouls: u8(teamFouls), Offsides: u8(teamOffsides), YellowCards: u8(teamYellowCards),
 	}
 	if th := [3]uint16{u16(teamThirdsCompleted), u16(teamThirdsCompleted + 4), u16(teamThirdsCompleted + 8)}; s.PassesCompleted > 0 && int(th[0])+int(th[1])+int(th[2]) == int(s.PassesCompleted) {
 		s.PassesCompletedByThird = &th
+		if final := u16(teamFinalThirdPasses); final >= th[2] && final <= s.Passes {
+			s.FinalThirdPasses = &final
+		}
 	}
 	ok := s.PassesCompleted <= s.Passes && s.TacklesWon <= s.Tackles && s.HeadersWon <= s.Headers &&
 		s.Passes <= maxTeamPasses && s.Tackles <= maxTeamDuels && s.Headers <= maxTeamDuels &&
-		max(s.ShotsBlocked, s.ClearCutChances, s.Corners, s.Fouls, s.YellowCards) <= maxTeamCount
+		max(s.ShotsBlocked, s.ClearCutChances, s.Corners, s.Fouls, s.Offsides, s.YellowCards) <= maxTeamCount
 	return s, ok
 }
 
@@ -327,7 +338,8 @@ func matchRecord(b []byte) (MatchPlayer, bool) {
 		XG:             math.Float32frombits(binary.LittleEndian.Uint32(b[25:])),
 		Rating:         binary.LittleEndian.Uint16(b[136:]),
 		Stats: MatchPlayerStats{
-			Shots: b[41], ShotsOnTarget: b[42], ClearCutChances: b[45], Fouls: b[60], YellowCards: b[63], RedCards: b[64],
+			Shots: b[41], ShotsOnTarget: b[42], LongShots: b[44], ClearCutChances: b[45], Fouls: b[60], Offsides: b[62],
+			YellowCards: b[63], RedCards: b[64],
 			SubbedOffMinute: b[67], SubbedOnMinute: b[71],
 			Passes: b[86], PassesCompleted: b[87], KeyPasses: b[88], Crosses: b[89], CrossesCompleted: b[90],
 			Tackles: b[92], TacklesWon: b[93], KeyTackles: b[94], Interceptions: b[98],

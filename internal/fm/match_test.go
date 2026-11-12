@@ -190,7 +190,7 @@ func TestMatchStatusWithObjects(t *testing.T) {
 func TestMatchPlayers(t *testing.T) {
 	home := squad(0, 92)
 	home[8].Stats = savefile.MatchPlayerStats{
-		Shots: 3, ShotsOnTarget: 2, ClearCutChances: 1, Fouls: 2, YellowCards: 1, Passes: 73, PassesCompleted: 65, KeyPasses: 4,
+		Shots: 3, ShotsOnTarget: 2, LongShots: 1, ClearCutChances: 1, Fouls: 2, Offsides: 2, YellowCards: 1, Passes: 73, PassesCompleted: 65, KeyPasses: 4,
 		Crosses: 7, CrossesCompleted: 3, Tackles: 4, TacklesWon: 3, KeyTackles: 2, Interceptions: 6, DistanceMetres: 9183.6,
 		PossessionWon: 16, Clearances: 5, ProgressivePasses: 8, Sprints: 9,
 	}
@@ -207,7 +207,7 @@ func TestMatchPlayers(t *testing.T) {
 	// is taken off, 103 came on, 104 unused.
 	vicario := m.Players[8]
 	want := MatchPlayer{Player: TacticPlayer{UID: 1, Name: "Guglielmo Vicario", ShirtNumber: 9}, TeamIndex: 1, Team: "Home FC", Performance: Performance{
-		Started: true, Rating: 6.9, XG: 0.13, Shots: 3, ShotsOnTarget: 2, ClearCutChances: 1, Passes: 73, PassesCompleted: 65, KeyPasses: 4,
+		Started: true, Rating: 6.9, XG: 0.13, Shots: 3, ShotsOnTarget: 2, LongShots: 1, ClearCutChances: 1, Offsides: 2, Passes: 73, PassesCompleted: 65, KeyPasses: 4,
 		ProgressivePasses: 8, Crosses: 7, CrossesCompleted: 3, Tackles: 4, TacklesWon: 3, KeyTackles: 2, Interceptions: 6, Clearances: 5,
 		PossessionWon: 16, Fouls: 2, YellowCards: 1, DistanceKm: 9.2, Sprints: 9,
 	}}
@@ -271,13 +271,13 @@ func TestMatchByIDKeepsFirstFixture(t *testing.T) {
 
 func TestMatchTeamStats(t *testing.T) {
 	teams := [2]savefile.TeamStats{
-		{Passes: 468, PassesCompleted: 402, PassesCompletedByThird: &[3]uint16{118, 215, 69}, Tackles: 6, TacklesWon: 4, Headers: 26, HeadersWon: 16, ShotsBlocked: 1, ClearCutChances: 5, Corners: 6, Fouls: 13, YellowCards: 3},
-		{Passes: 500, PassesCompleted: 435, Tackles: 12, TacklesWon: 7, Headers: 25, HeadersWon: 8, ShotsBlocked: 4, ClearCutChances: 3, Corners: 4, Fouls: 7, YellowCards: 2},
+		{Passes: 468, PassesCompleted: 402, PassesCompletedByThird: &[3]uint16{118, 215, 69}, FinalThirdPasses: ptr(uint16(78)), Tackles: 6, TacklesWon: 4, Headers: 26, HeadersWon: 16, ShotsBlocked: 1, ClearCutChances: 5, Corners: 6, Fouls: 13, Offsides: 2, YellowCards: 3},
+		{Passes: 500, PassesCompleted: 435, Tackles: 12, TacklesWon: 7, Headers: 25, HeadersWon: 8, ShotsBlocked: 4, ClearCutChances: 3, Corners: 4, Fouls: 7, Offsides: 5, YellowCards: 2},
 	}
 	players := append(squad(0, 92), squad(1, 200)...)
-	players[0].Stats = savefile.MatchPlayerStats{Shots: 3, ShotsOnTarget: 2, ProgressivePasses: 5, Crosses: 4, CrossesCompleted: 1, RedCards: 1, DistanceMetres: 10049}
+	players[0].Stats = savefile.MatchPlayerStats{Shots: 3, ShotsOnTarget: 2, LongShots: 2, ProgressivePasses: 5, Crosses: 4, CrossesCompleted: 1, RedCards: 1, DistanceMetres: 10049}
 	players[11].Stats.Shots, players[11].Stats.DistanceMetres = 1, 49 // the substitute (unnamed)
-	players[13].Stats.Shots = 2                                       // away
+	players[13].Stats.Shots, players[13].Stats.LongShots = 2, 1       // away
 	players[25].Stats.Crosses = 5                                     // away, unused: not counted
 	g := objectGame(savefile.MatchObject{MatchID: 7, Players: players, TeamStats: &teams})
 	id := int64(7)
@@ -288,12 +288,12 @@ func TestMatchTeamStats(t *testing.T) {
 	// Distance is summed in metres, then rounded: 10 098 m is 10.1 km, per-player rounding would give 10.0.
 	want := []TeamMatchStats{
 		{TeamIndex: 1, Team: "Home FC", Passes: 468, PassesCompleted: 402, PassesCompletedByThird: &ThirdPasses{Own: 118, Middle: 215, Final: 69},
-			Tackles: 6, TacklesWon: 4, Headers: 26, HeadersWon: 16, ShotsBlocked: 1, ClearCutChances: 5, Corners: 6, Fouls: 13, YellowCards: 3,
-			Shots: 4, ShotsOnTarget: 2, ProgressivePasses: 5, Crosses: 4, CrossesCompleted: 1, RedCards: 1, DistanceKm: 10.1},
+			FinalThirdPasses: ptr(78), Tackles: 6, TacklesWon: 4, Headers: 26, HeadersWon: 16, ShotsBlocked: 1, ClearCutChances: 5, Corners: 6, Fouls: 13, Offsides: 2, YellowCards: 3,
+			Shots: 4, ShotsOnTarget: 2, LongShots: 2, ProgressivePasses: 5, Crosses: 4, CrossesCompleted: 1, RedCards: 1, DistanceKm: 10.1},
 		{TeamIndex: 2, Team: "Away FC", Passes: 500, PassesCompleted: 435, // no split: left out
-			Tackles: 12, TacklesWon: 7, Headers: 25, HeadersWon: 8, ShotsBlocked: 4, ClearCutChances: 3, Corners: 4, Fouls: 7, YellowCards: 2,
-			Shots: 2},
-	}
+			Tackles: 12, TacklesWon: 7, Headers: 25, HeadersWon: 8, ShotsBlocked: 4, ClearCutChances: 3, Corners: 4, Fouls: 7, Offsides: 5, YellowCards: 2,
+			Shots: 2, LongShots: 1},
+	} // possession needs both sides' split: left out
 	if !reflect.DeepEqual(m.TeamStats, want) {
 		t.Errorf("team stats = %+v\nwant %+v", m.TeamStats, want)
 	}
@@ -303,5 +303,31 @@ func TestMatchTeamStats(t *testing.T) {
 	}
 	if !slices.Contains(noTeams.Info.Warnings, "match team stats not read: 1") {
 		t.Errorf("warnings = %q, want the missing team stats counted", noTeams.Info.Warnings)
+	}
+}
+
+// TestMatchPossession checks that possession is each side's share of the
+// completed passes, given only when both sides' passes split by third.
+func TestMatchPossession(t *testing.T) {
+	split := func(completed uint16) savefile.TeamStats {
+		return savefile.TeamStats{Passes: completed + 60, PassesCompleted: completed, PassesCompletedByThird: &[3]uint16{completed, 0, 0}}
+	}
+	id := int64(7)
+	for name, tc := range map[string]struct {
+		teams [2]savefile.TeamStats
+		want  [2]*int
+	}{
+		"rounded share":        {[2]savefile.TeamStats{split(486), split(368)}, [2]*int{ptr(57), ptr(43)}}, // 56.9 %
+		"halves add up to 100": {[2]savefile.TeamStats{split(101), split(99)}, [2]*int{ptr(51), ptr(49)}},  // 50.5 %
+		"one side not split":   {[2]savefile.TeamStats{split(486), {Passes: 500, PassesCompleted: 368}}, [2]*int{nil, nil}},
+	} {
+		g := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 92), squad(1, 200)...), TeamStats: &tc.teams})
+		m, err := g.View(false).Match(MatchSelector{MatchID: &id})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := [2]*int{m.TeamStats[0].Possession, m.TeamStats[1].Possession}; !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: possession = %v, %v; want %v, %v", name, deref(got[0]), deref(got[1]), deref(tc.want[0]), deref(tc.want[1]))
+		}
 	}
 }
