@@ -2519,6 +2519,9 @@ func harnessSquads() []savefile.MatchPlayer {
 			if p.Person == 1 {
 				p.Stats = savefile.MatchPlayerStats{SubbedOffMinute: 70, DistanceMetres: 9183.6, Passes: 47, PassesCompleted: 42}
 			}
+			if p.Person == 21 {
+				p.Stats.Shots = 3
+			}
 			out = append(out, p)
 		}
 	}
@@ -2648,6 +2651,9 @@ func TestGetMatchTeamStats(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Errorf("get_match output lacks %s: %s", want, text)
 		}
+	}
+	if strings.Count(text, `"shots":3`) != 2 {
+		t.Errorf("want the away player's 3 shots in his line and in his team's total: %s", text)
 	}
 	if strings.Count(text, "passes_completed_by_third") != 1 {
 		t.Errorf("the away side has no split, so only one passes_completed_by_third: %s", text)

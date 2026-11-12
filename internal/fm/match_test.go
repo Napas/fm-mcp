@@ -274,17 +274,25 @@ func TestMatchTeamStats(t *testing.T) {
 		{Passes: 468, PassesCompleted: 402, PassesCompletedByThird: &[3]uint16{118, 215, 69}, Tackles: 6, TacklesWon: 4, Headers: 26, HeadersWon: 16, ShotsBlocked: 1, ClearCutChances: 5, Corners: 6, Fouls: 13, YellowCards: 3},
 		{Passes: 500, PassesCompleted: 435, Tackles: 12, TacklesWon: 7, Headers: 25, HeadersWon: 8, ShotsBlocked: 4, ClearCutChances: 3, Corners: 4, Fouls: 7, YellowCards: 2},
 	}
-	g := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 92), squad(1, 200)...), TeamStats: &teams})
+	players := append(squad(0, 92), squad(1, 200)...)
+	players[0].Stats = savefile.MatchPlayerStats{Shots: 3, ShotsOnTarget: 2, ProgressivePasses: 5, Crosses: 4, CrossesCompleted: 1, RedCards: 1, DistanceMetres: 10049}
+	players[11].Stats.Shots, players[11].Stats.DistanceMetres = 1, 49 // the substitute (unnamed)
+	players[13].Stats.Shots = 2                                       // away
+	players[25].Stats.Crosses = 5                                     // away, unused: not counted
+	g := objectGame(savefile.MatchObject{MatchID: 7, Players: players, TeamStats: &teams})
 	id := int64(7)
 	m, err := g.View(false).Match(MatchSelector{MatchID: &id})
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Distance is summed in metres, then rounded: 10 098 m is 10.1 km, per-player rounding would give 10.0.
 	want := []TeamMatchStats{
 		{TeamIndex: 1, Team: "Home FC", Passes: 468, PassesCompleted: 402, PassesCompletedByThird: &ThirdPasses{Own: 118, Middle: 215, Final: 69},
-			Tackles: 6, TacklesWon: 4, Headers: 26, HeadersWon: 16, ShotsBlocked: 1, ClearCutChances: 5, Corners: 6, Fouls: 13, YellowCards: 3},
+			Tackles: 6, TacklesWon: 4, Headers: 26, HeadersWon: 16, ShotsBlocked: 1, ClearCutChances: 5, Corners: 6, Fouls: 13, YellowCards: 3,
+			Shots: 4, ShotsOnTarget: 2, ProgressivePasses: 5, Crosses: 4, CrossesCompleted: 1, RedCards: 1, DistanceKm: 10.1},
 		{TeamIndex: 2, Team: "Away FC", Passes: 500, PassesCompleted: 435, // no split: left out
-			Tackles: 12, TacklesWon: 7, Headers: 25, HeadersWon: 8, ShotsBlocked: 4, ClearCutChances: 3, Corners: 4, Fouls: 7, YellowCards: 2},
+			Tackles: 12, TacklesWon: 7, Headers: 25, HeadersWon: 8, ShotsBlocked: 4, ClearCutChances: 3, Corners: 4, Fouls: 7, YellowCards: 2,
+			Shots: 2},
 	}
 	if !reflect.DeepEqual(m.TeamStats, want) {
 		t.Errorf("team stats = %+v\nwant %+v", m.TeamStats, want)

@@ -73,6 +73,14 @@ type TeamMatchStats struct {
 	Corners                int          `json:"corners"`
 	Fouls                  int          `json:"fouls"`
 	YellowCards            int          `json:"yellow_cards"`
+	// Sums over the players who played.
+	Shots             int     `json:"shots"`
+	ShotsOnTarget     int     `json:"shots_on_target"`
+	ProgressivePasses int     `json:"progressive_passes"`
+	Crosses           int     `json:"crosses"` // attempted
+	CrossesCompleted  int     `json:"crosses_completed"`
+	RedCards          int     `json:"red_cards"`
+	DistanceKm        float64 `json:"distance_km"` // to 1 decimal
 }
 
 // ThirdPasses splits completed passes by the third they were played in.
@@ -139,8 +147,13 @@ func performance(r savefile.MatchPlayer) Performance {
 		Tackles: int(st.Tackles), TacklesWon: int(st.TacklesWon), KeyTackles: int(st.KeyTackles),
 		Interceptions: int(st.Interceptions), Clearances: int(st.Clearances), PossessionWon: int(st.PossessionWon),
 		Fouls: int(st.Fouls), YellowCards: int(st.YellowCards), RedCards: int(st.RedCards),
-		DistanceKm: math.Round(float64(st.DistanceMetres)/100) / 10, Sprints: int(st.Sprints),
+		DistanceKm: kilometres(float64(st.DistanceMetres)), Sprints: int(st.Sprints),
 	}
+}
+
+// kilometres rounds metres to 0.1 km.
+func kilometres(metres float64) float64 {
+	return math.Round(metres/100) / 10
 }
 
 // minute returns m, or nil for 0 (no substitution).
@@ -288,11 +301,13 @@ func (s storedFixture) sideTeam(side uint8) (int64, bool) {
 // teamStats returns the home and away totals of stored match s; nil when
 // they were not read.
 func (g *Game) teamStats(s storedFixture) []TeamMatchStats {
-	teams := g.matchObjects[int64(s.Result.MatchID)].TeamStats
+	obj := g.matchObjects[int64(s.Result.MatchID)]
+	teams := obj.TeamStats
 	if teams == nil {
 		return nil
 	}
 	out := make([]TeamMatchStats, len(teams))
+	var metres [2]float64
 	for side := range uint8(len(teams)) {
 		t := teams[side]
 		team, _ := s.sideTeam(side)
@@ -306,6 +321,22 @@ func (g *Game) teamStats(s storedFixture) []TeamMatchStats {
 		if th := t.PassesCompletedByThird; th != nil {
 			out[side].PassesCompletedByThird = &ThirdPasses{Own: int(th[0]), Middle: int(th[1]), Final: int(th[2])}
 		}
+	}
+	for _, r := range obj.Players {
+		if !r.Played() { // records of unused substitutes can hold cross counts
+			continue
+		}
+		t, st := &out[r.Side], r.Stats
+		t.Shots += int(st.Shots)
+		t.ShotsOnTarget += int(st.ShotsOnTarget)
+		t.ProgressivePasses += int(st.ProgressivePasses)
+		t.Crosses += int(st.Crosses)
+		t.CrossesCompleted += int(st.CrossesCompleted)
+		t.RedCards += int(st.RedCards)
+		metres[r.Side] += float64(st.DistanceMetres)
+	}
+	for side := range out {
+		out[side].DistanceKm = kilometres(metres[side])
 	}
 	return out
 }
