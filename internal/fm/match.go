@@ -73,7 +73,7 @@ type TeamMatchStats struct {
 	Corners                int          `json:"corners"`
 	Fouls                  int          `json:"fouls"`
 	YellowCards            int          `json:"yellow_cards"`
-	// The players' sums.
+	// Sums over the players who played.
 	Shots             int     `json:"shots"`
 	ShotsOnTarget     int     `json:"shots_on_target"`
 	ProgressivePasses int     `json:"progressive_passes"`
