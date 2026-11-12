@@ -60,7 +60,7 @@ No id moved between packs. `pks_0`..`pks_2` kept every match since their first o
 A decompressed object is 8 583–244 153 bytes on 07-16 (30.9 MB for all 821). Every one starts `01 00 01 3c 1f`; the bytes after that vary (07-15: `22 00 01 14 00 15 90`; 545 objects continue `02 00 ff 00 ff 00`). Two kinds:
 
 - 251 objects (64 831 bytes and more) hold the match setup section with the build string `FM27.…`.
-- 570 objects (8 583–14 064 bytes) have no setup section: all 544 in `pks_3` and 26 in the other packs. No object falls between the two sizes.
+- 570 objects (8 583–14 064 bytes) have no setup section: all 544 in `pks_3` and 26 in the other packs. No object falls between the two sizes. On `data/test_save_27_matches.fm` (11-12) 689 of 3 872 objects have one (18 %); on the shortlist save 685 of 3 385 (20 %).
 
 Player records are in all 821. Offsets below are in the decompressed 07-15 object (match id 1022, `pks_0`; 234 959 bytes), counting the 3-byte `01 00 01` prefix. In a `.scm` file body the same fields sit 3 bytes earlier up to the end of the player records, and 4 bytes earlier from the setup section on (see ".scm files").
 
