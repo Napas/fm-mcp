@@ -18,6 +18,13 @@ func matchRecordBytes(p MatchPlayer) []byte {
 	binary.LittleEndian.PutUint32(b[13:], p.EndPositions)
 	binary.LittleEndian.PutUint32(b[25:], math.Float32bits(p.XG))
 	binary.LittleEndian.PutUint16(b[136:], p.Rating)
+	st := p.Stats
+	b[41], b[42], b[45], b[60], b[63], b[64] = st.Shots, st.ShotsOnTarget, st.ClearCutChances, st.Fouls, st.YellowCards, st.RedCards
+	b[67], b[71] = st.SubbedOffMinute, st.SubbedOnMinute
+	b[86], b[87], b[88], b[89], b[90] = st.Passes, st.PassesCompleted, st.KeyPasses, st.Crosses, st.CrossesCompleted
+	b[92], b[93], b[94], b[98] = st.Tackles, st.TacklesWon, st.KeyTackles, st.Interceptions
+	binary.LittleEndian.PutUint32(b[140:], math.Float32bits(st.DistanceMetres))
+	b[151], b[153], b[186], b[190] = st.PossessionWon, st.Clearances, st.ProgressivePasses, st.Sprints
 	return b
 }
 
@@ -150,6 +157,7 @@ func TestScanMatchPlayersSkipsLookalikes(t *testing.T) {
 		{Person: -5, Side: 0, StartPositions: 0x10, Rating: 690},      // negative person
 		{Person: 1 << 30, Side: 0, StartPositions: 0x10, Rating: 690}, // float bytes read as a person
 		{Person: 904, Side: 0, StartPositions: 0x10, Rating: 200},     // rating too low
+		{Person: 906, Side: 0, StartPositions: 0x10, Rating: 690, Stats: MatchPlayerStats{DistanceMetres: float32(math.Inf(1))}},
 	} {
 		obj = append(obj, matchRecordBytes(bad)...)
 	}
@@ -180,6 +188,9 @@ func TestScanMatchPlayersStepsOverRecords(t *testing.T) {
 	got, _, err := scanMatchPlayers(obj)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(got) > 0 {
+		got[0].Stats = players[0].Stats // the planted record overwrites these bytes
 	}
 	if !reflect.DeepEqual(got, players) {
 		t.Errorf("%d players, want %d: a record inside another was read", len(got), len(players))
@@ -273,6 +284,7 @@ func TestTestSave27MatchObjects(t *testing.T) {
 		if o.TeamStats == nil {
 			t.Errorf("match %d has no team stats", o.MatchID)
 		}
+		checkTeamSums(t, o)
 	}
 }
 
@@ -409,6 +421,141 @@ func TestReadMatchObjectTeamStatsNeedRoom(t *testing.T) {
 		players, teams, err := readMatchObject(obj)
 		if err != nil || len(players) != len(home)+len(away) || teams != nil {
 			t.Errorf("%s: players %d, teams %+v, err %v; want the players and no team stats", name, len(players), teams, err)
+		}
+	}
+}
+
+func TestMatchRecordReadsStats(t *testing.T) {
+	want := MatchPlayer{Person: 7, Shirt: 23, Side: 1, StartPositions: 0x10, EndPositions: 0x10, XG: 0.4, Rating: 711, Stats: MatchPlayerStats{
+		Shots: 1, ShotsOnTarget: 2, ClearCutChances: 3, Fouls: 4, YellowCards: 5, RedCards: 6, SubbedOffMinute: 7, SubbedOnMinute: 8,
+		Passes: 73, PassesCompleted: 65, KeyPasses: 9, Crosses: 10, CrossesCompleted: 11, Tackles: 12, TacklesWon: 13, KeyTackles: 14,
+		Interceptions: 15, DistanceMetres: 9183.5, PossessionWon: 16, Clearances: 17, ProgressivePasses: 18, Sprints: 19,
+	}}
+
+	got, ok := matchRecord(matchRecordBytes(want))
+
+	if !ok || !reflect.DeepEqual(got, want) {
+		t.Errorf("matchRecord = %+v, %v; want %+v", got, ok, want)
+	}
+}
+
+// TestReadMatchObjectDistanceUnits checks that distances read as metres:
+// objects with a setup section store metres, the others kilometres.
+func TestReadMatchObjectDistanceUnits(t *testing.T) {
+	for name, tc := range map[string]struct {
+		stored float32
+		setup  bool
+	}{"metres with a setup section": {9500, true}, "kilometres without one": {9.5, false}} {
+		t.Run(name, func(t *testing.T) {
+			players := testSides(100, 200)
+			players[0].Stats.DistanceMetres = tc.stored
+			obj := matchObjectBytes(players)
+			if tc.setup {
+				obj = append(obj, "FM27.fm27-rel-03-launch-freepreview.2493426"...)
+			}
+
+			got, _, err := readMatchObject(obj)
+
+			if err != nil || got[0].Stats.DistanceMetres != 9500 {
+				t.Errorf("distance = %v (err %v), want 9500 metres", got[0].Stats.DistanceMetres, err)
+			}
+		})
+	}
+}
+
+// TestTestSave27MatchPlayerStats checks match 12438 (FK TransINVEST 1–1
+// Kauno Žalgiris, 2026-11-08) against the in-game player stats, and on
+// every object that the players' fouls, yellow cards and tackles add up to
+// the team totals.
+func TestTestSave27MatchPlayerStats(t *testing.T) {
+	objs, err := ReadMatchObjects(openTestSaveAt(t, testSave27MatchesPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPerson := map[int32]MatchPlayer{}
+	unread := 0
+	for _, o := range objs {
+		if o.Players == nil {
+			unread++
+		}
+		if o.MatchID == 12438 {
+			for _, p := range o.Players {
+				byPerson[p.Person] = p
+			}
+			want := [2]sideSums{
+				{shots: 6, onTarget: 3, progressive: 33, fouls: 8, yellow: 1, tackles: 10, tacklesWon: 5, clearCut: 0, metres: 114_900},
+				{shots: 12, onTarget: 7, progressive: 55, fouls: 12, yellow: 1, tackles: 12, tacklesWon: 10, clearCut: 2, metres: 117_200},
+			}
+			if got := matchSums(o.Players); got != want {
+				t.Errorf("match 12438 sums = %+v, want the report's %+v", got, want)
+			}
+		}
+		checkTeamSums(t, o)
+	}
+	if len(objs) != 3872 || unread != 0 {
+		t.Errorf("%d objects, %d unreadable; want 3872 and 0", len(objs), unread)
+	}
+	for name, tc := range map[string]struct {
+		person int32
+		want   MatchPlayerStats
+		km     float64
+	}{
+		"Hernández": {29473, MatchPlayerStats{Passes: 73, PassesCompleted: 65, Tackles: 4, TacklesWon: 4, KeyTackles: 2, Interceptions: 6, Clearances: 2, PossessionWon: 16, Sprints: 4}, 9.2},
+		"Moutachy":  {21036, MatchPlayerStats{Passes: 47, PassesCompleted: 42, KeyPasses: 3, Crosses: 7, CrossesCompleted: 3, Tackles: 2, TacklesWon: 1, Interceptions: 3, Clearances: 1, PossessionWon: 7, Sprints: 4}, 12.1},
+		"Kalik":     {8813, MatchPlayerStats{ClearCutChances: 1, SubbedOffMinute: 65, Passes: 70, PassesCompleted: 63, Crosses: 1, Interceptions: 2, PossessionWon: 3, Sprints: 4}, 8.9},
+		"Šluta":     {20782, MatchPlayerStats{Fouls: 2, YellowCards: 1, SubbedOnMinute: 33, Passes: 28, PassesCompleted: 24, Tackles: 1, Interceptions: 1, Clearances: 1, PossessionWon: 5, Sprints: 2}, 7.9},
+		"Kloniūnas": {20616, MatchPlayerStats{SubbedOffMinute: 33, Passes: 21, PassesCompleted: 18, Clearances: 1, PossessionWon: 3, Sprints: 1}, 4.1},
+	} {
+		got := byPerson[tc.person].Stats
+		km := math.Round(float64(got.DistanceMetres)/100) / 10
+		got.DistanceMetres = 0
+		got.Shots, got.ShotsOnTarget, got.ProgressivePasses = 0, 0, 0 // checked as team sums above
+		if !reflect.DeepEqual(got, tc.want) || km != tc.km {
+			t.Errorf("%s = %+v, %.1f km; want %+v, %.1f km", name, got, km, tc.want, tc.km)
+		}
+	}
+}
+
+type sideSums struct {
+	shots, onTarget, progressive, fouls, yellow, tackles, tacklesWon, clearCut int
+	metres                                                                     int // to the nearest 100
+}
+
+func matchSums(ps []MatchPlayer) [2]sideSums {
+	var out [2]sideSums
+	var metres [2]float64
+	for _, p := range ps {
+		s, st := &out[p.Side], p.Stats
+		s.shots += int(st.Shots)
+		s.onTarget += int(st.ShotsOnTarget)
+		s.progressive += int(st.ProgressivePasses)
+		s.fouls += int(st.Fouls)
+		s.yellow += int(st.YellowCards)
+		s.tackles += int(st.Tackles)
+		s.tacklesWon += int(st.TacklesWon)
+		s.clearCut += int(st.ClearCutChances)
+		metres[p.Side] += float64(st.DistanceMetres)
+	}
+	for side := range out {
+		out[side].metres = int(math.Round(metres[side]/100) * 100)
+	}
+	return out
+}
+
+// checkTeamSums checks that o's players add up to its team totals.
+func checkTeamSums(t *testing.T, o MatchObject) {
+	t.Helper()
+	if o.TeamStats == nil {
+		return
+	}
+	sums := matchSums(o.Players)
+	for side, ts := range o.TeamStats {
+		s := sums[side]
+		if s.fouls != int(ts.Fouls) || s.yellow != int(ts.YellowCards) || s.tackles != int(ts.Tackles) || s.tacklesWon != int(ts.TacklesWon) || s.clearCut != int(ts.ClearCutChances) {
+			t.Errorf("match %d side %d: player sums %+v, team %+v", o.MatchID, side, s, ts)
+		}
+		if s.metres < 50_000 {
+			t.Errorf("match %d side %d: players ran %d metres", o.MatchID, side, s.metres)
 		}
 	}
 }

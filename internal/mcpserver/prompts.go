@@ -73,7 +73,7 @@ If fog of war hides ability, value or wage, judge on what is visible (attributes
 1. Call game_overview and pass on its warnings.
 2. %s
 3. Call get_fixtures with the opponent's team_index, status played and limit 5.
-4. Call get_match with the match_id of each result that has one: every such match lists its goals; match_data stored adds players (rating, xG) and team_stats.
+4. Call get_match with the match_id of each result that has one: every such match lists its goals; match_data stored adds players (rating, xG, match stats) and team_stats.
 5. Call get_last_lineup with the opponent's team_index for formation, roles and who played.
 6. Pick three to five key players (goals, assists, high ratings). Call get_player_matches with their uid from get_match; skip unnamed players, which have no uid.
 7. Call get_tactic for my current tactic.

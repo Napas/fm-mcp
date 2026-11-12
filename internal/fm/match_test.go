@@ -142,19 +142,19 @@ func TestMatchUnknownEventKindAndSide(t *testing.T) {
 }
 
 // squad is a side of 11 starters (persons base..base+10; the last is taken
-// off when takenOff), a substitute who came on (base+11) and an unused one
-// (base+12).
-func squad(side uint8, base int32, takenOff bool) []savefile.MatchPlayer {
+// off in minute 70), a substitute who came on in minute 70 (base+11) and an
+// unused one (base+12).
+func squad(side uint8, base int32) []savefile.MatchPlayer {
 	out := make([]savefile.MatchPlayer, 0, 13)
 	for i := range int32(11) {
-		end := uint32(0x10)
-		if takenOff && i == 10 {
-			end = 0
+		p := savefile.MatchPlayer{Person: base + i, Shirt: uint8(i + 1), Side: side, StartPositions: 0x10, EndPositions: 0x10, XG: 0.125, Rating: 690} //nolint:gosec // small test data
+		if i == 10 {
+			p.EndPositions, p.Stats.SubbedOffMinute = 0, 70
 		}
-		out = append(out, savefile.MatchPlayer{Person: base + i, Shirt: uint8(i + 1), Side: side, StartPositions: 0x10, EndPositions: end, XG: 0.125, Rating: 690}) //nolint:gosec // small test data
+		out = append(out, p)
 	}
 	return append(out,
-		savefile.MatchPlayer{Person: base + 11, Shirt: 12, Side: side, EndPositions: 0x4000, XG: 0.5, Rating: 819},
+		savefile.MatchPlayer{Person: base + 11, Shirt: 12, Side: side, EndPositions: 0x4000, XG: 0.5, Rating: 819, Stats: savefile.MatchPlayerStats{SubbedOnMinute: 70}},
 		savefile.MatchPlayer{Person: base + 12, Shirt: 13, Side: side, Rating: 670})
 }
 
@@ -168,7 +168,7 @@ func objectGame(objs ...savefile.MatchObject) *Game {
 }
 
 func TestMatchStatusWithObjects(t *testing.T) {
-	g := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 90, true), squad(1, 200, false)...)})
+	g := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 90), squad(1, 200)...)})
 
 	got, err := g.View(false).Fixtures(FixtureFilter{})
 	if err != nil {
@@ -188,7 +188,13 @@ func TestMatchStatusWithObjects(t *testing.T) {
 }
 
 func TestMatchPlayers(t *testing.T) {
-	g := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 92, true), squad(1, 200, false)...)})
+	home := squad(0, 92)
+	home[8].Stats = savefile.MatchPlayerStats{
+		Shots: 3, ShotsOnTarget: 2, ClearCutChances: 1, Fouls: 2, YellowCards: 1, Passes: 73, PassesCompleted: 65, KeyPasses: 4,
+		Crosses: 7, CrossesCompleted: 3, Tackles: 4, TacklesWon: 3, KeyTackles: 2, Interceptions: 6, DistanceMetres: 9183.6,
+		PossessionWon: 16, Clearances: 5, ProgressivePasses: 8, Sprints: 9,
+	}
+	g := objectGame(savefile.MatchObject{MatchID: 7, Players: append(home, squad(1, 200)...)})
 	id := int64(7)
 	m, err := g.View(false).Match(MatchSelector{MatchID: &id})
 	if err != nil {
@@ -197,22 +203,22 @@ func TestMatchPlayers(t *testing.T) {
 	if len(m.Players) != 24 || len(m.UnusedSubstitutes) != 2 {
 		t.Fatalf("%d players, %d unused; want 24 and 2", len(m.Players), len(m.UnusedSubstitutes))
 	}
-	no := false
 	// Home persons 92..104: 100 (Vicario) starts in shirt 9, 102 (Bergvall)
 	// is taken off, 103 came on, 104 unused.
 	vicario := m.Players[8]
-	if !reflect.DeepEqual(vicario, MatchPlayer{Player: TacticPlayer{UID: 1, Name: "Guglielmo Vicario", ShirtNumber: 9}, TeamIndex: 1, Team: "Home FC", Performance: Performance{Started: true, TakenOff: &no, Rating: 6.9, XG: 0.13}}) {
-		t.Errorf("Vicario = %+v", vicario)
+	want := MatchPlayer{Player: TacticPlayer{UID: 1, Name: "Guglielmo Vicario", ShirtNumber: 9}, TeamIndex: 1, Team: "Home FC", Performance: Performance{
+		Started: true, Rating: 6.9, XG: 0.13, Shots: 3, ShotsOnTarget: 2, ClearCutChances: 1, Passes: 73, PassesCompleted: 65, KeyPasses: 4,
+		ProgressivePasses: 8, Crosses: 7, CrossesCompleted: 3, Tackles: 4, TacklesWon: 3, KeyTackles: 2, Interceptions: 6, Clearances: 5,
+		PossessionWon: 16, Fouls: 2, YellowCards: 1, DistanceKm: 9.2, Sprints: 9,
+	}}
+	if !reflect.DeepEqual(vicario, want) {
+		t.Errorf("Vicario = %+v\nwant      %+v", vicario, want)
 	}
-	if b := m.Players[10]; b.Player.Name != "Lucas Bergvall" || b.TakenOff == nil || !*b.TakenOff {
-		t.Errorf("Bergvall = %+v, want taken off", b)
+	if b := m.Players[10]; b.Player.Name != "Lucas Bergvall" || b.SubbedOffMinute == nil || *b.SubbedOffMinute != 70 || b.SubbedOnMinute != nil {
+		t.Errorf("Bergvall = %+v, want taken off in minute 70", b)
 	}
-	if sub := m.Players[11]; sub.Started || sub.Rating != 8.19 || sub.XG != 0.5 || !sub.Player.Unnamed || sub.TakenOff == nil || *sub.TakenOff {
-		t.Errorf("substitute = %+v", sub)
-	}
-	// The away side has a substitute but nobody with offset 13 = 0: unknown.
-	if away := m.Players[12]; away.TeamIndex != 2 || away.TakenOff != nil {
-		t.Errorf("away starter = %+v, want taken_off unknown", away)
+	if sub := m.Players[11]; sub.Started || sub.Rating != 8.19 || sub.XG != 0.5 || !sub.Player.Unnamed || sub.SubbedOnMinute == nil || *sub.SubbedOnMinute != 70 || sub.SubbedOffMinute != nil {
+		t.Errorf("substitute = %+v, want on in minute 70", sub)
 	}
 	if u := m.UnusedSubstitutes; !u[0].Player.Unnamed || u[0].Player.ShirtNumber != 13 || u[0].TeamIndex != 1 || u[1].TeamIndex != 2 || u[1].Team != "Away FC" {
 		t.Errorf("unused = %+v, want one per side with its team", u)
@@ -228,7 +234,7 @@ func TestMatchObjectWithoutFixtureWarns(t *testing.T) {
 			t.Errorf("warnings = %q, want %q", g.Info.Warnings, want)
 		}
 	}
-	dup := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 300, false), squad(1, 320, false)...)}, savefile.MatchObject{MatchID: 7, Players: squad(0, 400, false)})
+	dup := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 300), squad(1, 320)...)}, savefile.MatchObject{MatchID: 7, Players: squad(0, 400)})
 	if !slices.ContainsFunc(dup.Info.Warnings, func(w string) bool { return strings.Contains(w, "match objects with a repeated match id: 1") }) {
 		t.Errorf("warnings = %q, want the repeated id", dup.Info.Warnings)
 	}
@@ -252,16 +258,6 @@ func TestReadMatchesSkipsSavesWithoutMatchIDs(t *testing.T) {
 	}
 }
 
-// TestTakenOffUnknownWhenCountsDiffer covers a side with a starter not on at
-// the end but no substitute (e.g. a red card): taken_off stays unknown.
-func TestTakenOffUnknownWhenCountsDiffer(t *testing.T) {
-	home := squad(0, 92, true)[:11] // one starter off, nobody came on
-	known := takenOffKnown(append(home, squad(1, 200, false)...))
-	if known[0] || known[1] {
-		t.Errorf("takenOffKnown = %v, want unknown on both sides", known)
-	}
-}
-
 // TestMatchByIDKeepsFirstFixture guards against two results sharing a match
 // id (not seen in saves): the earlier one wins.
 func TestMatchByIDKeepsFirstFixture(t *testing.T) {
@@ -278,7 +274,7 @@ func TestMatchTeamStats(t *testing.T) {
 		{Passes: 468, PassesCompleted: 402, PassesCompletedByThird: &[3]uint16{118, 215, 69}, Tackles: 6, TacklesWon: 4, Headers: 26, HeadersWon: 16, ShotsBlocked: 1, ClearCutChances: 5, Corners: 6, Fouls: 13, YellowCards: 3},
 		{Passes: 500, PassesCompleted: 435, Tackles: 12, TacklesWon: 7, Headers: 25, HeadersWon: 8, ShotsBlocked: 4, ClearCutChances: 3, Corners: 4, Fouls: 7, YellowCards: 2},
 	}
-	g := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 92, true), squad(1, 200, false)...), TeamStats: &teams})
+	g := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 92), squad(1, 200)...), TeamStats: &teams})
 	id := int64(7)
 	m, err := g.View(false).Match(MatchSelector{MatchID: &id})
 	if err != nil {
@@ -293,7 +289,7 @@ func TestMatchTeamStats(t *testing.T) {
 	if !reflect.DeepEqual(m.TeamStats, want) {
 		t.Errorf("team stats = %+v\nwant %+v", m.TeamStats, want)
 	}
-	noTeams := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 92, true), squad(1, 200, false)...)})
+	noTeams := objectGame(savefile.MatchObject{MatchID: 7, Players: append(squad(0, 92), squad(1, 200)...)})
 	if m, _ := noTeams.View(false).Match(MatchSelector{MatchID: &id}); m.TeamStats != nil || len(m.Players) == 0 {
 		t.Errorf("without team stats: %+v, want players and no team_stats", m.TeamStats)
 	}

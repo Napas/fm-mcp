@@ -104,9 +104,11 @@ Checks (bytes; on the 07-16 save unless another is named):
 - `data/test_save_27_shortlist.fm` (3 385 objects, 6 770 sides with passes): one side has completed above attempted passes, the away side of match 8736 (pks_2, no setup section): 313 completed, 306 attempted (tackles 5 of 6 won, headers 23 of 42). The parser rejects that block, the only one on that save. Without a setup section, attempted minus completed is under 20 on 269 sides of this save (completion up to 99.4 %, 102 % on match 8736) and on 52 sides of the 07-16 save (up to 98.5 %); with one it is at least 32 on both saves. So −264 may not hold the attempted total there (inference).
 - Against `player_stats.dat`: KŽ's 19 stored TOPLYGA matches give 43 yellow cards, the sum of the league yellow cards of the players who played for KŽ in them (43); fouls 204 vs 209, completed/attempted passes 11 100 / 12 356 vs 11 090 / 12 388, tackles 120 / 160 vs 128 / 173, headers 284 / 511 vs 304 / 529. Players' league totals also count games for other clubs, and keepers' slots mean other things, so close but not equal is expected (inference). FK Žalgiris and FK Sūduva show the same pattern.
 
-Not located: shots 19/17, shots on target 10/5, possession 48/52, distance 117/115 km, progressive passes 54/43, OPPDA 15.39/14.41, crosses completed 25 %/22 %, red cards, which player was booked, substitution times.
+The players' records add up to fouls, yellow cards, blocked shots, clear-cut chances and tackles in this block on every side (all 7 744 sides of `data/test_save_27_matches.fm` and the 1 642 of 07-16). Passes add up only in objects with a setup section (all 1 378 sides of 11-12); on the 6 366 sides without one they never do, which supports the doubt about −264 there (inference: the player sums are right, since every other total agrees).
 
-**Player record** (07-15: all 44 records; the ratings of all 32 players who played checked against the match report, xG against both team totals):
+Shots, shots on target, distance, progressive passes and crosses are not in this block at one fixed offset (07-15's −421/−420 hold other values than 11-08's), but the players' records add up to the report's values (see "Player record"). Not located: possession (07-15 48/52, 11-08 44/56) and OPPDA (15.39/14.41, 27.29/15.81). On both matches the completed-pass share rounds to the possession shown (402/837 = 48.0 %, 423/953 = 44.4 %); two matches do not show that the game computes it that way (inference).
+
+**Player record** (07-15: all 44 records; the ratings of all 32 players who played checked against the match report, xG against both team totals. Offsets 41–190: match 12438 of `data/test_save_27_matches.fm` (11-12 below), FK TransINVEST 1–1 Kauno Žalgiris on 2026-11-08 (11-08), all 31 players who played checked against the in-game Key Statistics tables of both sides):
 
 | Offset | Size | Field | Evidence |
 |--------|------|-------|----------|
@@ -120,14 +122,37 @@ Not located: shots 19/17, shots on target 10/5, possession 48/52, distance 117/1
 | 25 | float32 | expected goals | KŽ's records sum to 2.182, Shamrock's to 1.980; the report shows 2.18 and 1.98. Renan Oliveira 1.679 (2 goals), Byrne 0.437 |
 | 29 | float32 | inference: expected goals faced in goal | 0 except for the two keepers who played: McGinty 2.182 and Mikelionis 1.980, the opponents' xG (1 178 and 14 564 in the object) |
 | 136 | u16 | match rating × 100 | Byrne 819: the header shows 8.19, the player list 8.2 (rounded), the formation view 8.1 (truncated). Iyobosa Edokpolor 777 shows as 7.8 and 7.7, Kalik 646 as 6.5 and 6.4, Benchaib 729 as 7.3 and 7.2, Mikelionis 693 as 6.9. All 32 ratings match |
+| 41 | u8 | shots | team sums 6/12 (11-08) and 19/17 (07-15), as the reports |
+| 42 | u8 | shots on target | team sums 3/7 and 10/5 |
+| 43 | u8 | shots blocked | team sums equal the team block's −296 |
+| 45 | u8 | clear-cut chances | Kalik, Baldassarra 1; team sums equal −295 on every side |
+| 56 | u8 | inference: assists | Milošević 1 (he assisted the 85th-minute goal) |
+| 60 | u8 | fouls | Lekiatas 3, Šluta 2; team sums equal −280 on every side |
+| 63 | u8 | yellow cards | Šluta, Konatar 1 (the report: 1 a side); team sums equal −278 on every side |
+| 64 | u8 | red cards | bytes only: 1 on all 157 players of 11-12 with two yellow cards, and on 297 with none (straight reds); no red card checked in game |
+| 67 | u8 | minute taken off; 0 otherwise | all 9 starters replaced on 11-08, both sides (33, 57, 65, 74, 83, 85). Never set for a player sent off |
+| 71 | u8 | minute brought on; 0 otherwise | all 9 substitutes who came on (the Time column). Up to 120 (extra time) |
+| 73 | u8 | inference: minute of the yellow card | Šluta 90, Konatar 75 (not checked in game). Only in objects with a setup section, and there set exactly when a player has one yellow card and no red (1 884 of 1 884) |
+| 74 | u8 | inference: minute of the red card | set on every record with a red card |
+| 86, 87 | u8, u8 | passes attempted, completed | Hernández 73/65, Baldassarra 79/73; team sums 482/423 and 592/530 (pass maps: 423 and 530 Total Passes) |
+| 88 | u8 | key passes | Moutachy 3 |
+| 89, 90 | u8, u8 | crosses attempted, completed | Traoré 11/1, Moutachy 7/3; team sums give 11 %/18 % (shown truncated) and 07-15's 25 %/22 % |
+| 92, 93 | u8, u8 | tackles attempted, won | Hernández 4/4; team sums equal −258/−256 on every side |
+| 94 | u8 | key tackles | Hernández 2, Girdvainis 2 |
+| 98 | u8 | interceptions | Hernández 6 |
+| 140 | float32 | distance covered: metres in objects with a setup section, kilometres rounded to 0.1 in the others | Bertašius 3 983.7 (4.0 km), Moutachy 12 064.3 (12.1 km); team sums 114.9/117.2 km (shown 114/117) and 07-15's 117.1/115.1. Unit split checked on all 7 744 sides |
+| 151 | u8 | possession won | Hernández 16 |
+| 153 | u8 | clearances | Bertašius 7 |
+| 186 | u8 | progressive passes | team sums 33/55 and 07-15's 54/43; no per-player value checked in game |
+| 190 | u8 | sprints | Kreković 11, Musolitin 12 |
 
 Squad members who did not play still have a record. Their rating is 670 in the 251 objects with a setup section (2 357 records; 07-15: all 12 the report shows as "-", e.g. Corr, Matthews, Švedkauskas) and 640 in the 570 without one (5 913 records). 268 records of players who played are also rated exactly 670, so the rating does not tell who played. Offsets 8 and 13 do: both are 0 for exactly the 12 players the report shows as "-", and at least one is non-zero for the other 32 (44 of 44). Offset 8 = 0 with offset 13 ≠ 0 marks a substitute who came on.
 
-**Taken off.** Offset 13 = 0 with offset 8 ≠ 0 (a starter not on at the end) occurs on 23 sides across the 821 objects, all KŽ's: in 23 of KŽ's 29 matches, each with as many taken off as came on (5). KŽ's other 6 (the friendlies of days 20, 32, 36, 40 and 52, with 9–10 substitutes each, and the cup match of day 115) show nobody taken off, as do about 1 600 sides of other teams. So "taken off" is readable only for some of the human's matches; why is not known.
+**Taken off.** Offset 67 holds the minute a player was taken off, on both sides of every object (11-08: all 9). Offset 13 is a weaker sign: 0 for a starter not on at the end only on 23 of KŽ's sides across the 821 objects of 07-16 (in 23 of KŽ's 29 matches), and non-zero for replaced starters everywhere else, so it does not tell who was taken off.
 
-**Record length** is not decoded: 222 bytes or more (07-15: 222, 233, 240, 258, 273, 276, 294, 330). Longer ones hold extra data, probably shots (inference: Renan Oliveira's holds float32 values after the fixed part). A parser has to find records by scanning, not by stepping. Minutes played and substitution times were not found.
+**Record length** is not decoded: 222 bytes or more (07-15: 222, 233, 240, 258, 273, 276, 294, 330). Longer ones hold extra data, probably shots (inference: Renan Oliveira's holds float32 values after the fixed part). A parser has to find records by scanning, not by stepping. Substitution minutes are at 67 and 71. Minutes played are not stored as such; the match length (added and extra time) is not located.
 
-**Finding records** (verified 27.0.0, bytes; `savefile.ReadMatchObjects`). Record length is not decoded, so the parser scans each object for the record shape: tag bytes 2 at offsets 0, 7 and 12, side 0 or 1, a person from 0 to 2^24, no position bits outside `0x00307fff` (bits 0–14 and the flags `0x100000` and `0x200000`) at offsets 8 and 13, a finite xG of 0–10 at 25 and 0–20 at 29, and a rating of 300–1000 at 136. After a record the scan resumes past its 222-byte fixed part: inside two goalkeeper records on 07-16 (the 382nd and 781st objects in file order), bytes 139 in read as a substitute who came on, with float bytes as the person (about 1e9) (hence the cap on persons). An object whose sides do not have exactly 11 starters each, or that repeats a person, is kept as unread: `get_match` shows its goals only (`goals_only`) and a load warning counts it. Results:
+**Finding records** (verified 27.0.0, bytes; `savefile.ReadMatchObjects`). Record length is not decoded, so the parser scans each object for the record shape: tag bytes 2 at offsets 0, 7 and 12, side 0 or 1, a person from 0 to 2^24, no position bits outside `0x00307fff` (bits 0–14 and the flags `0x100000` and `0x200000`) at offsets 8 and 13, a finite xG of 0–10 at 25 and 0–20 at 29, a rating of 300–1000 at 136, and a finite distance of 0–30 000 at 140 (before the kilometre scaling; 17 922 metres seen). After a record the scan resumes past its 222-byte fixed part: inside two goalkeeper records on 07-16 (the 382nd and 781st objects in file order), bytes 139 in read as a substitute who came on, with float bytes as the person (about 1e9) (hence the cap on persons). An object whose sides do not have exactly 11 starters each, or that repeats a person, is kept as unread: `get_match` shows its goals only (`goals_only`) and a load warning counts it. Results:
 
 - 07-16: all 821 objects read; every side has 11 starters (1 642 sides), with 11–26 records. Records of a side are contiguous (222–399 bytes apart), the home side's first, and no person repeats. 05-04 (293 objects) and 05-09 (393) read the same way.
 - Without the position-bit test, 4 sides gain a twelfth "starter" (bytes with junk bit patterns; the 7 rejected lookalikes next to real records have float bytes as the person).
@@ -144,7 +169,7 @@ Counts: none on 01-19, 01-22 and 02-11; 17 on 05-04; 26 on 05-09; 30 on 07-16. O
 ## Open questions
 
 - `match_stats_cfg.dat`: the undecoded header and pack bytes; what decides pack membership; the `pks_3` pruning rule; whether packs are pruned at a season change; the `pks_3` gap.
-- Match object: the header grammar; what decides an object's kind (with or without setup); the rest of the team block (shots, shots on target, possession, distance, progressive passes, OPPDA, crosses, red cards); which player was booked; substitution times, minutes played; the position bit meanings at offsets 8 and 13 and why offset 13 differs by side; record length; offsets 20 (goals?) and 21 (non-zero on keepers only and equal to the goals each conceded on 07-15: McGinty 2, Mikelionis 3); the sections after 26 807; what the attempted-passes field (−264) counts in objects without a setup section (below completed in match 8736).
+- Match object: the header grammar; what decides an object's kind (with or without setup); possession and OPPDA; whether 73 and 74 are card minutes; the position bit meanings at offsets 8 and 13 and why offset 13 differs by side; record length; offsets 20 (goals?), 21 (non-zero on keepers only and equal to the goals each conceded on 07-15: McGinty 2, Mikelionis 3), 56 (assists?), 61, 62, 65, 66 (card reasons?), 68–70, 72 (non-zero on 575 of 116 116 played records of 11-12, e.g. Kloniūnas 33, taken off in minute 33) and 75–85; the sections after 26 807; what the attempted-passes field (−264) counts in objects without a setup section (below completed in match 8736).
 - Player records: which substitute appearances the game leaves unrated; Kazlauskas's 3 extra starts.
 - `.scm` files: why they exist and when the game deletes them.
 - 26.x: whether `match_stats_cfg.dat` (a root file of the 26.2.0 test save) and the `*.scm` files of 26.3.2 saves use the same layout (see [`container.md`](container.md)).
