@@ -2617,15 +2617,25 @@ func TestGetPlayerMatchesIsExplained(t *testing.T) {
 }
 
 // TestPerformanceFieldsAreExplained checks that both tools returning
-// fm.Performance name every one of its fields.
+// fm.Performance describe every one of its fields.
 func TestPerformanceFieldsAreExplained(t *testing.T) {
 	typ := reflect.TypeFor[fm.Performance]()
 	for i := range typ.NumField() {
 		name, _, _ := strings.Cut(typ.Field(i).Tag.Get("json"), ",")
-		for tool, desc := range map[string]string{"get_match": matchDescription, "get_player_matches": playerMatchesDescription} {
-			if !strings.Contains(desc, name) {
-				t.Errorf("%s description lacks %q", tool, name)
-			}
+		if name == "" || name == "-" {
+			t.Errorf("field %s has no JSON name", typ.Field(i).Name)
+			continue
+		}
+		if name == "started" { // described by each tool before the list
+			continue
+		}
+		if !regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `\b`).MatchString(performanceDescription) {
+			t.Errorf("performanceDescription lacks %q", name)
+		}
+	}
+	for tool, desc := range map[string]string{"get_match": matchDescription, "get_player_matches": playerMatchesDescription} {
+		if !strings.Contains(desc, performanceDescription) || !strings.Contains(desc, statsCaveat) {
+			t.Errorf("%s description lacks the performance fields or their caveat", tool)
 		}
 	}
 }

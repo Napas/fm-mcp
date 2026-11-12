@@ -554,7 +554,7 @@ func checkTeamSums(t *testing.T, o MatchObject) {
 		if s.fouls != int(ts.Fouls) || s.yellow != int(ts.YellowCards) || s.tackles != int(ts.Tackles) || s.tacklesWon != int(ts.TacklesWon) || s.clearCut != int(ts.ClearCutChances) {
 			t.Errorf("match %d side %d: player sums %+v, team %+v", o.MatchID, side, s, ts)
 		}
-		if s.metres < 50_000 {
+		if s.metres < 50_000 || s.metres > 200_000 {
 			t.Errorf("match %d side %d: players ran %d metres", o.MatchID, side, s.metres)
 		}
 	}

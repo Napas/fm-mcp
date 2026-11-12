@@ -36,9 +36,9 @@ const (
 	// maxMatchDistance bounds a record's distance before unit scaling:
 	// 17 922 metres and 20.0 km seen.
 	maxMatchDistance = 30000
-	// matchSetupMarker starts the build string of the match setup section
-	// in every object of the 27.0.0 saves checked; matchPackVersion gates
-	// other layouts.
+	// matchSetupMarker starts the build string of the match setup section,
+	// in every object that has one on the 27.0.0 saves checked;
+	// matchPackVersion gates other layouts.
 	matchSetupMarker = "FM27."
 )
 

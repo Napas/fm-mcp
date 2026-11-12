@@ -101,7 +101,7 @@ type MatchPlayer struct {
 type Performance struct {
 	Started         bool    `json:"started"` // false: came on as a substitute
 	SubbedOnMinute  *int    `json:"subbed_on_minute,omitempty"`
-	SubbedOffMinute *int    `json:"subbed_off_minute,omitempty"` // nil unless taken off; a player sent off is not
+	SubbedOffMinute *int    `json:"subbed_off_minute,omitempty"` // nil unless taken off (nil for a player sent off)
 	Rating          float64 `json:"rating"`                      // e.g. 8.19
 	XG              float64 `json:"xg"`                          // expected goals, to 2 decimals
 	Shots           int     `json:"shots"`
