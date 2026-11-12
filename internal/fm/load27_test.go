@@ -760,6 +760,12 @@ func TestLoadTestSave27MatchPlayers(t *testing.T) {
 	if away.PassesCompleted != 435 || away.Corners != 4 || away.Fouls != 7 || away.YellowCards != 2 || away.HeadersWon != 8 || away.TacklesWon != 7 || away.Tackles != 12 || away.ShotsBlocked != 4 {
 		t.Errorf("KŽ = %+v, want the report's totals", away)
 	}
+	// Report: shots 19/17, on target 10/5, progressive passes 54/43,
+	// crosses 6 of 24 and 6 of 27, distance 117/115 km (shown truncated; the sums are 117.1/115.1).
+	if home.Shots != 19 || home.ShotsOnTarget != 10 || home.ProgressivePasses != 54 || home.CrossesCompleted != 6 || home.Crosses != 24 || home.DistanceKm != 117.1 ||
+		away.Shots != 17 || away.ShotsOnTarget != 5 || away.ProgressivePasses != 43 || away.CrossesCompleted != 6 || away.Crosses != 27 || away.DistanceKm != 115.1 {
+		t.Errorf("player sums = %+v / %+v, want the report's shots, progressive passes, crosses and distance", home, away)
+	}
 }
 
 // TestLoadTestSave27PlayerMatches checks Renan Oliveira's match log on
@@ -854,6 +860,31 @@ func TestLoadTestSave27MatchPlayerStats(t *testing.T) {
 	}
 	if p := byName["Aldayr Hernández"]; p.Tackles != 4 || p.TacklesWon != 4 || p.KeyTackles != 2 || p.Interceptions != 6 || p.PossessionWon != 16 || p.DistanceKm != 9.2 || on(p)+off(p) != 0 {
 		t.Errorf("Hernández = %+v, want 4/4 tackles, 2 key, 6 interceptions, 16 possession won, 9.2 km, played throughout", p)
+	}
+}
+
+func TestLoadTestSave27MatchTeamTotals(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27MatchesPath, LoadOptions{})
+	id := int64(12438)
+	m, err := g.View(false).Match(MatchSelector{MatchID: &id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.TeamStats) != 2 {
+		t.Fatalf("team stats = %+v, want home and away", m.TeamStats)
+	}
+	// Report: shots 6/12, on target 3/7, progressive passes 33/55,
+	// crosses 4 of 34 and 5 of 27, red cards 0/0, distance 114/117 km
+	// (shown truncated; the sums are 114.9/117.2).
+	type totals struct {
+		shots, onTarget, progressive, crosses, crossesCompleted, red int
+		km                                                           float64
+	}
+	for side, want := range []totals{{6, 3, 33, 34, 4, 0, 114.9}, {12, 7, 55, 27, 5, 0, 117.2}} {
+		s := m.TeamStats[side]
+		if got := (totals{s.Shots, s.ShotsOnTarget, s.ProgressivePasses, s.Crosses, s.CrossesCompleted, s.RedCards, s.DistanceKm}); got != want {
+			t.Errorf("side %d = %+v, want %+v", side, got, want)
+		}
 	}
 }
 

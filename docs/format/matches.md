@@ -60,7 +60,7 @@ No id moved between packs. `pks_0`..`pks_2` kept every match since their first o
 A decompressed object is 8 583–244 153 bytes on 07-16 (30.9 MB for all 821). Every one starts `01 00 01 3c 1f`; the bytes after that vary (07-15: `22 00 01 14 00 15 90`; 545 objects continue `02 00 ff 00 ff 00`). Two kinds:
 
 - 251 objects (64 831 bytes and more) hold the match setup section with the build string `FM27.…`.
-- 570 objects (8 583–14 064 bytes) have no setup section: all 544 in `pks_3` and 26 in the other packs. No object falls between the two sizes. On `data/test_save_27_matches.fm` (11-12) 689 of 3 872 objects have one (18 %); on the shortlist save 685 of 3 385 (20 %).
+- 570 objects (8 583–14 064 bytes) have no setup section: all 544 in `pks_3` and 26 in the other packs. No object falls between the two sizes. On `data/test_save_27_matches.fm` (11-12) 689 of 3 872 objects have one (18 %); on `data/test_save_27_shortlist.fm` (11-25) 685 of 3 385 (20 %).
 
 Player records are in all 821. Offsets below are in the decompressed 07-15 object (match id 1022, `pks_0`; 234 959 bytes), counting the 3-byte `01 00 01` prefix. In a `.scm` file body the same fields sit 3 bytes earlier up to the end of the player records, and 4 bytes earlier from the setup section on (see ".scm files").
 
@@ -136,7 +136,7 @@ Shots, shots on target, distance, progressive passes and crosses are not in this
 | 74 | u8 | inference: minute of the red card | set on every record with a red card |
 | 86, 87 | u8, u8 | passes attempted, completed | Hernández 73/65, Baldassarra 79/73; team sums 482/423 and 592/530 (pass maps: 423 and 530 Total Passes) |
 | 88 | u8 | key passes | Moutachy 3 |
-| 89, 90 | u8, u8 | crosses attempted, completed | Traoré 11/1, Moutachy 7/3; team sums give 11 %/18 % (shown truncated) and 07-15's 25 %/22 % |
+| 89, 90 | u8, u8 | crosses attempted, completed | Traoré 11/1, Moutachy 7/3; team sums over players who played give 11 %/18 % (shown truncated) and 07-15's 25 %/22 %. On 11-12, 797 records of players who did not play hold 1–16 here, all in objects without a setup section (meaning unknown) |
 | 92, 93 | u8, u8 | tackles attempted, won | Hernández 4/4; team sums equal −258/−256 on every side |
 | 94 | u8 | key tackles | Hernández 2, Girdvainis 2 |
 | 98 | u8 | interceptions | Hernández 6 |
@@ -170,6 +170,6 @@ Counts: none on 01-19, 01-22 and 02-11; 17 on 05-04; 26 on 05-09; 30 on 07-16. O
 
 - `match_stats_cfg.dat`: the undecoded header and pack bytes; what decides pack membership; the `pks_3` pruning rule; whether packs are pruned at a season change; the `pks_3` gap.
 - Match object: the header grammar; what decides an object's kind (with or without setup); possession and OPPDA; whether 73 and 74 are card minutes; the position bit meanings at offsets 8 and 13 and why offset 13 differs by side; record length; offsets 20 (goals?), 21 (non-zero on keepers only and equal to the goals each conceded on 07-15: McGinty 2, Mikelionis 3), 56 (assists?), 61, 62, 65, 66 (card reasons?), 68–70, 72 (non-zero on 575 of 116 116 played records of 11-12, e.g. Kloniūnas 33, taken off in minute 33) and 75–85; the sections after 26 807; what the attempted-passes field (−264) counts in objects without a setup section (below completed in match 8736).
-- Player records: which substitute appearances the game leaves unrated; Kazlauskas's 3 extra starts.
+- Player records: what offsets 89 and 90 hold on unused substitutes' records in objects without a setup section; which substitute appearances the game leaves unrated; Kazlauskas's 3 extra starts.
 - `.scm` files: why they exist and when the game deletes them.
 - 26.x: whether `match_stats_cfg.dat` (a root file of the 26.2.0 test save) and the `*.scm` files of 26.3.2 saves use the same layout (see [`container.md`](container.md)).
