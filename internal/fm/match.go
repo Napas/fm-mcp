@@ -64,18 +64,26 @@ type TeamMatchStats struct {
 	PassesCompleted int    `json:"passes_completed"`
 	// PassesCompletedByThird is nil when the save does not split them.
 	PassesCompletedByThird *ThirdPasses `json:"passes_completed_by_third,omitempty"`
-	Tackles                int          `json:"tackles"` // attempted
-	TacklesWon             int          `json:"tackles_won"`
-	Headers                int          `json:"headers"` // attempted
-	HeadersWon             int          `json:"headers_won"`
-	ShotsBlocked           int          `json:"shots_blocked"` // the side's own shots that were blocked
-	ClearCutChances        int          `json:"clear_cut_chances"`
-	Corners                int          `json:"corners"`
-	Fouls                  int          `json:"fouls"`
-	YellowCards            int          `json:"yellow_cards"`
+	// FinalThirdPasses (attempted) is set only with PassesCompletedByThird
+	// and a plausible value.
+	FinalThirdPasses *int `json:"final_third_passes,omitempty"`
+	// Possession is the side's share of both sides' completed passes, in
+	// percent. Set only when both sides have PassesCompletedByThird.
+	Possession      *int `json:"possession,omitempty"`
+	Tackles         int  `json:"tackles"` // attempted
+	TacklesWon      int  `json:"tackles_won"`
+	Headers         int  `json:"headers"` // attempted
+	HeadersWon      int  `json:"headers_won"`
+	ShotsBlocked    int  `json:"shots_blocked"` // the side's own shots that were blocked
+	ClearCutChances int  `json:"clear_cut_chances"`
+	Corners         int  `json:"corners"`
+	Fouls           int  `json:"fouls"`
+	Offsides        int  `json:"offsides"`
+	YellowCards     int  `json:"yellow_cards"`
 	// Sums over the players who played.
 	Shots             int     `json:"shots"`
 	ShotsOnTarget     int     `json:"shots_on_target"`
+	LongShots         int     `json:"long_shots"`
 	ProgressivePasses int     `json:"progressive_passes"`
 	Crosses           int     `json:"crosses"` // attempted
 	CrossesCompleted  int     `json:"crosses_completed"`
@@ -114,7 +122,9 @@ type Performance struct {
 	XG              float64 `json:"xg"`                          // expected goals, to 2 decimals
 	Shots           int     `json:"shots"`
 	ShotsOnTarget   int     `json:"shots_on_target"`
+	LongShots       int     `json:"long_shots"`
 	ClearCutChances int     `json:"clear_cut_chances"`
+	Offsides        int     `json:"offsides"`
 	Passes          int     `json:"passes"` // attempted
 	PassesCompleted int     `json:"passes_completed"`
 	KeyPasses       int     `json:"key_passes"`
@@ -141,7 +151,8 @@ func performance(r savefile.MatchPlayer) Performance {
 	return Performance{
 		Started: r.Started(), SubbedOnMinute: minute(st.SubbedOnMinute), SubbedOffMinute: minute(st.SubbedOffMinute),
 		Rating: float64(r.Rating) / 100, XG: math.Round(float64(r.XG)*100) / 100,
-		Shots: int(st.Shots), ShotsOnTarget: int(st.ShotsOnTarget), ClearCutChances: int(st.ClearCutChances),
+		Shots: int(st.Shots), ShotsOnTarget: int(st.ShotsOnTarget), LongShots: int(st.LongShots),
+		ClearCutChances: int(st.ClearCutChances), Offsides: int(st.Offsides),
 		Passes: int(st.Passes), PassesCompleted: int(st.PassesCompleted), KeyPasses: int(st.KeyPasses), ProgressivePasses: int(st.ProgressivePasses),
 		Crosses: int(st.Crosses), CrossesCompleted: int(st.CrossesCompleted),
 		Tackles: int(st.Tackles), TacklesWon: int(st.TacklesWon), KeyTackles: int(st.KeyTackles),
@@ -149,6 +160,20 @@ func performance(r savefile.MatchPlayer) Performance {
 		Fouls: int(st.Fouls), YellowCards: int(st.YellowCards), RedCards: int(st.RedCards),
 		DistanceKm: kilometres(float64(st.DistanceMetres)), Sprints: int(st.Sprints),
 	}
+}
+
+// setPossession sets each side's share of the completed passes, only when
+// both sides' passes split by third: without the split the team block's
+// passes are not the players' (docs/format/matches.md "Team stats"). The
+// formula is an inference; it fits 3 of 3 matches checked in game.
+func setPossession(out []TeamMatchStats, teams *[2]savefile.TeamStats) {
+	home, away := teams[0], teams[1]
+	if home.PassesCompletedByThird == nil || away.PassesCompletedByThird == nil {
+		return
+	}
+	h, a := float64(home.PassesCompleted), float64(away.PassesCompleted)
+	share := int(math.Round(100 * h / (h + a)))
+	out[0].Possession, out[1].Possession = ptr(share), ptr(100-share)
 }
 
 // kilometres rounds metres to 0.1 km.
@@ -316,12 +341,16 @@ func (g *Game) teamStats(s storedFixture) []TeamMatchStats {
 			Passes: int(t.Passes), PassesCompleted: int(t.PassesCompleted),
 			Tackles: int(t.Tackles), TacklesWon: int(t.TacklesWon), Headers: int(t.Headers), HeadersWon: int(t.HeadersWon),
 			ShotsBlocked: int(t.ShotsBlocked), ClearCutChances: int(t.ClearCutChances), Corners: int(t.Corners),
-			Fouls: int(t.Fouls), YellowCards: int(t.YellowCards),
+			Fouls: int(t.Fouls), Offsides: int(t.Offsides), YellowCards: int(t.YellowCards),
 		}
 		if th := t.PassesCompletedByThird; th != nil {
 			out[side].PassesCompletedByThird = &ThirdPasses{Own: int(th[0]), Middle: int(th[1]), Final: int(th[2])}
 		}
+		if f := t.FinalThirdPasses; f != nil {
+			out[side].FinalThirdPasses = ptr(int(*f))
+		}
 	}
+	setPossession(out, teams)
 	for _, r := range obj.Players {
 		if !r.Played() { // records of unused substitutes can hold cross counts
 			continue
@@ -329,6 +358,7 @@ func (g *Game) teamStats(s storedFixture) []TeamMatchStats {
 		t, st := &out[r.Side], r.Stats
 		t.Shots += int(st.Shots)
 		t.ShotsOnTarget += int(st.ShotsOnTarget)
+		t.LongShots += int(st.LongShots)
 		t.ProgressivePasses += int(st.ProgressivePasses)
 		t.Crosses += int(st.Crosses)
 		t.CrossesCompleted += int(st.CrossesCompleted)
