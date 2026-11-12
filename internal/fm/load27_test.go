@@ -737,13 +737,13 @@ func TestLoadTestSave27MatchPlayers(t *testing.T) {
 		}
 	}
 	byrne := byName["Jack Byrne"]
-	if byrne.Rating != 8.19 || byrne.Player.ShirtNumber != 29 || !byrne.Started || byrne.TakenOff != nil {
-		t.Errorf("Byrne = %+v, want 8.19, shirt 29, started, taken_off unknown (Shamrock's side)", byrne)
+	if byrne.Rating != 8.19 || byrne.Player.ShirtNumber != 29 || !byrne.Started {
+		t.Errorf("Byrne = %+v, want 8.19, shirt 29, started", byrne)
 	}
-	if k := byName["Lirim Kastrati"]; k.TakenOff == nil || !*k.TakenOff || k.Rating != 6.31 {
+	if k := byName["Lirim Kastrati"]; k.SubbedOffMinute == nil || k.Rating != 6.31 {
 		t.Errorf("Kastrati = %+v, want taken off, 6.31", k)
 	}
-	if l := byName["Rokas Lekiatas"]; l.Started || l.TakenOff == nil || *l.TakenOff {
+	if l := byName["Rokas Lekiatas"]; l.Started || l.SubbedOnMinute == nil || l.SubbedOffMinute != nil {
 		t.Errorf("Lekiatas = %+v, want came on and stayed on", l)
 	}
 	if math.Abs(xg[0]-1.98) > 0.03 || math.Abs(xg[1]-2.18) > 0.03 {
@@ -825,4 +825,41 @@ func TestLoadTestSave27Shortlists(t *testing.T) {
 			t.Errorf("%s: got %v (total %d, needs scouting %d), want %v", name, got, res.Total, res.NeedsScouting, want)
 		}
 	}
+}
+
+// testSave27MatchesPath holds FK TransINVEST 1–1 Kauno Žalgiris (match
+// 12438, 2026-11-08), checked against the in-game match report.
+const testSave27MatchesPath = "../../data/test_save_27_matches.fm"
+
+func TestLoadTestSave27MatchPlayerStats(t *testing.T) {
+	g := loadTestSaveAt(t, testSave27MatchesPath, LoadOptions{GameDBDir: gameDBDir()})
+	id := int64(12438)
+	m, err := g.View(false).Match(MatchSelector{MatchID: &id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]Performance{}
+	for _, p := range m.Players {
+		byName[p.Player.Name] = p.Performance
+	}
+	on, off := func(p Performance) int { return deref(p.SubbedOnMinute) }, func(p Performance) int { return deref(p.SubbedOffMinute) }
+	if p := byName["Domantas Šluta"]; on(p) != 33 || off(p) != 0 || p.YellowCards != 1 || p.Fouls != 2 || p.Passes != 28 || p.PassesCompleted != 24 || p.DistanceKm != 7.9 || p.Sprints != 2 {
+		t.Errorf("Šluta = %+v, want on at 33, booked, 2 fouls, 24/28 passes, 7.9 km, 2 sprints", p)
+	}
+	if p := byName["Edvinas Kloniūnas"]; !p.Started || off(p) != 33 || on(p) != 0 {
+		t.Errorf("Kloniūnas = %+v, want taken off at 33", p)
+	}
+	if p := byName["Marko Konatar"]; on(p) != 74 || p.YellowCards != 1 || p.Crosses != 1 || p.Clearances != 2 {
+		t.Errorf("Konatar = %+v, want on at 74, booked, 1 cross, 2 clearances", p)
+	}
+	if p := byName["Aldayr Hernández"]; p.Tackles != 4 || p.TacklesWon != 4 || p.KeyTackles != 2 || p.Interceptions != 6 || p.PossessionWon != 16 || p.DistanceKm != 9.2 || on(p)+off(p) != 0 {
+		t.Errorf("Hernández = %+v, want 4/4 tackles, 2 key, 6 interceptions, 16 possession won, 9.2 km, played throughout", p)
+	}
+}
+
+func deref(p *int) int {
+	if p == nil {
+		return 0
+	}
+	return *p
 }

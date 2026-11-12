@@ -20,15 +20,15 @@ func playerMatchesGame() *Game {
 		savefile.GoalEvent{Scorer: 300, Assister: 100, Side: 1, Kind: savefile.EventShootoutScored, Minute: 120})} // not an assist
 	pruned := savefile.Fixture{Key: 0, Home: 2, Away: 1, Date: day(2025, 8, 22), Result: matchResult(1, 1, 9,
 		savefile.GoalEvent{Scorer: 100, Assister: savefile.NoPerson, Side: 1, Kind: savefile.EventGoal, Minute: 5})}
-	home7 := squad(0, 92, true) // persons 92–104: 100 starts in shirt 9, 101 starts, 102 taken off
-	away12 := squad(1, 95, false)
+	home7 := squad(0, 92) // persons 92–104: 100 starts in shirt 9, 101 starts, 102 taken off
+	away12 := squad(1, 95)
 	away12[6].Rating, away12[6].XG = 812, 0.704 // person 101 sits out: unused below
 	away12[6].StartPositions, away12[6].EndPositions = 0, 0
 	return NewGame(Info{Date: gameDate, ManagerTeamIndex: 1}, tacticPlayers(), fixtureWorld(), PlayerExtras{
 		Fixtures: []savefile.Fixture{detailedFixture, second, pruned},
 		Matches: []savefile.MatchObject{
-			{MatchID: 7, Players: append(home7, squad(1, 200, false)...)},
-			{MatchID: 12, Players: append(squad(0, 300, false), away12...)},
+			{MatchID: 7, Players: append(home7, squad(1, 200)...)},
+			{MatchID: 12, Players: append(squad(0, 300), away12...)},
 		},
 	})
 }
@@ -38,19 +38,18 @@ func TestPlayerMatchesNewestFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	no := false
 	want := PlayerMatchList{
 		Player: TacticPlayer{UID: 1, Name: "Guglielmo Vicario"},
 		Matches: []PlayerMatch{
 			{
 				MatchID: 12, Date: time.Date(2025, 8, 15, 0, 0, 0, 0, time.UTC), CompetitionIndex: 8, Competition: "Sky Bet Championship", Stage: "Playoffs – Semi Final – First Leg",
 				TeamIndex: 1, Team: "Home FC", OpponentIndex: 3, Opponent: "Third FC", Score: &Score{Home: 0, Away: 2}, ShirtNumber: 6,
-				Performance: Performance{Started: true, Rating: 6.9, XG: 0.13}, Goals: 1, // a sub came on, nobody off: unknown
+				Performance: Performance{Started: true, Rating: 6.9, XG: 0.13}, Goals: 1,
 			},
 			{
 				MatchID: 7, Date: time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC), CompetitionIndex: 8, Competition: "Sky Bet Championship", Stage: "Playoffs – Semi Final – First Leg",
 				TeamIndex: 1, Team: "Home FC", Home: true, OpponentIndex: 2, Opponent: "Away FC", Score: &Score{Home: 2, Away: 1}, ShirtNumber: 9,
-				Performance: Performance{Started: true, TakenOff: &no, Rating: 6.9, XG: 0.13}, Goals: 1,
+				Performance: Performance{Started: true, Rating: 6.9, XG: 0.13}, Goals: 1,
 			},
 		},
 		Total: 2,
@@ -73,8 +72,8 @@ func TestPlayerMatchesCountsAssistsAndOwnGoals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m := bergvall.Matches[1]; bergvall.Total != 2 || m.MatchID != 7 || m.OwnGoals != 1 || m.Goals != 0 || m.TakenOff == nil || !*m.TakenOff {
-		t.Errorf("Bergvall in match 7 = %+v, want one own goal and taken off", m)
+	if m := bergvall.Matches[1]; bergvall.Total != 2 || m.MatchID != 7 || m.OwnGoals != 1 || m.Goals != 0 || m.SubbedOffMinute == nil || *m.SubbedOffMinute != 70 {
+		t.Errorf("Bergvall in match 7 = %+v, want one own goal and taken off in minute 70", m)
 	}
 }
 
@@ -126,7 +125,7 @@ func TestPlayerMatchesRepeatedMatchID(t *testing.T) {
 	later := savefile.Fixture{Key: 0, Home: 3, Away: 1, Date: day(2025, 9, 1), Result: matchResult(4, 4, 7)}
 	g := NewGame(Info{Date: gameDate, ManagerTeamIndex: 1}, tacticPlayers(), fixtureWorld(), PlayerExtras{
 		Fixtures: []savefile.Fixture{detailedFixture, later},
-		Matches:  []savefile.MatchObject{{MatchID: 7, Players: append(squad(0, 92, true), squad(1, 200, false)...)}},
+		Matches:  []savefile.MatchObject{{MatchID: 7, Players: append(squad(0, 92), squad(1, 200)...)}},
 	})
 	got, err := g.View(false).PlayerMatches(1, PlayerMatchFilter{})
 	if err != nil || got.Total != 1 || got.Matches[0].Date.Format(time.DateOnly) != "2025-08-01" {

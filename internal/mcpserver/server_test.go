@@ -2516,6 +2516,9 @@ func harnessSquads() []savefile.MatchPlayer {
 			if i < 11 {
 				p.StartPositions, p.EndPositions = 0x10, 0x10
 			}
+			if p.Person == 1 {
+				p.Stats = savefile.MatchPlayerStats{SubbedOffMinute: 70, DistanceMetres: 9183.6, Passes: 47, PassesCompleted: 42}
+			}
 			out = append(out, p)
 		}
 	}
@@ -2603,13 +2606,37 @@ func TestGetPlayerMatchesIsExplained(t *testing.T) {
 	if i < 0 {
 		t.Fatal("no get_player_matches tool")
 	}
-	for _, want := range []string{"newest first", "any team", "pruned", "rating", "xg", "goals", "assists", "own_goals (inference)", "shoot-out", "started", "taken_off", "limit", "Fog of war"} {
+	for _, want := range []string{"newest first", "any team", "pruned", "rating", "xg", "goals", "assists", "own_goals (inference)", "shoot-out", "started", "subbed_on_minute", "subbed_off_minute", "distance_km", "red_cards", "limit", "Fog of war"} {
 		if !strings.Contains(tools.Tools[i].Description, want) {
 			t.Errorf("get_player_matches description lacks %q", want)
 		}
 	}
 	if text := h.session.InitializeResult().Instructions; !strings.Contains(text, "get_player_matches") || !strings.Contains(text, "own_goals are an inference") {
 		t.Error("instructions lack get_player_matches or its own_goals inference")
+	}
+}
+
+// TestPerformanceFieldsAreExplained checks that both tools returning
+// fm.Performance describe every one of its fields.
+func TestPerformanceFieldsAreExplained(t *testing.T) {
+	typ := reflect.TypeFor[fm.Performance]()
+	for i := range typ.NumField() {
+		name, _, _ := strings.Cut(typ.Field(i).Tag.Get("json"), ",")
+		if name == "" || name == "-" {
+			t.Errorf("field %s has no JSON name", typ.Field(i).Name)
+			continue
+		}
+		if name == "started" { // described by each tool before the list
+			continue
+		}
+		if !regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `\b`).MatchString(performanceDescription) {
+			t.Errorf("performanceDescription lacks %q", name)
+		}
+	}
+	for tool, desc := range map[string]string{"get_match": matchDescription, "get_player_matches": playerMatchesDescription} {
+		if !strings.Contains(desc, performanceDescription) || !strings.Contains(desc, statsCaveat) {
+			t.Errorf("%s description lacks the performance fields or their caveat", tool)
+		}
 	}
 }
 
@@ -2624,6 +2651,20 @@ func TestGetMatchTeamStats(t *testing.T) {
 	}
 	if strings.Count(text, "passes_completed_by_third") != 1 {
 		t.Errorf("the away side has no split, so only one passes_completed_by_third: %s", text)
+	}
+}
+
+func TestGetMatchPlayerStats(t *testing.T) {
+	h := fixturesHarness(t)
+
+	text := h.rawJSON("get_match", map[string]any{"match_id": 5})
+	for _, want := range []string{`"subbed_off_minute":70`, `"distance_km":9.2`, `"passes":47`, `"passes_completed":42`, `"red_cards":0`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("get_match output lacks %s: %s", want, text)
+		}
+	}
+	if strings.Contains(text, "subbed_on_minute") {
+		t.Errorf("no substitute came on, so no subbed_on_minute: %s", text)
 	}
 }
 
@@ -2655,7 +2696,7 @@ func TestGetMatchIsExplained(t *testing.T) {
 	for _, tool := range tools.Tools {
 		desc[tool.Name] = tool.Description
 	}
-	for _, want := range []string{"match_id", "stored", "pruned", "goals_only", "quick_simulated", "unsupported_build", "own_goal", "missed_penalty", "shootout_scored", "unknown_", "unnamed_player", "inference", "players", "rating", "xg", "started", "taken_off", "unused_substitutes", "team_stats", "passes_completed_by_third", "clear_cut_chances", "shots_blocked", "yellow_cards"} {
+	for _, want := range []string{"match_id", "stored", "pruned", "goals_only", "quick_simulated", "unsupported_build", "own_goal", "missed_penalty", "shootout_scored", "unknown_", "unnamed_player", "inference", "players", "rating", "xg", "started", "subbed_on_minute", "subbed_off_minute", "progressive_passes", "distance_km", "unused_substitutes", "team_stats", "passes_completed_by_third", "clear_cut_chances", "shots_blocked", "yellow_cards"} {
 		if !strings.Contains(desc["get_match"], want) {
 			t.Errorf("get_match description lacks %q", want)
 		}

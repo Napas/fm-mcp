@@ -1,6 +1,7 @@
 package savefile
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -15,7 +16,7 @@ const (
 	maxMatchEntries    = 1 << 16 // 544 seen in one pack
 	maxMatchObjectSize = 4 << 20 // 244 153 bytes seen
 	// maxMatchPackDecoded caps all objects' decompressed bytes together:
-	// 30.9 MB seen.
+	// 105 MB seen.
 	maxMatchPackDecoded = 256 << 20
 
 	// matchPlayerSize is a player record's fixed part; records are this long
@@ -32,6 +33,13 @@ const (
 	// maxMatchPerson bounds person indices: real ones are below 200 000;
 	// float bytes read as a person are about 1e9.
 	maxMatchPerson = 1 << 24
+	// maxMatchDistance bounds a record's distance before unit scaling:
+	// 17 922 metres and 20.0 km seen.
+	maxMatchDistance = 30000
+	// matchSetupMarker starts the build string of the match setup section,
+	// in every object that has one on the 27.0.0 saves checked;
+	// matchPackVersion gates other layouts.
+	matchSetupMarker = "FM27."
 )
 
 // Team stats sit at fixed offsets before each side's first player record
@@ -100,6 +108,30 @@ type MatchPlayer struct {
 	EndPositions uint32
 	XG           float32 // expected goals
 	Rating       uint16  // match rating × 100; a placeholder for players who did not play
+	Stats        MatchPlayerStats
+}
+
+// MatchPlayerStats are a player's counts in a match; all 0 for a player who
+// did not play.
+type MatchPlayerStats struct {
+	Shots, ShotsOnTarget    uint8
+	ClearCutChances         uint8
+	Fouls                   uint8
+	YellowCards, RedCards   uint8
+	SubbedOffMinute         uint8 // 0 unless taken off; a player sent off has 0
+	SubbedOnMinute          uint8 // 0 unless he came on
+	Passes, PassesCompleted uint8
+	KeyPasses               uint8
+	Crosses                 uint8 // attempted
+	CrossesCompleted        uint8
+	Tackles, TacklesWon     uint8
+	KeyTackles              uint8
+	Interceptions           uint8
+	DistanceMetres          float32
+	PossessionWon           uint8
+	Clearances              uint8
+	ProgressivePasses       uint8
+	Sprints                 uint8
 }
 
 // Started reports whether p was on the pitch at kick-off.
@@ -238,6 +270,11 @@ func readMatchObject(obj []byte) ([]MatchPlayer, *[2]TeamStats, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	if !bytes.Contains(obj, []byte(matchSetupMarker)) { // distances in kilometres
+		for i := range players {
+			players[i].Stats.DistanceMetres *= 1000
+		}
+	}
 	if spans[1].first-teamBlockSize < spans[0].end {
 		return players, nil, nil
 	}
@@ -289,10 +326,19 @@ func matchRecord(b []byte) (MatchPlayer, bool) {
 		EndPositions:   binary.LittleEndian.Uint32(b[13:]),
 		XG:             math.Float32frombits(binary.LittleEndian.Uint32(b[25:])),
 		Rating:         binary.LittleEndian.Uint16(b[136:]),
+		Stats: MatchPlayerStats{
+			Shots: b[41], ShotsOnTarget: b[42], ClearCutChances: b[45], Fouls: b[60], YellowCards: b[63], RedCards: b[64],
+			SubbedOffMinute: b[67], SubbedOnMinute: b[71],
+			Passes: b[86], PassesCompleted: b[87], KeyPasses: b[88], Crosses: b[89], CrossesCompleted: b[90],
+			Tackles: b[92], TacklesWon: b[93], KeyTackles: b[94], Interceptions: b[98],
+			DistanceMetres: math.Float32frombits(binary.LittleEndian.Uint32(b[140:])),
+			PossessionWon:  b[151], Clearances: b[153], ProgressivePasses: b[186], Sprints: b[190],
+		},
 	}
 	faced := math.Float32frombits(binary.LittleEndian.Uint32(b[29:]))
 	ok := p.Person >= 0 && p.Person < maxMatchPerson && p.StartPositions&^matchPositionBits == 0 && p.EndPositions&^matchPositionBits == 0 &&
-		p.Rating >= minMatchRating && p.Rating <= maxMatchRating && finiteIn(p.XG, maxMatchXG) && finiteIn(faced, 2*maxMatchXG)
+		p.Rating >= minMatchRating && p.Rating <= maxMatchRating && finiteIn(p.XG, maxMatchXG) && finiteIn(faced, 2*maxMatchXG) &&
+		finiteIn(p.Stats.DistanceMetres, maxMatchDistance)
 	return p, ok
 }
 

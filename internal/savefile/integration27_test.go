@@ -648,6 +648,10 @@ func TestTestSave27WorkPermits(t *testing.T) {
 // of 7; see "27.0.0 shortlists".
 const testSave27ShortlistPath = "../../data/test_save_27_shortlist.fm"
 
+// testSave27MatchesPath holds FK TransINVEST 1–1 Kauno Žalgiris (match
+// 12438, 2026-11-08), checked against the in-game match report.
+const testSave27MatchesPath = "../../data/test_save_27_matches.fm"
+
 func TestTestSave27Shortlists(t *testing.T) {
 	for _, tt := range []struct {
 		path string

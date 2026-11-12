@@ -85,7 +85,7 @@ func (g *Game) playerMatch(at playedMatch) PlayerMatch {
 		MatchID: int64(s.Result.MatchID), Date: s.date,
 		CompetitionIndex: f.CompetitionIndex, Competition: f.Competition, Stage: f.Stage,
 		TeamIndex: team, Team: g.world.teamName(team), OpponentIndex: opponent, Opponent: g.world.teamName(opponent),
-		Home: r.Side == 0, Score: f.Score, ShirtNumber: int(r.Shirt), Performance: performance(r, takenOffKnown(records)[r.Side]),
+		Home: r.Side == 0, Score: f.Score, ShirtNumber: int(r.Shirt), Performance: performance(r),
 	}
 	for _, e := range s.Result.Events {
 		switch e.Kind {

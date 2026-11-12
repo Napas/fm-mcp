@@ -99,21 +99,56 @@ type MatchPlayer struct {
 
 // Performance is how a player who played did in a match.
 type Performance struct {
-	Started bool `json:"started"` // false: came on as a substitute
-	// TakenOff is nil when the records do not tell (see takenOffKnown).
-	TakenOff *bool   `json:"taken_off,omitempty"`
-	Rating   float64 `json:"rating"` // e.g. 8.19
-	XG       float64 `json:"xg"`     // expected goals, to 2 decimals
+	Started         bool    `json:"started"` // false: came on as a substitute
+	SubbedOnMinute  *int    `json:"subbed_on_minute,omitempty"`
+	SubbedOffMinute *int    `json:"subbed_off_minute,omitempty"` // nil unless taken off (nil for a player sent off)
+	Rating          float64 `json:"rating"`                      // e.g. 8.19
+	XG              float64 `json:"xg"`                          // expected goals, to 2 decimals
+	Shots           int     `json:"shots"`
+	ShotsOnTarget   int     `json:"shots_on_target"`
+	ClearCutChances int     `json:"clear_cut_chances"`
+	Passes          int     `json:"passes"` // attempted
+	PassesCompleted int     `json:"passes_completed"`
+	KeyPasses       int     `json:"key_passes"`
+	// ProgressivePasses is checked in game as team totals only.
+	ProgressivePasses int     `json:"progressive_passes"`
+	Crosses           int     `json:"crosses"` // attempted
+	CrossesCompleted  int     `json:"crosses_completed"`
+	Tackles           int     `json:"tackles"` // attempted
+	TacklesWon        int     `json:"tackles_won"`
+	KeyTackles        int     `json:"key_tackles"`
+	Interceptions     int     `json:"interceptions"`
+	Clearances        int     `json:"clearances"`
+	PossessionWon     int     `json:"possession_won"`
+	Fouls             int     `json:"fouls"`
+	YellowCards       int     `json:"yellow_cards"`
+	RedCards          int     `json:"red_cards"`
+	DistanceKm        float64 `json:"distance_km"` // to 1 decimal
+	Sprints           int     `json:"sprints"`
 }
 
-// performance reads a played record; known says whether its side's records
-// show who was taken off.
-func performance(r savefile.MatchPlayer, known bool) Performance {
-	p := Performance{Started: r.Started(), Rating: float64(r.Rating) / 100, XG: math.Round(float64(r.XG)*100) / 100}
-	if known {
-		p.TakenOff = ptr(r.EndPositions == 0)
+// performance reads a played record.
+func performance(r savefile.MatchPlayer) Performance {
+	st := r.Stats
+	return Performance{
+		Started: r.Started(), SubbedOnMinute: minute(st.SubbedOnMinute), SubbedOffMinute: minute(st.SubbedOffMinute),
+		Rating: float64(r.Rating) / 100, XG: math.Round(float64(r.XG)*100) / 100,
+		Shots: int(st.Shots), ShotsOnTarget: int(st.ShotsOnTarget), ClearCutChances: int(st.ClearCutChances),
+		Passes: int(st.Passes), PassesCompleted: int(st.PassesCompleted), KeyPasses: int(st.KeyPasses), ProgressivePasses: int(st.ProgressivePasses),
+		Crosses: int(st.Crosses), CrossesCompleted: int(st.CrossesCompleted),
+		Tackles: int(st.Tackles), TacklesWon: int(st.TacklesWon), KeyTackles: int(st.KeyTackles),
+		Interceptions: int(st.Interceptions), Clearances: int(st.Clearances), PossessionWon: int(st.PossessionWon),
+		Fouls: int(st.Fouls), YellowCards: int(st.YellowCards), RedCards: int(st.RedCards),
+		DistanceKm: math.Round(float64(st.DistanceMetres)/100) / 10, Sprints: int(st.Sprints),
 	}
-	return p
+}
+
+// minute returns m, or nil for 0 (no substitution).
+func minute(m uint8) *int {
+	if m == 0 {
+		return nil
+	}
+	return ptr(int(m))
 }
 
 // MatchEvent is a goal, a missed penalty or a shoot-out kick.
@@ -197,7 +232,6 @@ func (g *Game) match(s storedFixture) Match {
 
 func (g *Game) matchPlayerLines(s storedFixture) ([]MatchPlayer, []UnusedSubstitute) {
 	records := g.matchObjects[int64(s.Result.MatchID)].Players
-	known := takenOffKnown(records)
 	var played []MatchPlayer
 	var unused []UnusedSubstitute
 	for _, r := range records {
@@ -211,26 +245,9 @@ func (g *Game) matchPlayerLines(s storedFixture) ([]MatchPlayer, []UnusedSubstit
 			unused = append(unused, UnusedSubstitute{Player: person, TeamIndex: team, Team: g.world.teamName(team)})
 			continue
 		}
-		played = append(played, MatchPlayer{Player: person, TeamIndex: team, Team: g.world.teamName(team), Performance: performance(r, known[r.Side])})
+		played = append(played, MatchPlayer{Player: person, TeamIndex: team, Team: g.world.teamName(team), Performance: performance(r)})
 	}
 	return played, unused
-}
-
-// takenOffKnown reports per side whether the records show who was taken
-// off: as many starters with no end position as substitutes who came on.
-// The game keeps end positions only in some of the human's matches.
-func takenOffKnown(records []savefile.MatchPlayer) [2]bool {
-	var off, on [2]int
-	for _, r := range records {
-		switch {
-		case r.Side > 1: // savefile reads sides 0 and 1 only
-		case r.Started() && r.EndPositions == 0:
-			off[r.Side]++
-		case !r.Started() && r.EndPositions != 0:
-			on[r.Side]++
-		}
-	}
-	return [2]bool{off[0] == on[0], off[1] == on[1]}
 }
 
 // matchData returns a played result's match id (nil when none) and what is
