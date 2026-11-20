@@ -35,20 +35,21 @@ const (
 	maxTacticTeams  = 64   // team entries per human; samples hold at most 4
 
 	// Team entry (writer 0x47a1cc4) and human (0x16ef560) tails.
-	teamRecordsVersion = 3
-	teamRecords        = 26 // records after the tactics (0x473fa94)
-	teamRecordSize     = 22 // 4 × i32, 6 × u8 (0x473f170)
-	routinesVersion    = 0x3c
-	routineGroups      = 8 // player categories in a set-piece routine
-	listTag            = 1 // u8 1 before the human's tactic headers, named positions and plans, and in each plan
-	planTag            = 0x10
-	planItemTag        = 2
-	minSelectionSize   = 1 + 4 + 4*selectionSize
-	minRoutineSize     = 2*routineGroups + 1 + 1 + 4 + 6
-	minHeaderItemSize  = 2 + 4 + 3 + 4 + 4 + 4 // bitset with no words
-	minPlanSize        = 1 + 4 + 4 + 1 + 4 + 4 + 6
-	minPlanItemSize    = 1 + 4 + 1 + 4 + 4 + 3 + 2 + 4 + 2
-	minHumanSize       = 1 + 4 + 4 + 2 + 5 + 5 + 4 + 5 + 4 + 4 // header and empty lists
+	teamRecordsVersion  = 3
+	teamRecords         = 26   // records after the tactics (0x473fa94)
+	teamRecordSize      = 22   // 4 × i32, 6 × u8 (0x473f170)
+	routinesVersion26   = 0x3c // 26.x and 27.0.0
+	routinesVersion27_1 = 0x3d
+	routineGroups       = 8 // player categories in a set-piece routine
+	listTag             = 1 // u8 1 before the human's tactic headers, named positions and plans, and in each plan
+	planTag             = 0x10
+	planItemTag         = 2
+	minSelectionSize    = 1 + 4 + 4*selectionSize
+	minRoutineSize      = 2*routineGroups + 1 + 1 + 4 + 6
+	minHeaderItemSize   = 2 + 4 + 3 + 4 + 4 + 4 // bitset with no words
+	minPlanSize         = 1 + 4 + 4 + 1 + 4 + 4 + 6
+	minPlanItemSize     = 1 + 4 + 1 + 4 + 4 + 3 + 2 + 4 + 2
+	minHumanSize        = 1 + 4 + 4 + 2 + 5 + 5 + 4 + 5 + 4 + 4 // header and empty lists
 	// maxLineupCandidates caps the places tried as the last-lineup table:
 	// places followed, past their records, by a tactic's start. Real saves
 	// have at most 26 in the whole body.
@@ -444,10 +445,20 @@ var setPieceRoutines = [...]struct {
 	{true, 2},  // vector of A3 (0x4774684)
 }
 
+// routinesHeaderSizes maps each set-piece routines version to the bytes
+// between the version and the first routine, not decoded. 27.1.0's single
+// byte is an inference: with it the walk reads both 27.1.0 saves checked
+// to the end of the file.
+var routinesHeaderSizes = map[uint16]int{routinesVersion26: 4, routinesVersion27_1: 1}
+
 // skipSetPieceRoutines skips the set-piece routines.
 func skipSetPieceRoutines(r *reader) {
-	r.expectU16(routinesVersion, "set-piece routines version")
-	r.take(4)
+	v := r.u16()
+	header, ok := routinesHeaderSizes[v]
+	if !ok {
+		r.fail("set-piece routines version %#x", v)
+	}
+	r.take(header)
 	for _, p := range setPieceRoutines {
 		if p.vector {
 			skipRoutines(r, p.prefix)

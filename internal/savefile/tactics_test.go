@@ -182,11 +182,13 @@ func appendRoutines(b []byte, prefix, n int) []byte {
 	return b
 }
 
-// appendSetPieceRoutines encodes the routine block with every vector of
-// length n.
 func appendSetPieceRoutines(b []byte, n int) []byte {
-	b = binary.LittleEndian.AppendUint16(b, routinesVersion)
-	b = append(b, 0, 0, 0, 0)
+	return appendSetPieceRoutinesIn(b, n, routinesVersion26, 4)
+}
+
+func appendSetPieceRoutinesIn(b []byte, n int, version uint16, header int) []byte {
+	b = binary.LittleEndian.AppendUint16(b, version)
+	b = append(b, make([]byte, header)...)
 	for _, p := range setPieceRoutines {
 		if p.vector {
 			b = appendRoutines(b, p.prefix, n)
@@ -717,9 +719,9 @@ func TestParseTacticsFallsBackToScan(t *testing.T) {
 	// The first and second team entries' records and routines, and the
 	// human's plan.
 	firstRecords := bytes.Index(valid, []byte{teamRecordsVersion, 0, teamRecords, 0, 0, 0})
-	firstRoutines := bytes.Index(valid, []byte{routinesVersion, 0, 0, 0, 0, 0, 0, 1, 2})
+	firstRoutines := bytes.Index(valid, []byte{routinesVersion26, 0, 0, 0, 0, 0, 0, 1, 2})
 	records := bytes.LastIndex(valid, []byte{teamRecordsVersion, 0, teamRecords, 0, 0, 0})
-	routines := bytes.LastIndex(valid, []byte{routinesVersion, 0, 0, 0, 0, 0, 0, 1, 2})
+	routines := bytes.LastIndex(valid, []byte{routinesVersion26, 0, 0, 0, 0, 0, 0, 1, 2})
 	plan := bytes.Index(valid, []byte{planTag, 0, 0, 0, 0, 1, 0, 0, 0, planItemTag})
 	keyed := records + 6 + teamRecords*teamRecordSize
 	if firstRecords < 0 || firstRecords == records || firstRoutines == routines || plan < 0 || valid[keyed] != 1 {
@@ -744,11 +746,11 @@ func TestParseTacticsFallsBackToScan(t *testing.T) {
 		{"position version", patched(firstSlot, 0x41), false, walkPartTeamEntry},
 		{"huge role option count", patched(firstOptions, 0xff, 0xff, 0xff, 0xff), false, walkPartTeamEntry},
 		{"first entry's records version", patched(firstRecords, 4), true, walkPartTeamTail},
-		{"first entry's routines version", patched(firstRoutines, 0x3d), true, walkPartTeamTail},
+		{"first entry's routines version", patched(firstRoutines, 0x3e), true, walkPartTeamTail},
 		{"team records version", patched(records, 4), true, walkPartTeamTail},
 		{"team record count", patched(records+2, 25), true, walkPartTeamTail},
 		{"huge keyed record count", patched(keyed, 0xff, 0xff), true, walkPartTeamTail},
-		{"routines version", patched(routines, 0x3d), true, walkPartTeamTail},
+		{"routines version", patched(routines, 0x3e), true, walkPartTeamTail},
 		{"plan tag", patched(plan, 0x11), true, walkPartHumanTail},
 		{"bytes after the human", trailing, true, walkPartTables},
 	}
@@ -784,7 +786,7 @@ func TestParseTacticsScanStartsAfterTheFirstEntry(t *testing.T) {
 	decoys.Name = strings.Repeat("\x00\x00\x01\x00\x22\x42\x00", maxLineupCandidates+1)
 	lineups := map[int32]LastLineup{652: {Opponent: 1, Players: emptySelection(), Formation: zazFormation()}}
 	body := enc26.tacticsBody(158530, 652, zazSelection(), 0, []Tactic{decoys}, lineups, []int32{652}, zazTactic())
-	body[bytes.LastIndex(body, []byte{routinesVersion, 0, 0, 0, 0, 0, 0, 1, 2})] = 0x3d // second entry
+	body[bytes.LastIndex(body, []byte{routinesVersion26, 0, 0, 0, 0, 0, 0, 1, 2})] = 0x3e // second entry
 	if _, err := findLastLineups(body, 0); !errors.Is(err, ErrCorrupt) || !strings.Contains(err.Error(), "candidates") {
 		t.Fatalf("scan from 0: err = %v, want the candidate cap", err)
 	}
@@ -928,16 +930,18 @@ func TestSkipRoutine(t *testing.T) {
 }
 
 func TestSkipSetPieceRoutines(t *testing.T) {
-	for _, n := range []int{0, 1, 2} {
-		consumes(t, appendSetPieceRoutines(nil, n), skipSetPieceRoutines)
+	for version, header := range map[uint16]int{0x3c: 4, 0x3d: 1} {
+		for _, n := range []int{0, 1, 2} {
+			consumes(t, appendSetPieceRoutinesIn(nil, n, version, header), skipSetPieceRoutines)
+		}
 	}
 	b := appendSetPieceRoutines(nil, 1)
 	if err := skipError(b[:len(b)-1], skipSetPieceRoutines); !errors.Is(err, ErrTruncated) {
 		t.Errorf("truncated: err = %v, want ErrTruncated", err)
 	}
-	b[0] = 0x3d
+	b[0] = 0x3e
 	if err := skipError(b, skipSetPieceRoutines); !errors.Is(err, ErrCorrupt) {
-		t.Errorf("version 0x3d: err = %v, want ErrCorrupt", err)
+		t.Errorf("version 0x3e: err = %v, want ErrCorrupt", err)
 	}
 }
 

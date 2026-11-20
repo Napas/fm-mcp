@@ -43,6 +43,13 @@ const (
 // The game's own gate may be lower.
 const clubLayoutGate = dbVersion27_0
 
+// financeExtraGate is the first data version seen with five more bytes before
+// CLUB_FINANCE_BASE in CLUB_FINANCE, not read (inference: a u8 and an unset
+// date; every sample holds 00 01 00 6c 07). The game's own gate may be lower.
+const financeExtraGate = dbVersion27_1
+
+const financeExtraSize = 1 + 4
+
 // Club is a CLUB or LEAGUE_BODY_CLUB record (serializer 0x308b1a0). Men's
 // and women's sides of the same club are separate records.
 type Club struct {
@@ -228,6 +235,9 @@ func readFullFinance(r *reader, dataVersion uint16) (*Budgets, int32) {
 	r.take(4 + 1 + 20 + 8 + 16 + 2 + 20)
 	r.take(19 * int(r.u8()))
 	r.take(22)
+	if dataVersion >= financeExtraGate {
+		r.take(financeExtraSize)
+	}
 	return b, readFinanceBase(r)
 }
 

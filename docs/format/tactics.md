@@ -34,7 +34,7 @@ REC22          = 4 × i32 (signed 3-bit fields), 6 × u8 flags  (0x473f170); 0,0
 TACTIC_HEADER  = u16 0x42, u32 key, u8 4, u8, u8, bitset, string, u32
 PLAN           = u8 0x10, string, u32 m + m × (u8 2, u32 condition, u8 1, i32, string, 3 × u8, u16 0x42, bitset, 2 × u8),
                  u8 1, i32, string, 6 × u8                  (0x483c2cc)
-SET_PIECE_ROUTINES = u16 0x3c, 4 × u8,
+SET_PIECE_ROUTINES = u16 0x3c, 4 × u8 (27.1.0: u16 0x3d, u8),
                  ROUTINE × 3 (0x475ad04, 0x475d484, 0x4764410), RVEC × 3,
                  u8 + ROUTINE (0x475f8a8), u8 + ROUTINE (0x4761e5c), RVEC1 × 2,
                  u8 + ROUTINE (0x476931c), ROUTINE (0x4766ef8), u8 + ROUTINE (0x476e0c0), RVEC1, RVEC, RVEC1,
@@ -150,6 +150,14 @@ Evidence (`data/test_save_27.fm`, 2026-01-19; `data/test_save_27b.fm`, 2026-01-2
 - **Bitset versions**: the team-instruction bitset is version 6 in 26.x and 7 in 27.0.0 (3 words in both); the role-option bitsets are version 1 in 26.3.2 and 2 in 27.0.0 (2 words).
 
 Checked in game: the human's tactic (name, mentality, all 22 positions and roles) and KŽ's last-match XI (positions, sides and shirt numbers in possession; positions and roles out of possession). The FM27 game code was not traced.
+
+### 27.1.0 set-piece routines — verified 27.1.0 (bytes)
+
+SET_PIECE_ROUTINES is version `u16 0x3d` in 27.1.0 saves, with 1 byte (0 in every routine block seen) between the version and the first routine instead of 4. The routines are unchanged. `savefile` takes the header size from the version, so 0x3c and 0x3d blocks both parse.
+
+Evidence: in `data/test_save_27_1.fm` the first block (body offset 8 603) reads `3d 00`, `00`, then the same routine bytes the 27.0.0 trailer save holds after `3c 00 00 00 00 00` (`00 06 09 08 0a 06 03 04 01 01 02 …`, then `LLUN`). Treating the 3 bytes as missing, the walk reaches the end of the file in both 27.1.0 saves with every constant checked, and reads KŽ's tactic and 9 108 and 9 066 last lineups. Read with the 4-byte header, the walk fails: `fm` warns that the tactics layout is not recognised and finds last lineups by scanning. Whether the 4 bytes became 1 or 3 moved elsewhere in the block is not known (inference: the walk would fail if they had moved into a routine).
+
+No other tactics constant changed: object version 0x44, last-lineup version 10, team instructions and player instructions bitsets as in 27.0.0.
 
 ### 27.0.0 team instructions — verified 27.0.0 (code + in game)
 

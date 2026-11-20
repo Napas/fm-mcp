@@ -6,6 +6,7 @@ const (
 	dbVersion26_2 = 3727 // 26.2.0
 	dbVersion26_3 = 3733 // 26.3.2
 	dbVersion27_0 = 3754 // 27.0.0
+	dbVersion27_1 = 3756 // 27.1.0
 )
 
 // DatabaseVersion27 is FM 27.0.0's database version, exported for fm's

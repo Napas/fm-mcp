@@ -45,6 +45,19 @@ In game (copy of the real save at 2026-01-23, transfer budget £1 496 914, balan
 
 3754 is the first version seen with this layout; the game's real gate may be lower (any version from 3734 up).
 
+### 27.1.0 club finance — verified 27.1.0 (bytes)
+
+Database version 3756 (FM 27.1.0) adds 5 bytes to CLUB_FINANCE after its last block (`u8 n × 19 bytes`, then 22 bytes) and before CLUB_FINANCE_BASE. In the saves seen they hold `00 01 00 6c 07`: a u8 0 and the date 1900-01-01, that is unset (inference: the field's meaning is not known). The CLUB record is otherwise unchanged.
+
+Evidence (`data/test_save_27_1.fm`):
+
+- Without the 5 bytes the table stops at record 312 (Aldershot Town), the first full-finance record, and the save fails to load (`CLUB table with 30100 records` not found). The bank balance read there was 1 811 939 584 (`00 01 00 6c` as an i32). With them all 30 100 records parse to the table end marker.
+- Records with base finance (type 0) parse unchanged, so the bytes are in CLUB_FINANCE, not in CLUB_FINANCE_BASE. Which of the 27 bytes before the base is new is unknown; `fm` reads none of them.
+- Aldershot's CLUB_FINANCE matches the 27.0.0 layout up to the 22 bytes (budgets at 4 and 62, four sub-items, 27 entries of 230 bytes, 27 of 49 bytes); the 22 bytes end with float32 19.999 (`ff ff 9f 41`) and `ff 00`, as in 27.0.0, and the new bytes follow.
+- Values (bytes only, not checked in game): Kauno Žalgiris balance £12 690 015, transfer budget £1 316 073, wage budget £67 381 a week.
+
+3756 is the first version seen with these bytes; the game's own gate may be lower (3755).
+
 ### Club budgets (CLUB_FINANCE) — verified 26.3.2 (code + in game)
 
 CLUB_FINANCE (finance type 1; writer `0x3118c7c`) holds the budgets. Offsets are from the first byte after the finance type byte. The writer emits each field as `add x1, x20, #off; mov w2, #size; blr [stream+0x30]`, which gives the object offset.

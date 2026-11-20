@@ -185,7 +185,8 @@ func (g *Game) indexMatches(objs []savefile.MatchObject) {
 		return
 	}
 	g.matchObjects = make(map[int64]savefile.MatchObject, len(objs))
-	var orphans, unread, noTeamStats, repeated int
+	var orphans, unread, unsupported, overBudget, noTeamStats, repeated int
+	var unsupportedErr error
 	for _, o := range objs {
 		id := int64(o.MatchID)
 		_, seen := g.matchObjects[id]
@@ -197,6 +198,11 @@ func (g *Game) indexMatches(objs []savefile.MatchObject) {
 		case !hasFixture:
 			orphans++
 			continue
+		case errors.Is(o.Err, savefile.ErrUnsupported):
+			unsupported++
+			unsupportedErr = o.Err
+		case errors.Is(o.Err, savefile.ErrMatchBudget):
+			overBudget++
 		case o.Players == nil:
 			unread++
 		case o.TeamStats == nil:
@@ -207,10 +213,13 @@ func (g *Game) indexMatches(objs []savefile.MatchObject) {
 	for _, w := range []struct {
 		what string
 		n    int
-	}{{"match objects not read", unread}, {"match team stats not read", noTeamStats}, {"match objects with a repeated match id", repeated}, {"match objects without a fixture", orphans}} {
+	}{{"match objects not read", unread}, {"match objects past the size limit not read", overBudget}, {"match team stats not read", noTeamStats}, {"match objects with a repeated match id", repeated}, {"match objects without a fixture", orphans}} {
 		if w.n > 0 {
 			g.Info.Warnings = append(g.Info.Warnings, fmt.Sprintf("%s: %d", w.what, w.n))
 		}
+	}
+	if unsupported > 0 { // names one version: a new game build
+		g.Info.Warnings = append(g.Info.Warnings, fmt.Sprintf("match objects of an unsupported version not read: %d (%v)", unsupported, unsupportedErr))
 	}
 	g.indexPlayerMatches()
 }
