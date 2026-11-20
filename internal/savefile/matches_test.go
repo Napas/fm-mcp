@@ -8,24 +8,46 @@ import (
 	"testing"
 )
 
-// matchRecordBytes encodes a player record of matchPlayerSize bytes.
+// Match object versions and their record layouts, spelled out rather than
+// taken from the parser so that a wrong parser value fails the tests.
+const (
+	objectVersion27_0 = 0x1f3c
+	objectVersion27_1 = 0x1f3d
+)
+
+var testLayouts = map[uint16]matchLayout{
+	objectVersion27_0: {recordSize: 222},
+	objectVersion27_1: {recordSize: 227, shift: 5},
+}
+
 func matchRecordBytes(p MatchPlayer) []byte {
-	b := make([]byte, matchPlayerSize)
+	return matchRecordBytesIn(p, testLayouts[objectVersion27_0])
+}
+
+func matchRecordBytesIn(p MatchPlayer, l matchLayout) []byte {
+	b := make([]byte, l.recordSize)
 	b[0], b[7], b[12] = 2, 2, 2
 	binary.LittleEndian.PutUint32(b[1:], uint32(p.Person)) //nolint:gosec // signed field
 	b[5], b[6] = p.Shirt, p.Side
 	binary.LittleEndian.PutUint32(b[8:], p.StartPositions)
 	binary.LittleEndian.PutUint32(b[13:], p.EndPositions)
 	binary.LittleEndian.PutUint32(b[25:], math.Float32bits(p.XG))
-	binary.LittleEndian.PutUint16(b[136:], p.Rating)
 	st := p.Stats
 	b[41], b[42], b[44], b[45], b[60], b[62], b[63], b[64] = st.Shots, st.ShotsOnTarget, st.LongShots, st.ClearCutChances, st.Fouls, st.Offsides, st.YellowCards, st.RedCards
 	b[67], b[71] = st.SubbedOffMinute, st.SubbedOnMinute
 	b[86], b[87], b[88], b[89], b[90] = st.Passes, st.PassesCompleted, st.KeyPasses, st.Crosses, st.CrossesCompleted
 	b[92], b[93], b[94], b[98] = st.Tackles, st.TacklesWon, st.KeyTackles, st.Interceptions
-	binary.LittleEndian.PutUint32(b[140:], math.Float32bits(st.DistanceMetres))
-	b[151], b[153], b[186], b[190] = st.PossessionWon, st.Clearances, st.ProgressivePasses, st.Sprints
+	tail := b[l.shift:] // offsets from the rating on
+	binary.LittleEndian.PutUint16(tail[136:], p.Rating)
+	binary.LittleEndian.PutUint32(tail[140:], math.Float32bits(st.DistanceMetres))
+	tail[151], tail[153], tail[186], tail[190] = st.PossessionWon, st.Clearances, st.ProgressivePasses, st.Sprints
 	return b
+}
+
+// objectPrefix is a decompressed match object's first bytes: 01 00 01 and
+// the object version.
+func objectPrefix(version uint16) []byte {
+	return binary.LittleEndian.AppendUint16([]byte{1, 0, 1}, version)
 }
 
 // testSquad is a side of 11 starters (person base..base+10, one of them
@@ -49,12 +71,16 @@ func testSides(home, away int32) []MatchPlayer {
 	return append(testSquad(0, home), testSquad(1, away)...)
 }
 
-// matchObjectBytes encodes a decompressed match object: the 01 00 01 prefix,
-// filler that holds no record, then the records of both sides.
 func matchObjectBytes(players []MatchPlayer) []byte {
-	b := append([]byte{1, 0, 1, 0x3c, 0x1f}, make([]byte, 300)...)
+	return matchObjectBytesIn(players, objectVersion27_0)
+}
+
+// matchObjectBytesIn encodes a decompressed object of version: the prefix,
+// filler that holds no record, then the records of both sides.
+func matchObjectBytesIn(players []MatchPlayer, version uint16) []byte {
+	b := append(objectPrefix(version), make([]byte, 300)...)
 	for _, p := range players {
-		b = append(b, matchRecordBytes(p)...)
+		b = append(b, matchRecordBytesIn(p, testLayouts[version])...)
 		b = append(b, make([]byte, 30)...) // records are often longer than the fixed part
 	}
 	return append(b, make([]byte, 200)...)
@@ -114,39 +140,85 @@ func TestParseMatchPack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseMatchPack: %v", err)
 	}
+	if len(got) == 3 {
+		if got[2].Err == nil {
+			t.Error("match 8: no read error")
+		}
+		got[2].Err = nil
+	}
 	want := []MatchObject{{MatchID: 1022, Players: first}, {MatchID: 7, Players: second}, {MatchID: 8}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("objects = %+v, want %+v (match 8 unreadable)", got, want)
 	}
 }
 
+// TestParseMatchPackBudget: objects past the decompression budget stay
+// unread, with the reason, and the ones before it read.
 func TestParseMatchPackBudget(t *testing.T) {
 	frame := zstdFrame(t, matchObjectBytes(testSides(100, 200)))
 	body := matchPackBody([]testPackEntry{{1, frame}, {2, frame}, {3, frame}})
 	size := len(matchObjectBytes(testSides(100, 200)))
 
-	if _, err := parseMatchPack(body, 3*size); err != nil {
-		t.Errorf("within budget: %v", err)
+	objs, err := parseMatchPack(body, 3*size)
+	if err != nil || unreadObjects(objs) != 0 {
+		t.Errorf("within budget: %d unread, err %v", unreadObjects(objs), err)
 	}
-	if _, err := parseMatchPack(body, 3*size-1); !errors.Is(err, ErrCorrupt) {
-		t.Errorf("over budget: err = %v, want ErrCorrupt", err)
+	objs, err = parseMatchPack(body, 3*size-1)
+	if err != nil || len(objs) != 3 || unreadObjects(objs) != 1 || !errors.Is(objs[2].Err, ErrMatchBudget) {
+		t.Fatalf("over budget: %d objects, %d unread, err %v; want 3 with the last unread", len(objs), unreadObjects(objs), err)
 	}
 }
 
-func TestScanMatchPlayersRejectsBadSides(t *testing.T) {
+// TestDecodeMatchObjectStopsAtBudget: once the budget is used up, frames are
+// not decompressed.
+func TestDecodeMatchObjectStopsAtBudget(t *testing.T) {
+	dec, err := newDecoder(maxMatchObjectSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	frame := zstdFrame(t, matchObjectBytes(testSides(100, 200)))
+	left := -1
+
+	o := decodeMatchObject(dec, 5, frame, &left, 100)
+
+	if left != -1 || o.Players != nil || !errors.Is(o.Err, ErrMatchBudget) {
+		t.Errorf("left %d, %d players, err %v; want the frame skipped with ErrMatchBudget", left, len(o.Players), o.Err)
+	}
+}
+
+// TestParseMatchPackKeepsReadErrors: an object that does not read keeps why.
+func TestParseMatchPackKeepsReadErrors(t *testing.T) {
+	future := matchObjectBytes(testSides(100, 200))
+	binary.LittleEndian.PutUint16(future[3:], 0x1f3e)
+	body := matchPackBody([]testPackEntry{{1, zstdFrame(t, future)}, {2, zstdFrame(t, matchObjectBytes(testSides(100, 200)))}})
+
+	objs, err := parseMatchPack(body, maxMatchPackDecoded)
+
+	if err != nil || len(objs) != 2 {
+		t.Fatalf("%d objects, err %v", len(objs), err)
+	}
+	for _, o := range objs {
+		if wantErr := o.MatchID == 1; (o.Err != nil) != wantErr || wantErr && !errors.Is(o.Err, ErrUnsupported) || (o.Players == nil) != wantErr {
+			t.Errorf("match %d: %d players, err %v", o.MatchID, len(o.Players), o.Err)
+		}
+	}
+}
+
+func TestReadMatchObjectRejectsBadSides(t *testing.T) {
 	ten := append(testSquad(0, 100)[1:], testSquad(1, 200)...)
 	dup := testSides(100, 100)
 	for name, players := range map[string][]MatchPlayer{"ten starters": ten, "duplicate person": dup} {
-		if _, _, err := scanMatchPlayers(matchObjectBytes(players)); !errors.Is(err, ErrCorrupt) {
+		if _, _, err := readMatchObject(matchObjectBytes(players)); !errors.Is(err, ErrCorrupt) {
 			t.Errorf("%s: err = %v, want ErrCorrupt", name, err)
 		}
 	}
 }
 
-// TestScanMatchPlayersSkipsLookalikes checks that bytes shaped like a record
+// TestReadMatchObjectSkipsLookalikes checks that bytes shaped like a record
 // but with position bits outside the known ones, a rating out of range or a
 // non-finite xG are not read as players.
-func TestScanMatchPlayersSkipsLookalikes(t *testing.T) {
+func TestReadMatchObjectSkipsLookalikes(t *testing.T) {
 	players := testSides(100, 200)
 	obj := matchObjectBytes(players)
 	for _, bad := range []MatchPlayer{
@@ -165,7 +237,7 @@ func TestScanMatchPlayersSkipsLookalikes(t *testing.T) {
 	binary.LittleEndian.PutUint32(faced[29:], math.Float32bits(50)) // xG faced out of range
 	obj = append(obj, faced...)
 
-	got, _, err := scanMatchPlayers(obj)
+	got, _, err := readMatchObject(obj)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,18 +246,18 @@ func TestScanMatchPlayersSkipsLookalikes(t *testing.T) {
 	}
 }
 
-// TestScanMatchPlayersStepsOverRecords checks that bytes inside a record
+// TestReadMatchObjectStepsOverRecords checks that bytes inside a record
 // that look like another record (seen 139 bytes into goalkeeper records) are
 // not read: the scan resumes after a record's fixed part.
-func TestScanMatchPlayersStepsOverRecords(t *testing.T) {
+func TestReadMatchObjectStepsOverRecords(t *testing.T) {
 	players := testSides(100, 200)
 	first := append(matchRecordBytes(players[0]), make([]byte, 200)...) // a longer record
 	copy(first[139:], matchRecordBytes(MatchPlayer{Person: 999, Side: 0, EndPositions: 0x10, Rating: 512}))
-	obj := append([]byte{1, 0, 1}, first...)
+	obj := append(objectPrefix(objectVersion27_0), first...)
 	for _, p := range players[1:] {
 		obj = append(obj, matchRecordBytes(p)...)
 	}
-	got, _, err := scanMatchPlayers(obj)
+	got, _, err := readMatchObject(obj)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,13 +305,7 @@ func TestTestSave27MatchObjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unread := 0
-	for _, o := range objs {
-		if o.Players == nil {
-			unread++
-		}
-	}
-	if len(objs) != 821 || unread != 0 {
+	if unread := unreadObjects(objs); len(objs) != 821 || unread != 0 {
 		t.Fatalf("%d objects, %d unreadable; want 821 and 0", len(objs), unread)
 	}
 	var m *MatchObject
@@ -334,7 +400,7 @@ func teamBlockBytes(s TeamStats) []byte {
 
 // sidesObjectBytes encodes an object with a team block per side.
 func sidesObjectBytes(home, away []MatchPlayer, teams [2]TeamStats) []byte {
-	b := append([]byte{1, 0, 1, 0x3c, 0x1f}, make([]byte, 50)...)
+	b := append(objectPrefix(objectVersion27_0), make([]byte, 50)...)
 	for side, players := range [][]MatchPlayer{home, away} {
 		b = append(b, teamBlockBytes(teams[side])...)
 		for _, p := range players {
@@ -424,7 +490,7 @@ func TestReadMatchObjectFinalThirdPlausible(t *testing.T) {
 // the away block would overlap the home records; the players still are.
 func TestReadMatchObjectTeamStatsNeedRoom(t *testing.T) {
 	home, away := testSquad(0, 100), testSquad(1, 200)
-	early := append([]byte{1, 0, 1}, teamBlockBytes(testTeams[0])[teamBlockSize-100:]...) // 103 bytes before the home records
+	early := append(objectPrefix(objectVersion27_0), teamBlockBytes(testTeams[0])[teamBlockSize-100:]...) // 105 bytes before the home records
 	for _, p := range home {
 		early = append(early, matchRecordBytes(p)...)
 	}
@@ -435,7 +501,7 @@ func TestReadMatchObjectTeamStatsNeedRoom(t *testing.T) {
 	// The away block starts 6 bytes inside the last home record, whose last
 	// bytes are 0: the stats read as plausible, so only the overlap check
 	// can reject them.
-	overlap := append([]byte{1, 0, 1}, teamBlockBytes(testTeams[0])...)
+	overlap := append(objectPrefix(objectVersion27_0), teamBlockBytes(testTeams[0])...)
 	for _, p := range home {
 		overlap = append(overlap, matchRecordBytes(p)...)
 	}
@@ -457,11 +523,32 @@ func TestMatchRecordReadsStats(t *testing.T) {
 		Passes: 73, PassesCompleted: 65, KeyPasses: 9, Crosses: 10, CrossesCompleted: 11, Tackles: 12, TacklesWon: 13, KeyTackles: 14,
 		Interceptions: 15, DistanceMetres: 9183.5, PossessionWon: 16, Clearances: 17, ProgressivePasses: 18, Sprints: 19,
 	}}
+	for version, l := range testLayouts {
+		got, ok := matchRecord(matchRecordBytesIn(want, l), matchLayouts[version])
 
-	got, ok := matchRecord(matchRecordBytes(want))
+		if !ok || !reflect.DeepEqual(got, want) {
+			t.Errorf("version %#x: matchRecord = %+v, %v; want %+v", version, got, ok, want)
+		}
+	}
+}
 
-	if !ok || !reflect.DeepEqual(got, want) {
-		t.Errorf("matchRecord = %+v, %v; want %+v", got, ok, want)
+// TestReadMatchObjectVersions checks that each object version reads with
+// its own record layout and that another version is not read.
+func TestReadMatchObjectVersions(t *testing.T) {
+	players := testSides(100, 200)
+	for version := range testLayouts {
+		got, _, err := readMatchObject(matchObjectBytesIn(players, version))
+		if err != nil || !reflect.DeepEqual(got, players) {
+			t.Errorf("version %#x: players %+v, err %v; want both squads", version, got, err)
+		}
+	}
+	obj := matchObjectBytes(players)
+	binary.LittleEndian.PutUint16(obj[3:], objectVersion27_1+1)
+	if got, _, err := readMatchObject(obj); !errors.Is(err, ErrUnsupported) || got != nil {
+		t.Errorf("unknown version: players %d, err %v; want none and ErrUnsupported", len(got), err)
+	}
+	if _, _, err := readMatchObject([]byte{1, 0, 1, 0x3d}); !errors.Is(err, ErrTruncated) {
+		t.Errorf("no version: err %v, want ErrTruncated", err)
 	}
 }
 
@@ -499,11 +586,7 @@ func TestTestSave27MatchPlayerStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	byPerson := map[int32]MatchPlayer{}
-	unread := 0
 	for _, o := range objs {
-		if o.Players == nil {
-			unread++
-		}
 		if o.MatchID == 12438 {
 			for _, p := range o.Players {
 				byPerson[p.Person] = p
@@ -522,7 +605,7 @@ func TestTestSave27MatchPlayerStats(t *testing.T) {
 		}
 		checkTeamSums(t, o)
 	}
-	if len(objs) != 3872 || unread != 0 {
+	if unread := unreadObjects(objs); len(objs) != 3872 || unread != 0 {
 		t.Errorf("%d objects, %d unreadable; want 3872 and 0", len(objs), unread)
 	}
 	for name, tc := range map[string]struct {
@@ -605,6 +688,16 @@ func matchSums(ps []MatchPlayer) [2]sideSums {
 		out[side].metres = int(math.Round(metres[side]/100) * 100)
 	}
 	return out
+}
+
+func unreadObjects(objs []MatchObject) int {
+	n := 0
+	for _, o := range objs {
+		if o.Players == nil {
+			n++
+		}
+	}
+	return n
 }
 
 // checkTeamSums checks that o's players add up to its team totals.

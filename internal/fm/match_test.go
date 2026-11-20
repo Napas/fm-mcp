@@ -2,6 +2,7 @@ package fm
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -222,6 +223,29 @@ func TestMatchPlayers(t *testing.T) {
 	}
 	if u := m.UnusedSubstitutes; !u[0].Player.Unnamed || u[0].Player.ShirtNumber != 13 || u[0].TeamIndex != 1 || u[1].TeamIndex != 2 || u[1].Team != "Away FC" {
 		t.Errorf("unused = %+v, want one per side with its team", u)
+	}
+}
+
+// TestMatchObjectOfUnsupportedVersionWarns: an object of a version the
+// reader has no layout for gets its own warning, naming the version.
+func TestMatchObjectOfUnsupportedVersionWarns(t *testing.T) {
+	g := objectGame(savefile.MatchObject{MatchID: 7, Err: fmt.Errorf("%w: match object version 0x1f3e", savefile.ErrUnsupported)})
+	want := []string{"match objects of an unsupported version not read: 1 (savefile: unsupported save variant: match object version 0x1f3e)", "match objects not read: 1"}
+	for _, w := range want {
+		if !slices.Contains(g.Info.Warnings, w) {
+			t.Errorf("warnings = %q, want %q", g.Info.Warnings, w)
+		}
+	}
+}
+
+// TestMatchObjectPastBudgetWarns: objects left unread by the decompression
+// budget get their own warning.
+func TestMatchObjectPastBudgetWarns(t *testing.T) {
+	g := objectGame(savefile.MatchObject{MatchID: 7, Err: fmt.Errorf("%w: 1073741824 bytes", savefile.ErrMatchBudget)})
+	for _, w := range []string{"match objects past the size limit not read: 1", "match objects not read: 1"} {
+		if !slices.Contains(g.Info.Warnings, w) {
+			t.Errorf("warnings = %q, want %q", g.Info.Warnings, w)
+		}
 	}
 }
 

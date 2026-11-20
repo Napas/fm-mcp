@@ -53,7 +53,9 @@ Membership rules are an inference from these lists.
 | 05-09 | 54 | 65 | 19 | 255 | 0 |
 | 07-16 | 98 | 123 | 56 | 544 | 206, all from `pks_3`, of matches played on days 45–97 |
 
-No id moved between packs. `pks_0`..`pks_2` kept every match since their first one. The oldest `pks_3` match kept is also from day 97, so the pruning rule is not a plain age cut-off (inference). Whether any pack is pruned at the end of a season is not known: no sample spans a season change.
+No id moved between packs. `pks_0`..`pks_2` kept every match since their first one. The oldest `pks_3` match kept is also from day 97, so the pruning rule is not a plain age cut-off (inference).
+
+**Season change** (`data/test_save_27_1.fm`, 27.1.0, game date 2028-03-11; bytes). `fix_man.dat` has dropped the 2026 fixtures: its oldest result with a match id is from 2027-01-01 (id 16 401). The packs keep 232 objects of older matches (ids 0–16 400): 172 in `pks_0` and 60 in `pks_1`. So match objects can outlive their fixtures, and `fm` counts them in the load warning "match objects without a fixture" (232 here, 623 on a copy of `KŽ (v03).fm`). No 27.0.0 sample has any. Inference: the game drops a finished season's fixtures but not these packs' objects.
 
 ## Match object — partly verified 27.0.0 (bytes + in game)
 
@@ -162,13 +164,28 @@ Squad members who did not play still have a record. Their rating is 670 in the 2
 
 **Record length** is not decoded: 222 bytes or more (07-15: 222, 233, 240, 258, 273, 276, 294, 330). Longer ones hold extra data, probably shots (inference: Renan Oliveira's holds float32 values after the fixed part). A parser has to find records by scanning, not by stepping. Substitution minutes are at 67 and 71. Minutes played are not stored as such; the match length (added and extra time) is not located.
 
-**Finding records** (verified 27.0.0, bytes; `savefile.ReadMatchObjects`). Record length is not decoded, so the parser scans each object for the record shape: tag bytes 2 at offsets 0, 7 and 12, side 0 or 1, a person from 0 to 2^24, no position bits outside `0x00307fff` (bits 0–14 and the flags `0x100000` and `0x200000`) at offsets 8 and 13, a finite xG of 0–10 at 25 and 0–20 at 29, a rating of 300–1000 at 136, and a finite distance of 0–30 000 at 140 (before the kilometre scaling; 17 922 metres seen). After a record the scan resumes past its 222-byte fixed part: inside two goalkeeper records on 07-16 (the 382nd and 781st objects in file order), bytes 139 in read as a substitute who came on, with float bytes as the person (about 1e9) (hence the cap on persons). An object whose sides do not have exactly 11 starters each, or that repeats a person, is kept as unread: `get_match` shows its goals only (`goals_only`) and a load warning counts it. Results:
+**Finding records** (verified 27.0.0, bytes; `savefile.ReadMatchObjects`). Record length is not decoded, so the parser scans each object for the record shape: tag bytes 2 at offsets 0, 7 and 12, side 0 or 1, a person from 0 to 2^24, no position bits outside `0x00307fff` (bits 0–14 and the flags `0x100000` and `0x200000`) at offsets 8 and 13, a finite xG of 0–10 at 25 and 0–20 at 29, a rating of 300–1000 at 136 (141 in 27.1.0 objects), and a finite distance of 0–30 000 at 140 (145 in 27.1.0; before the kilometre scaling; 17 922 metres seen). After a record the scan resumes past its fixed part, 222 bytes (227 in 27.1.0; see "27.1.0 match objects"): inside two goalkeeper records on 07-16 (the 382nd and 781st objects in file order), bytes 139 in read as a substitute who came on, with float bytes as the person (about 1e9) (hence the cap on persons). An object whose sides do not have exactly 11 starters each, or that repeats a person, is kept as unread: `get_match` shows its goals only (`goals_only`) and a load warning counts it. Results:
 
 - 07-16: all 821 objects read; every side has 11 starters (1 642 sides), with 11–26 records. Records of a side are contiguous (222–399 bytes apart), the home side's first, and no person repeats. 05-04 (293 objects) and 05-09 (393) read the same way.
 - Without the position-bit test, 4 sides gain a twelfth "starter" (bytes with junk bit patterns; the 7 rejected lookalikes next to real records have float bytes as the person).
 - Small objects carry real values too: mean xG 1.28 per side (7 sides at 0), played ratings spread 5.0–9.8.
 - All 2 312 goals and own goals of the 07-16 results have their scorer as a played record on the right side (own goals: the other side).
 - Against `player_stats.dat` (KŽ's 21 squad players, TOPLYGA 2026, where all of KŽ's matches are stored): starts and substitute appearances match the league totals for 20 of 21 players (Kazlauskas: 9 starts in the objects, 6 in the totals). Rating sums (each rating rounded to one decimal) match exactly for the 14 players whose rated-match counts match. The other 7 have more records with a rating than rated league matches (Kastrati 7 vs 5): records hold a rating for some substitute appearances the game leaves unrated (inference: very short ones), and those ratings vary (6.35–7.67), so they are not placeholders.
+
+## 27.1.0 match objects — verified 27.1.0 (bytes)
+
+27.1.0 writes match objects of a new version with longer player records. `match_stats_cfg.dat` keeps file version 6 and the pack layout. A 27.1.0 save holds both versions: `data/test_save_27_1.fm` has 5 941 objects written by 27.0.0 and 1 610 written by 27.1.0 (a copy of `KŽ (v03).fm`: 6 528 and 1 228).
+
+**Object version.** The u16 after the `01 00 01` prefix: `3c 1f` (0x1f3c) in every 27.0.0 object, `3d 1f` (0x1f3d) in the 27.1.0 ones, whose setup section names build `FM27.fm27-rel-04-update1.2505117` (27.0.0's: `FM27.fm27-rel-03-launch-freepreview.2493426`). That it is a version is an inference: it is the only prefix byte that differs, and in both saves it splits the objects the 27.0.0 layout reads (all 0x1f3c) from those it cannot (all 0x1f3d). `savefile` reads each object by its version. Objects of another version stay unread, and `fm` names the version in the load warning "match objects of an unsupported version not read".
+
+**Player record.** 0x1f3d records are 5 bytes longer: 227 bytes or more (step between records 227, 238, 245, 256, 263, 274). Offsets up to 98 are unchanged. From the rating on every field moves 5 bytes: rating 141, distance 145, possession won 156, clearances 158, progressive passes 191, sprints 195. The 5 bytes are somewhere in 99–140 (first record of match 47208: `02 01 00 00 00` before the `01` that precedes the rating, a third copy of the tagged block at 109 and 122; inference).
+
+Evidence (`data/test_save_27_1.fm`, bytes):
+
+- With the new layout all 1 610 objects read: 11 starters a side, no person repeated.
+- On every side of every object, the players' fouls, yellow cards, tackles, tackles won, clear-cut chances and offsides add up to the team block, which keeps its offsets before the first record. In the 120 objects with a setup section the players' passes and completed passes also add up on all 240 sides, and completed passes by third sum to the total.
+- Per-player averages over players who played (0x1f3d / 0x1f3c objects with a setup section): distance 7 762 / 7 631 m, progressive passes 2.91 / 2.73, sprints 4.32 / 3.78, clearances 0.93 / 0.83, possession won 5.12 / 4.95, rating 6.82 / 6.80. Distances stay in metres with a setup section.
+- Not checked in game. KŽ 3–1 Wolfsberger AC (5–2 after extra time; UEFA Conference League round of 16, second leg, 2028-03-09, match 51085) is a 27.1.0 object to check against.
 
 ## .scm files — verified 27.0.0 (bytes)
 
@@ -178,7 +195,8 @@ Counts: none on 01-19, 01-22 and 02-11; 17 on 05-04; 26 on 05-09; 30 on 07-16. O
 
 ## Open questions
 
-- `match_stats_cfg.dat`: the undecoded header and pack bytes; what decides pack membership; the `pks_3` pruning rule; whether packs are pruned at a season change; the `pks_3` gap.
+- `match_stats_cfg.dat`: the undecoded header and pack bytes; what decides pack membership; the `pks_3` pruning rule; when, if ever, the game drops objects whose fixture is gone ("Season change"); the `pks_3` gap.
+- 27.1.0 match objects: what the 5 new record bytes hold; whether possession won, clearances, progressive passes and sprints are still at their shifted offsets (no team total checks them; their averages match 27.0.0's); a 27.1.0 match report checked in game.
 - Match object: the header grammar; what decides an object's kind (with or without setup); OPPDA and Ball Share; how the game computes possession; whether 73 and 74 are card minutes; the position bit meanings at offsets 8 and 13 and why offset 13 differs by side; record length; offsets 20 (goals?), 21 (non-zero on keepers only and equal to the goals each conceded on 07-15: McGinty 2, Mikelionis 3), 56 (assists?), 61, 65, 66 (card reasons?), 68–70, 72 (non-zero on 575 of 116 116 played records of 11-12, e.g. Kloniūnas 33, taken off in minute 33) and 75–85; the sections after 26 807; what the attempted-passes field (−264) counts in objects without a setup section (below completed in match 8736).
 - Player records: offset 207, which adds up to the final-third passes (−160) on only some sides; what offsets 89 and 90 hold on unused substitutes' records in objects without a setup section; which substitute appearances the game leaves unrated; Kazlauskas's 3 extra starts.
 - `.scm` files: why they exist and when the game deletes them.

@@ -60,7 +60,8 @@ func financeBase(b []byte, balance int32) []byte {
 }
 
 // fullFinance encodes CLUB_FINANCE with the given budgets and bank balance.
-// From data version 3754 the block before the wage budget is 4 bytes shorter.
+// Data version 3754 shortens the block before the wage budget by 4 bytes;
+// 3756 adds 5 bytes before the base.
 func fullFinance(b []byte, transfer, wage, balance int32, dataVersion uint16) []byte {
 	b = le32(b, 5634364) // +0x7d0
 	b = le32(b, transfer)
@@ -86,6 +87,9 @@ func fullFinance(b []byte, transfer, wage, balance int32, dataVersion uint16) []
 	b = append(b, 1)
 	b = append(b, make([]byte, 19)...)
 	b = append(b, make([]byte, 22)...)
+	if dataVersion >= 3756 {
+		b = append(b, 0, 1, 0, 0x6c, 0x07) // u8, date 1900-01-01
+	}
 	return financeBase(b, balance)
 }
 
@@ -199,7 +203,7 @@ func tableBytes(count int, records []byte) []byte {
 }
 
 func TestReadClubTableHandlesDataVersions(t *testing.T) {
-	for _, version := range []uint16{3727, 3733, 3754} {
+	for _, version := range []uint16{3727, 3733, 3754, 3756} {
 		var recs []byte
 		recs = testClub{index: 0, uid: 728, name: "Tottenham Hotspur", short: "Spurs", nation: 139, finance: 1, teams: []int32{1}}.encode(recs, version)
 		recs = testClub{index: 1, uid: 2000099871, name: "Chelsea", short: "Chelsea", nation: 139, women: true, finance: 0, teams: []int32{0}}.encode(recs, version)

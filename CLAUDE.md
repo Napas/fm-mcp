@@ -17,7 +17,7 @@ Reverse engineer Football Manager 26 `.fm` save files, expose the decoded data t
 @docs/format.md
 
 - The index above is all that loads. Before working on a structure, read its file under `docs/format/` (grep `docs/format/` for a quoted section name).
-- Record every decoded structure in its `docs/format/*.md` file with offsets, evidence and the FM build it was verified on; add new files or sections to the index in `docs/format.md`. The format can drift between builds (test save is 26.2.0, installed game is 26.3.2).
+- Record every decoded structure in its `docs/format/*.md` file with offsets, evidence and the FM build it was verified on; add new files or sections to the index in `docs/format.md`. The format can drift between builds (test saves are 26.2.0, 27.0.0 and 27.1.0; the installed game is 27.1.0).
 - Use the `/decode-structure` skill when decoding a new structure.
 
 ## Files outside the repo — READ ONLY
@@ -33,8 +33,9 @@ Reverse engineer Football Manager 26 `.fm` save files, expose the decoded data t
 - Shortlist test save: `data/test_save_27_shortlist.fm` (gitignored). The KŽ save of 2026-11-11 14:39 (game date 2026-11-25), with two shortlists: (Default) of 12 players and "interested" of 7 (listed in the "27.0.0 shortlists" section of `docs/format/scouting.md`).
 - Match stats test save: `data/test_save_27_matches.fm` (gitignored). The KŽ save of 2026-11-11 21:50, with FK TransINVEST 1–1 KŽ (match id 12438, 2026-11-08) checked against in-game match report and player stats screenshots ("Match object" in `docs/format/matches.md`).
 - False trailer test save: `data/test_save_27_trailer.fm` (gitignored). The KŽ save of 2026-11-12 00:44 (game date 2027-01-22). Person record 65 535 holds a false trailer for record 65 536 ("Person table" in `docs/format/game-db.md`).
+- FM 27.1.0 test save: `data/test_save_27_1.fm` (gitignored). The KŽ save of 2026-11-20 13:35 (game date 2028-03-11), written by 27.1.0 (database version 3756). It also holds match objects 27.0.0 wrote and 232 objects whose 2026 fixtures the game dropped ("27.1.0 saves" in `docs/format/container.md`). Not checked in game.
 - Real saves: `~/Library/Application Support/Sports Interactive/Football Manager 26/cloud/games/*.fm` and `.../Football Manager 27/games/*.fm` (FM26 ones Steam Cloud synced), ~400 MB, non-ASCII filenames (`Ž`). Never write, move or touch these; a bad write syncs to the cloud and destroys a career. Copy to `$TMPDIR` before experimenting.
-- Game: `~/Library/Application Support/Steam/steamapps/common/Football Manager 26/fm.app`. Unity IL2CPP front end (`Contents/Frameworks/GameAssembly.dylib` + `global-metadata.dat`); the native SI engine is `Contents/PlugIns/game_plugin.bundle/Contents/MacOS/game_plugin`. Bundled database under `game_plugin.bundle/Contents/Resources/shared/data/database/db/`.
+- Game: `~/Library/Application Support/Steam/steamapps/common/Football Manager 27/fm.app` (27.1.0; FM26 at `.../Football Manager 26/fm.app` if installed). Unity IL2CPP front end (`Contents/Frameworks/GameAssembly.dylib` + `global-metadata.dat`); the native SI engine is `Contents/PlugIns/game_plugin.bundle/Contents/MacOS/game_plugin`. Bundled database under `game_plugin.bundle/Contents/Resources/shared/data/database/db/`.
 
 ## Gotchas
 
